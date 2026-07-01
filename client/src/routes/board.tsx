@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useSocket } from '../socket/useSocket.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
 import styles from './board.module.css';
@@ -24,6 +25,42 @@ function Scoreboard({ players }: ScoreboardProps) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+interface ShareableLinkProps {
+  roomCode: string;
+}
+
+function ShareableLink({ roomCode }: ShareableLinkProps) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/board?room=${encodeURIComponent(roomCode)}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className={styles.shareBox}>
+      <a
+        href={url}
+        data-testid="share-link"
+        className={styles.shareLink}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {url}
+      </a>
+      <button type="button" className={styles.shareButton} onClick={handleCopy}>
+        {copied ? 'Copied!' : 'Copy Link'}
+      </button>
     </div>
   );
 }
@@ -88,6 +125,10 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
           <p className={styles.waiting}>Game in progress</p>
         )}
       </div>
+      <div className={styles.shareSection}>
+        <p className={styles.shareLabel}>Share this board display:</p>
+        <ShareableLink roomCode={roomCode} />
+      </div>
       <Scoreboard players={state.players} />
     </main>
   );
@@ -103,10 +144,27 @@ function getStoredBoardRoom(): string | null {
   }
 }
 
+function resolveInitialRoom(): string {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get('room')?.trim().toUpperCase();
+  if (fromUrl) {
+    try {
+      localStorage.setItem(BOARD_ROOM_KEY, fromUrl);
+    } catch {
+      // ignore storage failure
+    }
+    return fromUrl;
+  }
+  return getStoredBoardRoom() ?? '';
+}
+
 export function BoardRoute() {
-  const stored = getStoredBoardRoom();
-  const [roomCode, setRoomCode] = useState(stored ?? '');
-  const [submitted, setSubmitted] = useState(Boolean(stored));
+  const [searchParams] = useSearchParams();
+  const fromUrl = searchParams.get('room')?.trim().toUpperCase();
+  const initialRoom = fromUrl ? fromUrl : resolveInitialRoom();
+
+  const [roomCode, setRoomCode] = useState(initialRoom);
+  const [submitted, setSubmitted] = useState(Boolean(initialRoom));
 
   const handleReset = () => {
     localStorage.removeItem(BOARD_ROOM_KEY);

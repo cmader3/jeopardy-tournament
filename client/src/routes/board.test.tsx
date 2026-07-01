@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { BoardRoute } from './board.js';
 import type { BoardView } from '@jeopardy/shared';
+
+function renderBoardRoute() {
+  render(
+    <MemoryRouter>
+      <BoardRoute />
+    </MemoryRouter>,
+  );
+}
 
 vi.mock('../socket/useSocket.js', () => ({
   useSocket: vi.fn(),
@@ -32,7 +41,7 @@ describe('BoardRoute', () => {
   it('renders the room code entry form without a host passcode gate', () => {
     useSocket.mockReturnValue({ connected: false, error: null, data: null });
 
-    render(<BoardRoute />);
+    renderBoardRoute();
 
     expect(screen.getByRole('heading', { name: /board/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/room code/i)).toBeInTheDocument();
@@ -43,7 +52,7 @@ describe('BoardRoute', () => {
   it('shows the room code and a waiting-for-players state before anyone joins', async () => {
     mockUseSocket(makeBoardState());
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -62,7 +71,7 @@ describe('BoardRoute', () => {
       }),
     );
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -84,7 +93,7 @@ describe('BoardRoute', () => {
     }));
     mockUseSocket(makeBoardState({ players }));
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -107,7 +116,7 @@ describe('BoardRoute', () => {
       }),
     );
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -119,7 +128,7 @@ describe('BoardRoute', () => {
   it('shows an informative placeholder for an unknown or missing room', async () => {
     useSocket.mockReturnValue({ connected: false, error: 'Unknown room code', data: null });
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ZZZZ');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -135,7 +144,7 @@ describe('BoardRoute', () => {
       }),
     );
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -149,7 +158,7 @@ describe('BoardRoute', () => {
   it('allows entering a different room code after an unknown room error', async () => {
     useSocket.mockReturnValue({ connected: false, error: 'Unknown room code', data: null });
 
-    render(<BoardRoute />);
+    renderBoardRoute();
     const input = screen.getByLabelText(/room code/i);
     await userEvent.type(input, 'ZZZZ');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
@@ -162,7 +171,7 @@ describe('BoardRoute', () => {
     localStorage.setItem('jeopardy-board-room', 'WXYZ');
     mockUseSocket(makeBoardState({ roomCode: 'WXYZ' }));
 
-    render(<BoardRoute />);
+    renderBoardRoute();
 
     expect(await screen.findByTestId('room-code')).toHaveTextContent('WXYZ');
     expect(useSocket).toHaveBeenCalledWith('board', 'WXYZ', expect.any(Function));
@@ -172,7 +181,7 @@ describe('BoardRoute', () => {
     localStorage.setItem('jeopardy-board-room', 'WXYZ');
     useSocket.mockReturnValue({ connected: false, error: 'Unknown room code', data: null });
 
-    render(<BoardRoute />);
+    renderBoardRoute();
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /enter another code/i }));

@@ -169,3 +169,52 @@
   cursor: pointer;
   font-family: var(--font-body);
 }
+
+.shareSection {
+  padding: 0.75rem 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 2px solid var(--value-gold);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.shareLabel {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--text-light);
+  margin: 0;
+  opacity: 0.9;
+}
+
+.shareBox {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.shareLink {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--value-gold);
+  text-decoration: underline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.shareButton {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.9rem;
+  background: var(--jeopardy-blue);
+  color: var(--text-light);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: var(--font-body);
+  flex-shrink: 0;
+}
