@@ -129,6 +129,7 @@ describe('Boards REST API', () => {
       expect(response.body).toHaveLength(1);
       expect(response.body[0].name).toBe(payload.name);
       expect(response.body[0].rounds).toBeUndefined();
+      expect(response.body[0].isComplete).toBe(true);
     });
   });
 
@@ -254,6 +255,56 @@ describe('Boards REST API', () => {
 
       expect(response.body.rounds[0].categories[0].clues[0].clueText).toBe('');
       expect(response.body.rounds[0].categories[0].clues[0].answer).toBe('');
+      expect(response.body.isComplete).toBe(false);
+    });
+
+    it('returns 400 when a clue has text but no answer', async () => {
+      const app = createApp();
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+
+      const payload = makeBoardPayload();
+      payload.rounds[0].categories[0].clues[0].clueText = 'This is a clue';
+      payload.rounds[0].categories[0].clues[0].answer = '';
+
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(payload).expect(400);
+      expect(response.body.error).toBe('Invalid request body');
+      expect(response.body.details.some((d: { path: string }) => d.path.includes('answer'))).toBe(true);
+    });
+
+    it('returns 400 when a clue has answer but no text', async () => {
+      const app = createApp();
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+
+      const payload = makeBoardPayload();
+      payload.rounds[0].categories[0].clues[0].clueText = '';
+      payload.rounds[0].categories[0].clues[0].answer = 'This is an answer';
+
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(payload).expect(400);
+      expect(response.body.error).toBe('Invalid request body');
+      expect(response.body.details.some((d: { path: string }) => d.path.includes('clueText'))).toBe(true);
+    });
+
+    it('trims whitespace from strings before saving', async () => {
+      const app = createApp();
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+
+      const payload = makeBoardPayload();
+      payload.name = '  Trimmed Board  ';
+      payload.rounds[0].categories[0].title = '  Trimmed Category  ';
+      payload.rounds[0].categories[0].clues[0].clueText = '  Trimmed clue  ';
+      payload.rounds[0].categories[0].clues[0].answer = '  Trimmed answer  ';
+
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(payload).expect(200);
+      expect(response.body.name).toBe('Trimmed Board');
+      expect(response.body.rounds[0].categories[0].title).toBe('Trimmed Category');
+      expect(response.body.rounds[0].categories[0].clues[0].clueText).toBe('Trimmed clue');
+      expect(response.body.rounds[0].categories[0].clues[0].answer).toBe('Trimmed answer');
+    });
+
+    it('returns isComplete true for a fully authored board', async () => {
+      const app = createApp();
+      const response = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+      expect(response.body.isComplete).toBe(true);
     });
   });
 

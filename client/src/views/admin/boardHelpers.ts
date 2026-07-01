@@ -335,3 +335,121 @@ export function parsePositiveInteger(value: string): number | null {
   }
   return num;
 }
+
+export const MAX_FIELD_LENGTH = 5000;
+
+export interface ValidationError {
+  path: string;
+  message: string;
+}
+
+export function isClueComplete(clue: Clue): boolean {
+  return clue.clueText.trim().length > 0 && clue.answer.trim().length > 0;
+}
+
+export function isClueHalfFilled(clue: Clue): boolean {
+  const text = clue.clueText.trim();
+  const answer = clue.answer.trim();
+  const hasContent = text.length > 0 || answer.length > 0;
+  return hasContent && !(text.length > 0 && answer.length > 0);
+}
+
+export function isCategoryTitleInvalid(title: string): boolean {
+  return title.trim().length === 0;
+}
+
+export function isCategoryComplete(category: Category): boolean {
+  if (isCategoryTitleInvalid(category.title)) return false;
+  return category.clues.every(isClueComplete);
+}
+
+export function isPlayRoundComplete(round: Round, includeDouble: boolean): boolean {
+  if (round.type === 'DOUBLE_JEOPARDY' && !includeDouble) return true;
+  if (round.type === 'FINAL') return true;
+  if (round.categories.length === 0) return false;
+  return round.categories.every(isCategoryComplete);
+}
+
+export function isFinalRoundComplete(round: Round): boolean {
+  if (round.categories.length === 0) return false;
+  return round.categories.every((category) => {
+    if (isCategoryTitleInvalid(category.title)) return false;
+    const clue = category.clues[0];
+    if (!clue) return false;
+    return isClueComplete(clue);
+  });
+}
+
+export function isBoardComplete(board: BoardWithRounds): boolean {
+  return board.rounds.every((round) => {
+    if (round.type === 'FINAL') return isFinalRoundComplete(round);
+    return isPlayRoundComplete(round, board.includeDoubleJeopardy);
+  });
+}
+
+export function findBoardValidationErrors(board: BoardWithRounds): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  if (board.name.trim().length === 0) {
+    errors.push({ path: 'name', message: 'Board name cannot be blank' });
+  }
+
+  for (const round of board.rounds) {
+    if (round.type === 'DOUBLE_JEOPARDY' && !board.includeDoubleJeopardy) continue;
+
+    for (const category of round.categories) {
+      if (isCategoryTitleInvalid(category.title)) {
+        errors.push({
+          path: `${round.type}.category.${category.order}.title`,
+          message: 'Category title cannot be blank',
+        });
+      }
+
+      for (const clue of category.clues) {
+        if (isClueHalfFilled(clue)) {
+          const missing = clue.clueText.trim().length === 0 ? 'clue text' : 'answer';
+          errors.push({
+            path: `${round.type}.category.${category.order}.clue.${clue.row}`,
+            message: `Clue is missing ${missing}`,
+          });
+        }
+        if (clue.clueText.length > MAX_FIELD_LENGTH) {
+          errors.push({
+            path: `${round.type}.category.${category.order}.clue.${clue.row}.clueText`,
+            message: `Clue text exceeds ${MAX_FIELD_LENGTH} characters`,
+          });
+        }
+        if (clue.answer.length > MAX_FIELD_LENGTH) {
+          errors.push({
+            path: `${round.type}.category.${category.order}.clue.${clue.row}.answer`,
+            message: `Answer exceeds ${MAX_FIELD_LENGTH} characters`,
+          });
+        }
+      }
+    }
+
+    if (round.type === 'FINAL') {
+      const category = round.categories[0];
+      const clue = category?.clues[0];
+      if (category && clue) {
+        const title = category.title.trim();
+        const text = clue.clueText.trim();
+        const answer = clue.answer.trim();
+        const hasContent = text.length > 0 || answer.length > 0;
+        if (hasContent) {
+          if (title.length === 0) {
+            errors.push({ path: 'FINAL.category.title', message: 'Final category title cannot be blank' });
+          }
+          if (text.length === 0) {
+            errors.push({ path: 'FINAL.clue.clueText', message: 'Final clue text cannot be blank' });
+          }
+          if (answer.length === 0) {
+            errors.push({ path: 'FINAL.clue.answer', message: 'Final answer cannot be blank' });
+          }
+        }
+      }
+    }
+  }
+
+  return errors;
+}

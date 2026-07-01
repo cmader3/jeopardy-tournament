@@ -250,6 +250,27 @@
   font-family: var(--font-body);
 }
 
+.incompleteIndicator {
+  font-size: 0.85rem;
+  color: var(--incorrect-red);
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+.incompleteBadge {
+  color: var(--incorrect-red);
+  font-weight: 600;
+}
+
+.validationList {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.validationList li {
+  margin: 0.25rem 0;
+}
+
 .saveButton {
   font-family: var(--font-body);
   font-size: 0.95rem;

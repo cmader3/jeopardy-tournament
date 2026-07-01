@@ -23,6 +23,7 @@ function makeBoard(overrides: Partial<BoardWithRounds> = {}): BoardWithRounds {
     includeDoubleJeopardy: overrides.includeDoubleJeopardy ?? false,
     defaultTimerSeconds: 10,
     finalTimerSeconds: 30,
+    isComplete: overrides.isComplete ?? true,
     createdAt: '2026-06-30T12:00:00.000Z',
     updatedAt: '2026-06-30T12:30:00.000Z',
     rounds: overrides.rounds ?? [
@@ -117,6 +118,7 @@ function createMockApi(board: BoardWithRounds, updates: Partial<BoardApiClient> 
       Promise.resolve({
         ...input,
         id: board.id,
+        isComplete: true,
         createdAt: board.createdAt,
         updatedAt: board.updatedAt,
       } as BoardWithRounds),
@@ -244,8 +246,8 @@ describe('BoardEditor', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /save board/i }));
 
-    expect(api.updateBoard).toHaveBeenCalledTimes(1);
-    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid request body/i);
+    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/timer/i);
   });
 
   it('toggles Double Jeopardy on and off', async () => {
@@ -446,5 +448,104 @@ describe('BoardEditor', () => {
     expect(final.categories[0].clues[0].clueText).toBe('He wrote Moby-Dick');
     expect(final.categories[0].clues[0].answer).toBe('Herman Melville');
     expect(final.categories[0].clues[0].value).toBeNull();
+  });
+
+  it('shows an incomplete indicator when the board has empty clue cells', () => {
+    renderEditor({
+      board: makeBoard({
+        rounds: [
+          {
+            id: 'round-1',
+            boardId: 'board-1',
+            type: 'JEOPARDY',
+            order: 0,
+            categories: [
+              {
+                id: 'cat-1',
+                roundId: 'round-1',
+                title: 'Science',
+                order: 0,
+                clues: [makeClue({ clueText: 'H2O?', answer: 'Water' })],
+              },
+              {
+                id: 'cat-2',
+                roundId: 'round-1',
+                title: 'History',
+                order: 1,
+                clues: [makeClue({ clueText: '', answer: '' })],
+              },
+            ],
+          },
+          {
+            id: 'round-final',
+            boardId: 'board-1',
+            type: 'FINAL',
+            order: 1,
+            categories: [
+              {
+                id: 'cat-final',
+                roundId: 'round-final',
+                title: 'Final Category',
+                order: 0,
+                clues: [makeClue({ row: 0, value: null, clueText: 'Final?', answer: 'Yes' })],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(screen.getAllByText(/incomplete/i).length).toBeGreaterThan(0);
+  });
+
+  it('prevents saving a half-filled clue and shows inline validation', async () => {
+    const { api } = renderEditor();
+
+    const answerTextareas = screen.getAllByPlaceholderText(/answer/i);
+    fireEvent.change(answerTextareas[0], { target: { value: '' } });
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('prevents saving a whitespace-only category title', async () => {
+    const { api } = renderEditor();
+
+    const titleInput = screen.getByRole('textbox', { name: /category 1 title/i });
+    fireEvent.change(titleInput, { target: { value: '   ' } });
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('prevents saving a Final with a missing answer', async () => {
+    const { api } = renderEditor();
+
+    const finalAnswerInput = screen.getByRole('textbox', { name: /final answer/i });
+    fireEvent.change(finalAnswerInput, { target: { value: '' } });
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('registers a beforeunload handler when there are unsaved changes', () => {
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+
+    renderEditor();
+
+    const nameInput = screen.getByLabelText(/board name/i);
+    fireEvent.change(nameInput, { target: { value: 'Changed Name' } });
+
+    expect(addEventListenerSpy).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+
+    addEventListenerSpy.mockRestore();
+    removeEventListenerSpy.mockRestore();
   });
 });

@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BoardApiClient, BoardWithRounds, Clue } from '../../api/boards.js';
 import {
   applyResize,
   computeBoardResizeImpact,
   deriveSettings,
+  findBoardValidationErrors,
   getFinalRound,
   getPlayRound,
   isAuthoredCategory,
+  isBoardComplete,
   parsePositiveInteger,
   rowCountForRound,
   setDoubleJeopardyEnabled,
@@ -51,7 +53,23 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Array<{ path: string; message: string }>>([]);
   const [hasChanges, setHasChanges] = useState(false);
+
+  const boardComplete = isBoardComplete(draft);
+
+  useEffect(() => {
+    if (!hasChanges) return undefined;
+
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasChanges]);
 
   const jeopardyRound = getPlayRound(draft, 'JEOPARDY');
   const currentCategoryCount = jeopardyRound?.categories.length ?? 0;
@@ -75,6 +93,9 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
       rowCount: String(updatedJeopardy ? rowCountForRound(updatedJeopardy) : 0),
     }));
     setHasChanges(true);
+    if (validationErrors.length > 0) {
+      setValidationErrors([]);
+    }
   };
 
   const handleAddCategory = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY') => {
@@ -188,18 +209,36 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
 
   const handleSave = async () => {
     setError(null);
-    setIsSaving(true);
+    setValidationErrors([]);
 
     const defaultTimerValue = parsePositiveInteger(settings.defaultTimer);
     const finalTimerValue = parsePositiveInteger(settings.finalTimer);
 
-    const payload = {
-      ...toUpdateInput(draft),
+    if (defaultTimerValue === null || finalTimerValue === null) {
+      setError('Timer values must be positive integers');
+      return;
+    }
+
+    const trimmedDraft = {
+      ...draft,
       name: settings.name.trim(),
+      defaultTimerSeconds: defaultTimerValue,
+      finalTimerSeconds: finalTimerValue,
+    };
+    const errors = findBoardValidationErrors(trimmedDraft);
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    setIsSaving(true);
+
+    const payload = {
+      ...toUpdateInput(trimmedDraft),
+      name: trimmedDraft.name,
       includeDoubleJeopardy: settings.includeDoubleJeopardy,
-      defaultTimerSeconds:
-        defaultTimerValue ?? (settings.defaultTimer as unknown as number),
-      finalTimerSeconds: finalTimerValue ?? (settings.finalTimer as unknown as number),
+      defaultTimerSeconds: defaultTimerValue,
+      finalTimerSeconds: finalTimerValue,
     };
 
     try {
@@ -214,6 +253,14 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
     }
   };
 
+  const handleBack = () => {
+    if (hasChanges) {
+      const confirmed = window.confirm('You have unsaved changes. Leave without saving?');
+      if (!confirmed) return;
+    }
+    onBack();
+  };
+
   const timerErrorClass = (value: string): string | undefined => {
     return parsePositiveInteger(value) === null ? styles.invalidInput : undefined;
   };
@@ -221,11 +268,14 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
   return (
     <main className={styles.editor}>
       <header className={styles.editorHeader}>
-        <button type="button" className={styles.backButton} onClick={onBack}>
+        <button type="button" className={styles.backButton} onClick={handleBack}>
           Back to Library
         </button>
         <h1 className={styles.editorTitle}>{settings.name || board.name}</h1>
         <div className={styles.headerActions}>
+          {!boardComplete && (
+            <span className={styles.incompleteIndicator}>Incomplete</span>
+          )}
           {hasChanges && <span className={styles.unsavedIndicator}>Unsaved changes</span>}
           <button
             type="button"
@@ -245,10 +295,24 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
         </p>
       )}
 
+      {validationErrors.length > 0 && (
+        <div className={styles.error} role="alert" aria-live="polite">
+          <p>Please fix the following errors before saving:</p>
+          <ul className={styles.validationList}>
+            {validationErrors.map((err) => (
+              <li key={`${err.path}-${err.message}`}>{err.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <section className={styles.editorSummary}>
         <p className={styles.editorMeta}>
           {currentCategoryCount} {currentCategoryCount === 1 ? 'category' : 'categories'} × {currentRowCount}{' '}
           {currentRowCount === 1 ? 'row' : 'rows'} · {clueCount} {clueCount === 1 ? 'clue' : 'clues'}
+          {!boardComplete && (
+            <span className={styles.incompleteBadge}> · Incomplete</span>
+          )}
         </p>
         <p className={styles.editorMeta}>
           {draft.includeDoubleJeopardy ? 'Double Jeopardy enabled' : 'Double Jeopardy disabled'} ·{' '}

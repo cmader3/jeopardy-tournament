@@ -13,6 +13,7 @@ function makeSummary(overrides: Partial<BoardSummary> = {}): BoardSummary {
     includeDoubleJeopardy: true,
     defaultTimerSeconds: 10,
     finalTimerSeconds: 30,
+    isComplete: true,
     createdAt: '2026-06-30T12:00:00.000Z',
     updatedAt: '2026-06-30T12:30:00.000Z',
     ...overrides,
@@ -226,5 +227,15 @@ describe('AdminBoardLibrary', () => {
 
     expect(api.deleteBoard).not.toHaveBeenCalled();
     expect(screen.getByText('Board A')).toBeInTheDocument();
+  });
+
+  it('shows an incomplete badge on boards with holes', async () => {
+    const api = makeMockApi();
+    const summary = makeSummary({ id: 'a', name: 'Board A', isComplete: false });
+    api.getBoards = vi.fn().mockResolvedValue([summary]);
+
+    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={vi.fn()} />);
+
+    expect(await screen.findByText(/incomplete/i)).toBeInTheDocument();
   });
 });

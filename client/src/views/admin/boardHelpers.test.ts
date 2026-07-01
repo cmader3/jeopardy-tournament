@@ -4,9 +4,13 @@ import {
   applyResize,
   computeBoardResizeImpact,
   deriveSettings,
+  findBoardValidationErrors,
   getPlayRound,
   isAuthoredClue,
   isAuthoredCategory,
+  isBoardComplete,
+  isClueComplete,
+  isClueHalfFilled,
   rowCountForRound,
   setDoubleJeopardyEnabled,
   toUpdateInput,
@@ -51,6 +55,7 @@ function makeBoard(overrides: Partial<BoardWithRounds> = {}): BoardWithRounds {
     includeDoubleJeopardy: overrides.includeDoubleJeopardy ?? true,
     defaultTimerSeconds: 10,
     finalTimerSeconds: 30,
+    isComplete: overrides.isComplete ?? true,
     createdAt: '2026-06-30T12:00:00.000Z',
     updatedAt: '2026-06-30T12:30:00.000Z',
     rounds: overrides.rounds ?? [
@@ -243,6 +248,84 @@ describe('boardHelpers', () => {
       expect(input.rounds[0].categories[0]).not.toHaveProperty('id');
       expect(input).not.toHaveProperty('id');
       expect(input).not.toHaveProperty('createdAt');
+    });
+  });
+
+  describe('isClueComplete / isClueHalfFilled', () => {
+    it('identifies complete and half-filled clues', () => {
+      expect(isClueComplete(makeClue({ clueText: 'A', answer: 'B' }))).toBe(true);
+      expect(isClueComplete(makeClue({ clueText: 'A', answer: '' }))).toBe(false);
+      expect(isClueComplete(makeClue({ clueText: '', answer: 'B' }))).toBe(false);
+
+      expect(isClueHalfFilled(makeClue({ clueText: 'A', answer: '' }))).toBe(true);
+      expect(isClueHalfFilled(makeClue({ clueText: '', answer: 'B' }))).toBe(true);
+      expect(isClueHalfFilled(makeClue({ clueText: '', answer: '' }))).toBe(false);
+      expect(isClueHalfFilled(makeClue({ clueText: 'A', answer: 'B' }))).toBe(false);
+    });
+  });
+
+  describe('isBoardComplete', () => {
+    it('returns true for a fully authored board', () => {
+      expect(isBoardComplete(makeBoard())).toBe(true);
+    });
+
+    it('returns false when a play round clue is empty', () => {
+      const board = makeBoard();
+      board.rounds[0].categories[0].clues[0].clueText = '';
+      board.rounds[0].categories[0].clues[0].answer = '';
+      expect(isBoardComplete(board)).toBe(false);
+    });
+
+    it('returns false when a category title is blank', () => {
+      const board = makeBoard();
+      board.rounds[0].categories[0].title = '   ';
+      expect(isBoardComplete(board)).toBe(false);
+    });
+
+    it('returns false when the Final round is missing an answer', () => {
+      const board = makeBoard();
+      board.rounds[2].categories[0].clues[0].answer = '';
+      expect(isBoardComplete(board)).toBe(false);
+    });
+
+    it('ignores the hidden Double Jeopardy round', () => {
+      const board = makeBoard({ includeDoubleJeopardy: false });
+      expect(isBoardComplete(board)).toBe(true);
+    });
+  });
+
+  describe('findBoardValidationErrors', () => {
+    it('finds no errors on a complete board', () => {
+      expect(findBoardValidationErrors(makeBoard())).toHaveLength(0);
+    });
+
+    it('reports a half-filled clue', () => {
+      const board = makeBoard();
+      board.rounds[0].categories[0].clues[0].answer = '';
+      const errors = findBoardValidationErrors(board);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.some((e) => e.message.includes('missing answer'))).toBe(true);
+    });
+
+    it('reports a blank category title', () => {
+      const board = makeBoard();
+      board.rounds[0].categories[0].title = '   ';
+      const errors = findBoardValidationErrors(board);
+      expect(errors.some((e) => e.path.includes('title'))).toBe(true);
+    });
+
+    it('reports a Final with clue text but no answer', () => {
+      const board = makeBoard();
+      board.rounds[2].categories[0].clues[0].answer = '';
+      const errors = findBoardValidationErrors(board);
+      expect(errors.some((e) => e.path.startsWith('FINAL') && e.message.includes('answer'))).toBe(true);
+    });
+
+    it('reports a field that exceeds the maximum length', () => {
+      const board = makeBoard();
+      board.rounds[0].categories[0].clues[0].clueText = 'x'.repeat(5001);
+      const errors = findBoardValidationErrors(board);
+      expect(errors.some((e) => e.message.includes('exceeds'))).toBe(true);
     });
   });
 });

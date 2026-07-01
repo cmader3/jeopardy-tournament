@@ -49,6 +49,7 @@ function makeBoard(overrides: Partial<BoardWithRounds> = {}): BoardWithRounds {
     includeDoubleJeopardy: overrides.includeDoubleJeopardy ?? true,
     defaultTimerSeconds: 10,
     finalTimerSeconds: 30,
+    isComplete: overrides.isComplete ?? true,
     createdAt: '2026-06-30T12:00:00.000Z',
     updatedAt: '2026-06-30T12:30:00.000Z',
     rounds: overrides.rounds ?? [

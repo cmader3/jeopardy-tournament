@@ -64,6 +64,7 @@ export interface BoardWithRounds {
   finalTimerSeconds: number;
   createdAt: Date;
   updatedAt: Date;
+  isComplete: boolean;
   rounds: RoundWithCategories[];
 }
 
@@ -73,6 +74,7 @@ export interface BoardSummary {
   includeDoubleJeopardy: boolean;
   defaultTimerSeconds: number;
   finalTimerSeconds: number;
+  isComplete: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -100,6 +102,89 @@ const includeRounds = {
     },
   },
 };
+
+function isPlayRoundComplete(
+  round: {
+    type: string;
+    categories: { title: string; clues: { clueText: string; answer: string }[] }[];
+  },
+  includeDouble: boolean,
+): boolean {
+  if (round.type === 'DOUBLE_JEOPARDY' && !includeDouble) return true;
+  if (round.type === 'FINAL') return true;
+
+  if (round.categories.length === 0) return false;
+
+  return round.categories.every((category) => {
+    if (category.title.trim().length === 0) return false;
+    if (category.clues.length === 0) return false;
+    return category.clues.every(
+      (clue) => clue.clueText.trim().length > 0 && clue.answer.trim().length > 0,
+    );
+  });
+}
+
+function isFinalRoundComplete(
+  round: {
+    categories: { title: string; clues: { clueText: string; answer: string }[] }[];
+  },
+): boolean {
+  if (round.categories.length === 0) return false;
+
+  return round.categories.every((category) => {
+    if (category.title.trim().length === 0) return false;
+    if (category.clues.length === 0) return false;
+    const clue = category.clues[0];
+    if (!clue) return false;
+    return (
+      clue.clueText.trim().length > 0 && clue.answer.trim().length > 0
+    );
+  });
+}
+
+function isBoardComplete(board: {
+  includeDoubleJeopardy: boolean;
+  rounds: {
+    type: string;
+    categories: { title: string; clues: { clueText: string; answer: string }[] }[];
+  }[];
+}): boolean {
+  return board.rounds.every((round) => {
+    if (round.type === 'FINAL') return isFinalRoundComplete(round);
+    return isPlayRoundComplete(round, board.includeDoubleJeopardy);
+  });
+}
+
+function normalizeClueInput(clue: CreateClueInput): CreateClueInput {
+  return {
+    ...clue,
+    clueText: clue.clueText.trim(),
+    answer: clue.answer.trim(),
+  };
+}
+
+function normalizeCategoryInput(category: CreateCategoryInput): CreateCategoryInput {
+  return {
+    ...category,
+    title: category.title.trim(),
+    clues: category.clues.map(normalizeClueInput),
+  };
+}
+
+function normalizeRoundInput(round: CreateRoundInput): CreateRoundInput {
+  return {
+    ...round,
+    categories: round.categories.map(normalizeCategoryInput),
+  };
+}
+
+function normalizeBoardInput(input: CreateBoardInput): CreateBoardInput {
+  return {
+    ...input,
+    name: input.name.trim(),
+    rounds: input.rounds.map(normalizeRoundInput),
+  };
+}
 
 function mapClue(clue: {
   id: string;
@@ -177,20 +262,22 @@ function mapBoardWithRounds(board: {
     finalTimerSeconds: board.finalTimerSeconds,
     createdAt: board.createdAt,
     updatedAt: board.updatedAt,
+    isComplete: isBoardComplete(board),
     rounds: board.rounds.map(mapRound),
   };
 }
 
 export const boardRepository: BoardRepository = {
   async create(input) {
+    const normalized = normalizeBoardInput(input);
     const board = await prisma.board.create({
       data: {
-        name: input.name,
-        includeDoubleJeopardy: input.includeDoubleJeopardy ?? true,
-        defaultTimerSeconds: input.defaultTimerSeconds ?? 5,
-        finalTimerSeconds: input.finalTimerSeconds ?? 30,
+        name: normalized.name,
+        includeDoubleJeopardy: normalized.includeDoubleJeopardy ?? true,
+        defaultTimerSeconds: normalized.defaultTimerSeconds ?? 5,
+        finalTimerSeconds: normalized.finalTimerSeconds ?? 30,
         rounds: {
-          create: input.rounds.map((round) => ({
+          create: normalized.rounds.map((round) => ({
             type: round.type,
             order: round.order,
             categories: {
@@ -218,18 +305,21 @@ export const boardRepository: BoardRepository = {
   },
 
   async findAll() {
-    return prisma.board.findMany({
+    const boards = await prisma.board.findMany({
       orderBy: { updatedAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        includeDoubleJeopardy: true,
-        defaultTimerSeconds: true,
-        finalTimerSeconds: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      include: includeRounds,
     });
+
+    return boards.map((board) => ({
+      id: board.id,
+      name: board.name,
+      includeDoubleJeopardy: board.includeDoubleJeopardy,
+      defaultTimerSeconds: board.defaultTimerSeconds,
+      finalTimerSeconds: board.finalTimerSeconds,
+      isComplete: isBoardComplete(board),
+      createdAt: board.createdAt,
+      updatedAt: board.updatedAt,
+    }));
   },
 
   async findById(id) {
@@ -242,6 +332,7 @@ export const boardRepository: BoardRepository = {
   },
 
   async update(id, input) {
+    const normalized = normalizeBoardInput(input);
     await prisma.$transaction(async (tx) => {
       await tx.clue.deleteMany({
         where: { category: { round: { boardId: id } } },
@@ -256,12 +347,12 @@ export const boardRepository: BoardRepository = {
       await tx.board.update({
         where: { id },
         data: {
-          name: input.name,
-          includeDoubleJeopardy: input.includeDoubleJeopardy ?? true,
-          defaultTimerSeconds: input.defaultTimerSeconds ?? 5,
-          finalTimerSeconds: input.finalTimerSeconds ?? 30,
+          name: normalized.name,
+          includeDoubleJeopardy: normalized.includeDoubleJeopardy ?? true,
+          defaultTimerSeconds: normalized.defaultTimerSeconds ?? 5,
+          finalTimerSeconds: normalized.finalTimerSeconds ?? 30,
           rounds: {
-            create: input.rounds.map((round) => ({
+            create: normalized.rounds.map((round) => ({
               type: round.type,
               order: round.order,
               categories: {

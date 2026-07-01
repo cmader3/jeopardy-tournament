@@ -4,6 +4,7 @@ export interface BoardSummary {
   includeDoubleJeopardy: boolean;
   defaultTimerSeconds: number;
   finalTimerSeconds: number;
+  isComplete: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +43,7 @@ export interface BoardWithRounds {
   finalTimerSeconds: number;
   createdAt: string;
   updatedAt: string;
+  isComplete: boolean;
   rounds: Round[];
 }
 

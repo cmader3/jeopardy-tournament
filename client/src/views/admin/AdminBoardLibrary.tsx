@@ -219,6 +219,9 @@ export function AdminBoardLibrary({ token, api, onOpenBoard }: AdminBoardLibrary
                       {summary.finalTimerSeconds}s Final
                       {' · '}
                       Last updated {new Date(summary.updatedAt).toLocaleString()}
+                      {!summary.isComplete && (
+                        <span className={styles.incompleteBadge}> · Incomplete</span>
+                      )}
                     </p>
                   </div>
                   <div className={styles.boardActions}>
