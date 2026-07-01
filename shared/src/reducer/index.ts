@@ -151,7 +151,7 @@ function handleStartGame(state: GameState): ReducerResult {
 
   const connectedPlayers = state.players.filter((p) => p.connected);
   if (connectedPlayers.length === 0) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'At least one player is required to start' }] };
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'At least one connected contestant is required to start' }] };
   }
 
   const controller = connectedPlayers.reduce((lowest, p) => (p.seatOrder < lowest.seatOrder ? p : lowest));

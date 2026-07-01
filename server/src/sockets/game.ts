@@ -70,7 +70,11 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
 
       try {
-        await engine.startGame(meta.roomCode);
+        const result = await engine.startGame(meta.roomCode);
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Start game failed';
         socket.emit('error', { message });

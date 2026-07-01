@@ -10,21 +10,15 @@ export interface HostLobbyProps {
   roomCode: string;
   state: HostView | null;
   onStartGame: () => void;
-  startError: string | null;
-}
-
-export interface HostLobbyProps {
-  roomCode: string;
-  state: HostView | null;
-  onStartGame: () => void;
   onCreateNewGame?: () => void;
   startError: string | null;
 }
 
 export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
+  const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
   const inLobby = !state || state.phase === 'LOBBY';
-  const canStart = playerCount > 0 && inLobby;
+  const canStart = connectedCount > 0 && inLobby;
 
   return (
     <main className="host-lobby route-stub">
@@ -73,8 +67,8 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
               New Game
             </button>
           )}
-          {playerCount === 0 && (
-            <p className="minimum-players">At least one contestant is required to start.</p>
+          {connectedCount === 0 && inLobby && (
+            <p className="minimum-players">At least one connected contestant is required to start.</p>
           )}
         </div>
       )}

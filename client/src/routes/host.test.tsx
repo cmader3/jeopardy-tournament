@@ -50,7 +50,7 @@ describe('HostLobby', () => {
 
     const button = screen.getByTestId('start-game-button');
     expect(button).toBeDisabled();
-    expect(screen.getByText('At least one contestant is required to start.')).toBeInTheDocument();
+    expect(screen.getByText('At least one connected contestant is required to start.')).toBeInTheDocument();
   });
 
   it('enables the start button when at least one player is connected', () => {
@@ -60,6 +60,36 @@ describe('HostLobby', () => {
     render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError={null} />);
 
     expect(screen.getByTestId('start-game-button')).toBeEnabled();
+  });
+
+  it('disables the start button when only disconnected players are in the lobby', () => {
+    const state = makeHostState({
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: false },
+        { id: 'p2', name: 'Bob', score: 0, connected: false },
+      ],
+    });
+    render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError={null} />);
+
+    expect(screen.getByTestId('start-game-button')).toBeDisabled();
+  });
+
+  it('shows the minimum-players message when no players are connected', () => {
+    const state = makeHostState({
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: false }],
+    });
+    render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError={null} />);
+
+    expect(screen.getByText(/at least one connected contestant/i)).toBeInTheDocument();
+  });
+
+  it('shows the server rejection message when starting fails', () => {
+    const state = makeHostState({
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: false }],
+    });
+    render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError="At least one connected contestant is required to start" />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/connected contestant/i);
   });
 
   it('calls onStartGame when the start button is clicked', async () => {

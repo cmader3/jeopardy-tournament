@@ -219,8 +219,39 @@ describe('LOBBY intents', () => {
 
     const result = reduce(state, { type: 'START_GAME' }, { now: NOW });
 
-    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('player') });
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('connected contestant') });
     expect(result.state.phase).toBe('LOBBY');
+  });
+
+  it('START_GAME is rejected when all players are disconnected', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+
+    let result = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
+    result = reduce(result.state, { type: 'JOIN', player: bob }, { now: NOW });
+    result = reduce(result.state, { type: 'DISCONNECT', playerId: alice.id }, { now: NOW });
+    result = reduce(result.state, { type: 'DISCONNECT', playerId: bob.id }, { now: NOW });
+    result = reduce(result.state, { type: 'START_GAME' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('connected contestant') });
+    expect(result.state.phase).toBe('LOBBY');
+  });
+
+  it('START_GAME succeeds when at least one player is connected', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice', connected: true });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob', connected: false });
+
+    let result = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
+    result = reduce(result.state, { type: 'JOIN', player: bob }, { now: NOW });
+    result = reduce(result.state, { type: 'START_GAME' }, { now: NOW });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.controllingPlayerId).toBe(alice.id);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
   });
 
   it('RECONNECT marks a disconnected player as connected', () => {

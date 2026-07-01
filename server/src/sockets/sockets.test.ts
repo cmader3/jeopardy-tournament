@@ -158,6 +158,36 @@ describe('game sockets', () => {
     await server.close();
   });
 
+  it('host receives an error when starting with no connected players', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    await waitForState(host);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    await tokenPromise;
+
+    const hostDisconnect = waitForState(host);
+    alice.disconnect();
+    await hostDisconnect;
+
+    const errorPromise = waitForError(host);
+    host.emit('start_game');
+    const error = await errorPromise;
+
+    expect(error.message).toMatch(/connected contestant/i);
+
+    host.disconnect();
+    await server.close();
+  });
+
   it('board connects with a room code and receives a board projection', async () => {
     const server = await createTestServer();
     const board = await boardRepository.create(makeBoardPayload());
