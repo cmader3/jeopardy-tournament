@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { boardRepository } from '../repo/board.js';
 import { createBoardSchema, formatZodError, updateBoardSchema, validate } from './validation.js';
+import { importRouter } from './import.js';
 
 export const boardRouter = Router();
+
+boardRouter.use('/import', importRouter);
 
 interface PrismaErrorLike {
   code?: string;
