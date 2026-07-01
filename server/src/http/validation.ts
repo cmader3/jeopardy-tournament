@@ -89,13 +89,29 @@ export const roundSchema = z
     }
   });
 
-export const createBoardSchema = z.object({
-  name: trimmedNonEmptyString('Board name cannot be blank'),
-  includeDoubleJeopardy: z.boolean().optional().default(true),
-  defaultTimerSeconds: z.number().int().positive().default(5),
-  finalTimerSeconds: z.number().int().positive().default(30),
-  rounds: z.array(roundSchema),
-});
+export const createBoardSchema = z
+  .object({
+    name: trimmedNonEmptyString('Board name cannot be blank'),
+    includeDoubleJeopardy: z.boolean().optional().default(true),
+    defaultTimerSeconds: z.number().int().positive().default(5),
+    finalTimerSeconds: z.number().int().positive().default(30),
+    rounds: z.array(roundSchema),
+  })
+  .superRefine((board, ctx) => {
+    const seen = new Set<string>();
+    for (let i = 0; i < board.rounds.length; i++) {
+      const type = board.rounds[i].type;
+      if (seen.has(type)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate round type: ${type}. Each round type may appear only once.`,
+          path: ['rounds', i, 'type'],
+        });
+      } else {
+        seen.add(type);
+      }
+    }
+  });
 
 export const updateBoardSchema = createBoardSchema;
 

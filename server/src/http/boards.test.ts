@@ -1,8 +1,9 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app.js';
 import { prisma } from '../repo/prisma.js';
 import { mintHostToken } from '../auth/token.js';
+import { boardRepository } from '../repo/board.js';
 
 function authHeader() {
   return `Bearer ${mintHostToken()}`;
@@ -63,6 +64,10 @@ describe('Boards REST API', () => {
     await prisma.$disconnect();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('POST /api/boards', () => {
     it('creates a board with nested rounds, categories, and clues', async () => {
       const app = createApp();
@@ -108,6 +113,61 @@ describe('Boards REST API', () => {
 
       expect(response.body.error).toBe('Invalid request body');
       expect(response.body.details.some((d: { path: string }) => d.path.includes('row'))).toBe(true);
+    });
+
+    it('rejects a board with duplicate round types with a 400 error', async () => {
+      const app = createApp();
+      const payload = makeBoardPayload();
+      payload.rounds = [
+        {
+          type: 'JEOPARDY',
+          order: 0,
+          categories: [
+            {
+              title: 'Science',
+              order: 0,
+              clues: [{ value: 100, row: 0, clueText: 'Clue', answer: 'Answer', isDailyDouble: false }],
+            },
+          ],
+        },
+        {
+          type: 'JEOPARDY',
+          order: 1,
+          categories: [
+            {
+              title: 'History',
+              order: 0,
+              clues: [{ value: 100, row: 0, clueText: 'Clue', answer: 'Answer', isDailyDouble: false }],
+            },
+          ],
+        },
+        {
+          type: 'FINAL',
+          order: 2,
+          categories: [
+            {
+              title: 'Final',
+              order: 0,
+              clues: [{ value: null, row: 0, clueText: 'Final clue', answer: 'Final answer', isDailyDouble: false }],
+            },
+          ],
+        },
+      ];
+
+      const response = await authRequest(app).post('/api/boards').send(payload).expect(400);
+
+      expect(response.body.error).toBe('Invalid request body');
+      expect(response.body.details.some((d: { path: string; message: string }) => d.path.includes('rounds') && d.path.includes('type') && d.message.includes('Duplicate round type'))).toBe(true);
+    });
+
+    it('maps a Prisma P2002 unique-constraint violation to 409', async () => {
+      const app = createApp();
+      const prismaError = { code: 'P2002', message: 'Unique constraint failed on the fields: (`boardId`,`type`)' };
+      vi.spyOn(boardRepository, 'create').mockRejectedValueOnce(prismaError as never);
+
+      const response = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(409);
+
+      expect(response.body.error).toMatch(/unique constraint/i);
     });
   });
 
@@ -216,6 +276,18 @@ describe('Boards REST API', () => {
       const response = await authRequest(app).put('/api/boards/non-existent').send(makeBoardPayload()).expect(404);
 
       expect(response.body.error).toBe('Board not found');
+    });
+
+    it('maps a Prisma P2002 unique-constraint violation to 409', async () => {
+      const app = createApp();
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+
+      const prismaError = { code: 'P2002', message: 'Unique constraint failed on the fields: (`boardId`,`type`)' };
+      vi.spyOn(boardRepository, 'update').mockRejectedValueOnce(prismaError as never);
+
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(makeBoardPayload()).expect(409);
+
+      expect(response.body.error).toMatch(/unique constraint/i);
     });
 
     it('rejects an invalid payload with a 400 error', async () => {

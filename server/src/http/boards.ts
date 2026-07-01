@@ -20,6 +20,10 @@ function isForeignKeyError(error: unknown): boolean {
   return isPrismaError(error) && error.code === 'P2003';
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return isPrismaError(error) && error.code === 'P2002';
+}
+
 boardRouter.get('/', async (_req, res, next) => {
   try {
     const boards = await boardRepository.findAll();
@@ -56,6 +60,10 @@ boardRouter.post('/', async (req, res, next) => {
     const board = await boardRepository.create(validation.data);
     res.status(201).json(board);
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      res.status(409).json({ error: 'A unique constraint was violated. Duplicate round types are not allowed.' });
+      return;
+    }
     next(error);
   }
 });
@@ -74,6 +82,10 @@ boardRouter.put('/:id', async (req, res, next) => {
   } catch (error) {
     if (isNotFoundError(error)) {
       res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+    if (isUniqueConstraintError(error)) {
+      res.status(409).json({ error: 'A unique constraint was violated. Duplicate round types are not allowed.' });
       return;
     }
     next(error);

@@ -384,6 +384,92 @@ describe('board validation schemas', () => {
     });
   });
 
+  describe('duplicate round types', () => {
+    it('rejects a board with two rounds of the same type', () => {
+      const payload = makeBoard({
+        rounds: [
+          {
+            type: 'JEOPARDY',
+            order: 0,
+            categories: [makeCategory()],
+          },
+          {
+            type: 'JEOPARDY',
+            order: 1,
+            categories: [makeCategory()],
+          },
+          {
+            type: 'FINAL',
+            order: 2,
+            categories: [
+              {
+                title: 'Final Category',
+                order: 0,
+                clues: [makeClue({ value: null, clueText: 'Final clue', answer: 'Final answer' })],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = createBoardSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const details = formatZodError(result.error);
+        expect(details.some((d) => d.path.includes('rounds') && d.path.includes('type'))).toBe(true);
+        expect(details.some((d) => d.message.includes('Duplicate round type'))).toBe(true);
+      }
+    });
+
+    it('rejects a board with two FINAL rounds', () => {
+      const payload = makeBoard({
+        rounds: [
+          {
+            type: 'JEOPARDY',
+            order: 0,
+            categories: [makeCategory()],
+          },
+          {
+            type: 'FINAL',
+            order: 1,
+            categories: [
+              {
+                title: 'Final Category 1',
+                order: 0,
+                clues: [makeClue({ value: null, clueText: 'Final clue', answer: 'Final answer' })],
+              },
+            ],
+          },
+          {
+            type: 'FINAL',
+            order: 2,
+            categories: [
+              {
+                title: 'Final Category 2',
+                order: 0,
+                clues: [makeClue({ value: null, clueText: 'Final clue 2', answer: 'Final answer 2' })],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = createBoardSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const details = formatZodError(result.error);
+        expect(details.some((d) => d.message.includes('Duplicate round type'))).toBe(true);
+      }
+    });
+
+    it('allows a board with one JEOPARDY and one FINAL round', () => {
+      const payload = makeBoard();
+
+      const result = createBoardSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('updateBoardSchema', () => {
     it('is the same as createBoardSchema for validation purposes', () => {
       const payload = makeBoard({
