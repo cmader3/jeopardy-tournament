@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as passcode from './passcode.js';
 import { mintHostToken, verifyHostToken } from './token.js';
 
 describe('host token', () => {
@@ -35,5 +36,17 @@ describe('host token', () => {
     expect(verifyHostToken('')).toBeNull();
     expect(verifyHostToken('only-one-part')).toBeNull();
     expect(verifyHostToken('a.b.c')).toBeNull();
+  });
+
+  it('compares signatures in constant time without an early length check', () => {
+    const token = mintHostToken();
+    const [payloadB64, signature] = token.split('.');
+    const shortSignature = signature.slice(0, -2);
+    const tampered = `${payloadB64}.${shortSignature}`;
+
+    const spy = vi.spyOn(passcode, 'constantTimeCompare');
+    expect(verifyHostToken(tampered)).toBeNull();
+    expect(spy).toHaveBeenCalledWith(shortSignature, expect.any(String));
+    spy.mockRestore();
   });
 });

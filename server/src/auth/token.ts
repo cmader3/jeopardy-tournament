@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { constantTimeCompare } from './passcode.js';
 
 export interface HostTokenPayload {
   role: 'host';
@@ -28,13 +29,7 @@ export function verifyHostToken(token: string): HostTokenPayload | null {
   }
 
   const expectedSignature = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  const signatureBuffer = Buffer.from(signature, 'utf8');
-  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
-  if (signatureBuffer.length !== expectedBuffer.length) {
-    return null;
-  }
-
-  if (!crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+  if (!constantTimeCompare(signature, expectedSignature)) {
     return null;
   }
 
