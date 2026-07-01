@@ -6,6 +6,7 @@ import {
   createInitialState,
   GameState,
   Intent,
+  isBoardPlayable,
   reduce,
   ReducerCtx,
   ReducerResult,
@@ -44,6 +45,10 @@ export class GameEngine {
     }
 
     const sharedBoard = mapBoardToShared(board);
+    if (!isBoardPlayable(sharedBoard)) {
+      throw new BoardEmptyError();
+    }
+
     let roomCode = generateRoomCode();
     while (await this.sessionRepo.findByRoomCode(roomCode)) {
       roomCode = generateRoomCode();
@@ -114,7 +119,11 @@ export class GameEngine {
   }
 
   async startGame(roomCode: string): Promise<ReducerResult> {
-    return this.applyIntent(roomCode, { type: 'START_GAME' }, { now: Date.now() });
+    const result = await this.applyIntent(roomCode, { type: 'START_GAME' }, { now: Date.now() });
+    if (result.state.phase !== 'LOBBY') {
+      await this.sessionRepo.updateStatus(result.state.sessionId, GameSessionStatus.IN_PROGRESS);
+    }
+    return result;
   }
 
   async persistSnapshot(state: GameState): Promise<void> {
@@ -175,5 +184,11 @@ export class BoardNotFoundError extends Error {
 export class SessionNotFoundError extends Error {
   constructor() {
     super('Session not found');
+  }
+}
+
+export class BoardEmptyError extends Error {
+  constructor() {
+    super('Board has no playable clues');
   }
 }

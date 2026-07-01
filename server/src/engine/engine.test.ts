@@ -133,6 +133,19 @@ describe('GameEngine', () => {
     expect(freshEngine.getState(roomCode)).toBeUndefined();
   });
 
+  it('rejects a board with no playable clues', async () => {
+    const board = await boardRepository.create({
+      name: 'Empty Board',
+      includeDoubleJeopardy: false,
+      defaultTimerSeconds: 10,
+      finalTimerSeconds: 30,
+      rounds: [],
+    });
+    const engine = new GameEngine();
+
+    await expect(engine.createSession(board.id)).rejects.toThrow('Board has no playable clues');
+  });
+
   it('maps a BoardWithRounds to a shared Board with flat round clues', () => {
     const board = {
       id: 'b1',

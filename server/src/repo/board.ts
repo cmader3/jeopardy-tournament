@@ -142,6 +142,22 @@ function isFinalRoundComplete(
   });
 }
 
+function hasPlayableClue(board: {
+  rounds: {
+    type: string;
+    categories: { clues: { clueText: string; answer: string }[] }[];
+  }[];
+}): boolean {
+  return board.rounds.some((round) => {
+    if (round.type === 'FINAL') return false;
+    return round.categories.some((category) =>
+      category.clues.some(
+        (clue) => clue.clueText.trim().length > 0 && clue.answer.trim().length > 0,
+      ),
+    );
+  });
+}
+
 function isBoardComplete(board: {
   includeDoubleJeopardy: boolean;
   rounds: {
@@ -149,6 +165,8 @@ function isBoardComplete(board: {
     categories: { title: string; clues: { clueText: string; answer: string }[] }[];
   }[];
 }): boolean {
+  if (!hasPlayableClue(board)) return false;
+
   return board.rounds.every((round) => {
     if (round.type === 'FINAL') return isFinalRoundComplete(round);
     return isPlayRoundComplete(round, board.includeDoubleJeopardy);

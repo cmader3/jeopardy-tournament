@@ -5,7 +5,8 @@ import type { ContestantView } from '@jeopardy/shared';
 function ContestantLobby({ roomCode, name }: { roomCode: string; name: string }) {
   const [gameState, setGameState] = useState<ContestantView | null>(null);
   const token = getStoredContestantToken();
-  const socket = useSocket<ContestantView>('contestant', roomCode, setGameState, name, token?.reconnectToken);
+  const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
+  const socket = useSocket<ContestantView>('contestant', roomCode, setGameState, name, reconnectToken);
 
   return (
     <main className="route-stub">

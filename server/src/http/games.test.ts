@@ -132,4 +132,23 @@ describe('POST /api/games', () => {
 
     expect(first.body.roomCode).not.toBe(second.body.roomCode);
   });
+
+  it('rejects an empty board with no playable clues', async () => {
+    const app = createApp();
+    const created = await boardRepository.create({
+      name: 'Empty Board',
+      includeDoubleJeopardy: false,
+      defaultTimerSeconds: 10,
+      finalTimerSeconds: 30,
+      rounds: [],
+    });
+
+    const response = await request(app)
+      .post('/api/games')
+      .set('Authorization', authHeader())
+      .send({ boardId: created.id })
+      .expect(400);
+
+    expect(response.body.error).toMatch(/no playable clues/i);
+  });
 });

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { GameEngine } from '../engine/game.js';
+import { GameEngine, BoardEmptyError } from '../engine/game.js';
 import { formatZodError, validate } from './validation.js';
 
 const createGameSchema = z.object({
@@ -21,6 +21,10 @@ export function createGamesRouter(engine: GameEngine): Router {
       const result = await engine.createSession(validation.data.boardId);
       res.status(201).json({ roomCode: result.roomCode });
     } catch (error) {
+      if (error instanceof BoardEmptyError) {
+        res.status(400).json({ error: 'Board has no playable clues' });
+        return;
+      }
       if (error instanceof Error && error.message === 'Board not found') {
         res.status(404).json({ error: 'Board not found' });
         return;

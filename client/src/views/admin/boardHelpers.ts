@@ -387,7 +387,16 @@ export function isFinalRoundComplete(round: Round): boolean {
   });
 }
 
+export function hasPlayableClue(board: BoardWithRounds): boolean {
+  return board.rounds.some((round) => {
+    if (round.type === 'FINAL') return false;
+    return round.categories.some((category) => category.clues.some(isClueComplete));
+  });
+}
+
 export function isBoardComplete(board: BoardWithRounds): boolean {
+  if (!hasPlayableClue(board)) return false;
+
   return board.rounds.every((round) => {
     if (round.type === 'FINAL') return isFinalRoundComplete(round);
     return isPlayRoundComplete(round, board.includeDoubleJeopardy);
