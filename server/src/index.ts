@@ -5,14 +5,25 @@ loadServerEnv();
 import { createServer } from 'node:http';
 import { createApp } from './http/app.js';
 import { bootstrapSocketIO } from './sockets/index.js';
+import { GameEngine } from './engine/game.js';
 
 const port = process.env.PORT ?? 4000;
 
-const app = createApp();
-const httpServer = createServer(app);
+async function main() {
+  const engine = new GameEngine();
+  await engine.loadActiveSessions();
 
-bootstrapSocketIO(httpServer);
+  const app = createApp(engine);
+  const httpServer = createServer(app);
 
-httpServer.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+  bootstrapSocketIO(httpServer, engine);
+
+  httpServer.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
+
+main().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });

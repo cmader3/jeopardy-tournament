@@ -1,3 +1,10 @@
+export type GameSessionStatus =
+  | 'LOBBY'
+  | 'IN_PROGRESS'
+  | 'FINAL'
+  | 'COMPLETE'
+  | 'ABANDONED';
+
 export type GamePhase =
   | 'LOBBY'
   | 'BOARD_SELECT'
@@ -18,6 +25,7 @@ export interface Player {
   score: number;
   seatOrder: number;
   connected: boolean;
+  reconnectToken: string;
 }
 
 export interface Category {

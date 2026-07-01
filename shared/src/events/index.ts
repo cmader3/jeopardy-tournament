@@ -28,6 +28,7 @@ export interface JoinPayload {
   roomCode: string;
   name?: string;
   reconnectToken?: string;
+  hostToken?: string;
 }
 
 export interface SelectCluePayload {

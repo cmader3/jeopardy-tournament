@@ -61,15 +61,23 @@ model Clue {
   @@index([categoryId])
 }
 
+enum GameSessionStatus {
+  LOBBY
+  IN_PROGRESS
+  FINAL
+  COMPLETE
+  ABANDONED
+}
+
 model GameSession {
-  id        String   @id @default(uuid())
-  roomCode  String   @unique
+  id        String            @id @default(uuid())
+  roomCode  String            @unique
   boardId   String
-  board     Board    @relation(fields: [boardId], references: [id], onDelete: Restrict)
-  status    String
+  board     Board             @relation(fields: [boardId], references: [id], onDelete: Restrict)
+  status    GameSessionStatus
   snapshot  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
   players   Player[]
 }
 

@@ -29,3 +29,81 @@ body {
   background-color: var(--panel-bg);
   color: var(--text-light);
 }
+
+.route-stub {
+  padding: 1.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.route-stub h1 {
+  font-family: var(--font-display);
+  color: var(--value-gold);
+}
+
+.route-stub form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 320px;
+}
+
+.route-stub input {
+  padding: 0.5rem;
+  font-size: 1rem;
+  border: 1px solid var(--value-gold);
+  background: var(--text-dark);
+  color: var(--text-light);
+}
+
+.route-stub button {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  background: var(--jeopardy-blue);
+  color: var(--text-light);
+  border: 2px solid var(--value-gold);
+  cursor: pointer;
+}
+
+.route-stub button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.room-code {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--value-gold);
+}
+
+.player-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.player-list li {
+  padding: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.player-list .connected {
+  color: var(--correct-green);
+}
+
+.player-list .disconnected {
+  color: var(--incorrect-red);
+}
+
+.board-list {
+  list-style: none;
+  padding: 0;
+}
+
+.board-list li {
+  margin: 0.5rem 0;
+}
+
+.error {
+  color: var(--incorrect-red);
+}

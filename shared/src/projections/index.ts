@@ -1,10 +1,17 @@
 import { GameState } from '../models/index.js';
 
+export interface ProjectedPlayer {
+  id: string;
+  name: string;
+  score: number;
+  connected: boolean;
+}
+
 export interface BoardView {
   phase: GameState['phase'];
   roomCode: string;
   roundIndex: number;
-  players: { id: string; name: string; score: number }[];
+  players: ProjectedPlayer[];
   currentClueId: string | null;
   buzzWinnerId: string | null;
   deadline: number | null;
@@ -12,8 +19,6 @@ export interface BoardView {
 
 export interface HostView extends BoardView {
   answer: string | null;
-  finalWagers: Record<string, number> | null;
-  finalAnswers: Record<string, string> | null;
 }
 
 export interface ContestantView extends BoardView {
@@ -28,7 +33,7 @@ export function projectBoard(state: GameState): BoardView {
     phase: state.phase,
     roomCode: state.roomCode,
     roundIndex: state.roundIndex,
-    players: state.players.map((p) => ({ id: p.id, name: p.name, score: p.score })),
+    players: state.players.map((p) => ({ id: p.id, name: p.name, score: p.score, connected: p.connected })),
     currentClueId: state.currentClueId,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
@@ -44,8 +49,6 @@ export function projectHost(state: GameState): HostView {
   return {
     ...projectBoard(state),
     answer: currentClue?.answer ?? null,
-    finalWagers: state.phase.startsWith('FINAL') ? state.finalWagers : null,
-    finalAnswers: state.phase === 'FINAL_REVEAL' ? state.finalAnswers : null,
   };
 }
 

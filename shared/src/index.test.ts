@@ -4,6 +4,7 @@ import {
   GamePhase,
   GameState,
   Player,
+  createInitialState,
   reduce,
   projectBoard,
   projectHost,
@@ -29,6 +30,7 @@ describe('shared package index', () => {
       score: 0,
       seatOrder: 0,
       connected: true,
+      reconnectToken: 'token-alice',
     };
 
     const phase: GamePhase = 'LOBBY';
@@ -51,10 +53,12 @@ describe('shared package index', () => {
       finalAnswers: {},
     };
 
-    expect(reduce(state, { type: 'noop' }, { now: 0 })).toBe(state);
+    const result = reduce(state, { type: 'JOIN', player: { ...player, id: 'p2', reconnectToken: 'token-bob' } }, { now: 0 });
+    expect(result.state.players).toHaveLength(2);
     expect(projectBoard(state).roomCode).toBe('TEST');
     expect(projectHost(state).answer).toBeNull();
     expect(projectContestant(state, player.id).playerId).toBe(player.id);
+    expect(createInitialState('s2', 'ROOM', board).phase).toBe('LOBBY');
     expect(ClientToServer.JOIN).toBe('join');
     expect(ServerToClient.STATE).toBe('state');
   });
