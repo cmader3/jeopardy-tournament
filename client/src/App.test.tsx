@@ -27,7 +27,7 @@ describe('App route stubs', () => {
     ['/admin', 'Enter Host Passcode'],
     ['/host', 'Enter Host Passcode'],
     ['/board', 'Board'],
-    ['/play', 'Play'],
+    ['/play', 'Join Game'],
   ])('renders %s with its expected heading', (path, heading) => {
     renderRoute(path);
     expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();

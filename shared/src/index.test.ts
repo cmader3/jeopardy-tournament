@@ -53,7 +53,7 @@ describe('shared package index', () => {
       finalAnswers: {},
     };
 
-    const result = reduce(state, { type: 'JOIN', player: { ...player, id: 'p2', reconnectToken: 'token-bob' } }, { now: 0 });
+    const result = reduce(state, { type: 'JOIN', player: { ...player, id: 'p2', name: 'Bob', reconnectToken: 'token-bob' } }, { now: 0 });
     expect(result.state.players).toHaveLength(2);
     expect(projectBoard(state).roomCode).toBe('TEST');
     expect(projectHost(state).answer).toBeNull();

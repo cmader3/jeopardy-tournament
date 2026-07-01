@@ -15,7 +15,7 @@ export interface SocketState<T> {
 export function useSocket<T>(
   role: JoinPayload['role'],
   roomCode: string,
-  onState: (state: T) => void,
+  onState?: (state: T) => void,
   name?: string,
   reconnectToken?: string,
   hostToken?: string,
@@ -54,7 +54,7 @@ export function useSocket<T>(
 
     socket.on('state', (state: T) => {
       setData(state);
-      onStateRef.current(state);
+      onStateRef.current?.(state);
     });
 
     socket.on('error', (err: { message?: string }) => {

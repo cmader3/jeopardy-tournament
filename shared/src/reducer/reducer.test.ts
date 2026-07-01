@@ -167,6 +167,22 @@ describe('LOBBY intents', () => {
     expect(result.state.players).toHaveLength(5);
   });
 
+  it('JOIN rejects a duplicate name', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const duplicate = makePlayer({ id: 'p2', name: 'alice', reconnectToken: 'token-bob' });
+
+    let result = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
+    result = reduce(result.state, { type: 'JOIN', player: duplicate }, { now: NOW });
+
+    expect(result.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: expect.stringContaining('name'),
+    });
+    expect(result.state.players).toHaveLength(1);
+  });
+
   it('LEAVE removes a player from the lobby and frees the seat', () => {
     const board = makeBoard();
     const state = createInitialState('session-1', 'ABCD', board);

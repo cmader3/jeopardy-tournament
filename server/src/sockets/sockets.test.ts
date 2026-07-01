@@ -232,4 +232,169 @@ describe('game sockets', () => {
     client.disconnect();
     await server.close();
   });
+
+  it('rejects a blank or whitespace-only contestant name', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+    const client = connectClient(server.url);
+    await waitForConnect(client);
+
+    const errorPromise = waitForError(client);
+    client.emit('join', { role: 'contestant', roomCode, name: '   ' });
+    const error = await errorPromise;
+
+    expect(error.message).toMatch(/name/i);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    const hostStatePromise = waitForState(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    const hostState = (await hostStatePromise) as { players: { name: string }[] };
+    expect(hostState.players).toHaveLength(0);
+
+    client.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('rejects a duplicate contestant name', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const first = connectClient(server.url);
+    await waitForConnect(first);
+    const tokenPromise = waitForToken(first);
+    first.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    await tokenPromise;
+
+    const second = connectClient(server.url);
+    await waitForConnect(second);
+    const errorPromise = waitForError(second);
+    second.emit('join', { role: 'contestant', roomCode, name: 'alice' });
+    const error = await errorPromise;
+
+    expect(error.message).toMatch(/name/i);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    const hostStatePromise = waitForState(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    const hostState = (await hostStatePromise) as { players: { name: string }[] };
+    expect(hostState.players).toHaveLength(1);
+
+    first.disconnect();
+    second.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('rejects a sixth contestant and does not add them to the roster', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const clients: ClientSocket[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const client = connectClient(server.url);
+      await waitForConnect(client);
+      const tokenPromise = waitForToken(client);
+      client.emit('join', { role: 'contestant', roomCode, name: `Player ${i + 1}` });
+      await tokenPromise;
+      clients.push(client);
+    }
+
+    const sixth = connectClient(server.url);
+    await waitForConnect(sixth);
+    const errorPromise = waitForError(sixth);
+    sixth.emit('join', { role: 'contestant', roomCode, name: 'Too Many' });
+    const error = await errorPromise;
+
+    expect(error.message).toMatch(/full/i);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    const hostStatePromise = waitForState(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    const hostState = (await hostStatePromise) as { players: { name: string }[] };
+    expect(hostState.players).toHaveLength(5);
+
+    clients.forEach((c) => c.disconnect());
+    sixth.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('accepts a room code with different case and surrounding whitespace', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+    const client = connectClient(server.url);
+    await waitForConnect(client);
+
+    const paddedCode = `  ${roomCode.toLowerCase()}  `;
+    const statePromise = waitForState(client);
+    const tokenPromise = waitForToken(client);
+    client.emit('join', { role: 'contestant', roomCode: paddedCode, name: 'Alice' });
+    const [state, token] = await Promise.all([statePromise, tokenPromise]);
+
+    expect(state.roomCode).toBe(roomCode);
+    expect(token.reconnectToken).toBeDefined();
+
+    client.disconnect();
+    await server.close();
+  });
+
+  it('admits exactly one racer for the last open slot and rejects the other as full', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const existing: ClientSocket[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const client = connectClient(server.url);
+      await waitForConnect(client);
+      const tokenPromise = waitForToken(client);
+      client.emit('join', { role: 'contestant', roomCode, name: `Player ${i + 1}` });
+      await tokenPromise;
+      existing.push(client);
+    }
+
+    const racerA = connectClient(server.url);
+    const racerB = connectClient(server.url);
+    await Promise.all([waitForConnect(racerA), waitForConnect(racerB)]);
+
+    const outcomeAPromise = Promise.race([
+      waitForToken(racerA).then(() => 'token' as const),
+      waitForError(racerA).then(() => 'error' as const),
+    ]);
+    const outcomeBPromise = Promise.race([
+      waitForToken(racerB).then(() => 'token' as const),
+      waitForError(racerB).then(() => 'error' as const),
+    ]);
+
+    racerA.emit('join', { role: 'contestant', roomCode, name: 'Racer A' });
+    racerB.emit('join', { role: 'contestant', roomCode, name: 'Racer B' });
+
+    const [outcomeA, outcomeB] = await Promise.all([outcomeAPromise, outcomeBPromise]);
+
+    const admitted = [outcomeA, outcomeB].filter((o) => o === 'token').length;
+    const rejected = [outcomeA, outcomeB].filter((o) => o === 'error').length;
+    expect(admitted).toBe(1);
+    expect(rejected).toBe(1);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    const hostStatePromise = waitForState(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    const hostState = (await hostStatePromise) as { players: { name: string }[] };
+    expect(hostState.players).toHaveLength(5);
+
+    existing.forEach((c) => c.disconnect());
+    racerA.disconnect();
+    racerB.disconnect();
+    host.disconnect();
+    await server.close();
+  });
 });

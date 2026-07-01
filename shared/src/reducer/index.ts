@@ -75,6 +75,16 @@ function handleJoin(state: GameState, player: Player): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player already joined' }] };
   }
 
+  const normalizedName = player.name.trim().toLowerCase();
+  if (normalizedName.length === 0) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Name is required' }] };
+  }
+
+  const duplicateName = state.players.find((p) => p.name.trim().toLowerCase() === normalizedName);
+  if (duplicateName) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A contestant with that name already joined' }] };
+  }
+
   const nextSeatOrder = Math.max(0, ...state.players.map((p) => p.seatOrder + 1));
   const joined: Player = { ...player, seatOrder: nextSeatOrder, connected: true };
   return {
