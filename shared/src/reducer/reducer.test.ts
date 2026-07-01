@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, reduce } from './index.js';
-import type { Board, Player } from '../models/index.js';
+import type { Board, GameState, Player } from '../models/index.js';
 
 function makeBoard(): Board {
   return {
@@ -30,6 +30,32 @@ function makeBoard(): Board {
                 answer: 'Water',
                 isDailyDouble: false,
               },
+              {
+                id: 'cl2',
+                categoryId: 'c1',
+                row: 1,
+                value: 200,
+                clueText: 'This planet is known as the Red Planet',
+                answer: 'Mars',
+                isDailyDouble: true,
+              },
+            ],
+          },
+          {
+            id: 'c2',
+            roundId: 'r1',
+            title: 'History',
+            order: 1,
+            clues: [
+              {
+                id: 'cl3',
+                categoryId: 'c2',
+                row: 0,
+                value: 100,
+                clueText: 'First US president',
+                answer: 'Washington',
+                isDailyDouble: false,
+              },
             ],
           },
         ],
@@ -43,6 +69,24 @@ function makeBoard(): Board {
             answer: 'Water',
             isDailyDouble: false,
           },
+          {
+            id: 'cl2',
+            categoryId: 'c1',
+            row: 1,
+            value: 200,
+            clueText: 'This planet is known as the Red Planet',
+            answer: 'Mars',
+            isDailyDouble: true,
+          },
+          {
+            id: 'cl3',
+            categoryId: 'c2',
+            row: 0,
+            value: 100,
+            clueText: 'First US president',
+            answer: 'Washington',
+            isDailyDouble: false,
+          },
         ],
       },
       {
@@ -51,14 +95,14 @@ function makeBoard(): Board {
         order: 1,
         categories: [
           {
-            id: 'c2',
+            id: 'c3',
             roundId: 'r2',
             title: 'Literature',
             order: 0,
             clues: [
               {
-                id: 'cl2',
-                categoryId: 'c2',
+                id: 'cl-final',
+                categoryId: 'c3',
                 row: 0,
                 value: null,
                 clueText: 'He wrote The Hobbit',
@@ -70,8 +114,8 @@ function makeBoard(): Board {
         ],
         clues: [
           {
-            id: 'cl2',
-            categoryId: 'c2',
+            id: 'cl-final',
+            categoryId: 'c3',
             row: 0,
             value: null,
             clueText: 'He wrote The Hobbit',
@@ -281,5 +325,102 @@ describe('LOBBY intents', () => {
     expect(result.state.players).toHaveLength(1);
     expect(result.state.players[0].connected).toBe(false);
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+});
+
+describe('SELECT_CLUE', () => {
+  function setupGame(): GameState {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+    return reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+  }
+
+  it('lets the controlling player select an unused clue and reveals it', () => {
+    const state = setupGame();
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW });
+
+    expect(result.state.phase).toBe('CLUE_REVEALED');
+    expect(result.state.currentClueId).toBe('cl1');
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('lets the host override select any unused clue', () => {
+    const state = setupGame();
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW });
+
+    expect(result.state.phase).toBe('CLUE_REVEALED');
+    expect(result.state.currentClueId).toBe('cl1');
+  });
+
+  it('rejects selection by a non-controlling player', () => {
+    const state = setupGame();
+    const nonController = state.players.find((p) => p.id !== state.controllingPlayerId);
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: nonController?.id }, { now: NOW });
+
+    expect(result.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: expect.stringContaining('controlling player'),
+    });
+    expect(result.state.phase).toBe('BOARD_SELECT');
+  });
+
+  it('rejects selection outside BOARD_SELECT', () => {
+    const state = setupGame();
+    const revealed = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+    const result = reduce(revealed, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: state.controllingPlayerId }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+
+  it('rejects a used clue', () => {
+    const state = setupGame();
+    const used = { ...state, usedClueIds: ['cl1'] };
+    const result = reduce(used, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already been used') });
+  });
+
+  it('transitions to DAILY_DOUBLE_WAGER for a daily double', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: state.controllingPlayerId }, { now: NOW });
+
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(result.state.currentClueId).toBe('cl2');
+  });
+});
+
+describe('REVEAL_ANSWER', () => {
+  it('marks the current clue used and returns to BOARD_SELECT', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'REVEAL_ANSWER' }, { now: NOW });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.usedClueIds).toContain('cl1');
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('is rejected when no clue is revealed', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+
+    const result = reduce(state, { type: 'REVEAL_ANSWER' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('No clue') });
   });
 });

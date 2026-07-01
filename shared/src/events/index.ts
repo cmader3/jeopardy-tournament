@@ -47,3 +47,7 @@ export interface SubmitWagerPayload {
 export interface SubmitFinalAnswerPayload {
   answer: string;
 }
+
+export interface RevealAnswerPayload {
+  playerId?: string;
+}

@@ -19,6 +19,54 @@ interface ContestantLobbyProps {
   onTryAgain: () => void;
 }
 
+function ContestantGrid({
+  state,
+  onSelectClue,
+}: {
+  state: ContestantView;
+  onSelectClue?: (clueId: string) => void;
+}) {
+  if (!state.round) return <p>No active round.</p>;
+
+  const maxRow = Math.max(0, ...state.round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
+  const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
+  const canSelect = state.isControllingPlayer;
+
+  return (
+    <div
+      className="contestant-grid"
+      data-testid="contestant-grid"
+      style={{ display: 'grid', gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)`, gap: '0.5rem' }}
+    >
+      {state.round.categories.map((category) => (
+        <div key={category.id} className="contestant-category-header" data-testid="contestant-category-header">
+          {category.title}
+        </div>
+      ))}
+      {rows.map((row) =>
+        state.round!.categories.map((category) => {
+          const clue = category.clues.find((c) => c.row === row);
+          if (!clue) return <div key={`${category.id}-${row}`} className="contestant-cell" />;
+          const used = state.usedClueIds.includes(clue.id);
+          return (
+            <button
+              key={clue.id}
+              type="button"
+              className="contestant-cell"
+              data-testid={used ? 'contestant-used-cell' : 'contestant-clue-cell'}
+              data-clue-id={clue.id}
+              disabled={used || !canSelect}
+              onClick={() => onSelectClue?.(clue.id)}
+            >
+              {used ? '' : `$${clue.value}`}
+            </button>
+          );
+        }),
+      )}
+    </div>
+  );
+}
+
 function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
@@ -26,6 +74,11 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
 
   const gameState = socket.data;
   const me = gameState?.players.find((p) => p.id === gameState?.playerId);
+
+  const showClue =
+    gameState?.currentClueId &&
+    gameState?.currentClueText &&
+    (gameState?.phase === 'CLUE_REVEALED' || gameState?.phase === 'BUZZERS_ARMED' || gameState?.phase === 'BUZZED');
 
   return (
     <main className="route-stub">
@@ -45,7 +98,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
         <div className="contestant-state">
           <p>Welcome, {me?.name ?? 'Contestant'}</p>
           <p>Score: {me?.score ?? 0}</p>
-          {gameState.phase === 'LOBBY' ? (
+          {gameState.phase === 'LOBBY' && (
             <>
               <p>Waiting for the host to start the game.</p>
               <button
@@ -58,8 +111,25 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 Leave Game
               </button>
             </>
-          ) : (
-            <p>Phase: {gameState.phase}</p>
+          )}
+          {gameState.phase === 'BOARD_SELECT' && gameState.round && (
+            <>
+              <p>Phase: {gameState.phase}</p>
+              {gameState.isControllingPlayer ? (
+                <p>Select a clue from the board.</p>
+              ) : (
+                <p>Waiting for {gameState.players.find((p) => p.id === gameState.controllingPlayerId)?.name ?? 'the controller'} to select a clue.</p>
+              )}
+              <ContestantGrid state={gameState} onSelectClue={socket.selectClue} />
+            </>
+          )}
+          {showClue && (
+            <div className="clue-overlay" data-testid="contestant-clue-overlay">
+              <p data-testid="contestant-clue-text">{gameState.currentClueText}</p>
+            </div>
+          )}
+          {gameState.phase === 'DAILY_DOUBLE_WAGER' && (
+            <div data-testid="daily-double-splash">DAILY DOUBLE</div>
           )}
         </div>
       )}

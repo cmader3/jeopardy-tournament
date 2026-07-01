@@ -23,13 +23,43 @@ import { boardApi } from '../api/boards.js';
 import { createGame } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
 
+function makeRound(overrides: Partial<HostView['round']> = {}): NonNullable<HostView['round']> {
+  return {
+    id: 'r1',
+    type: 'JEOPARDY',
+    order: 0,
+    categories: [
+      {
+        id: 'c1',
+        title: 'Science',
+        order: 0,
+        clues: [
+          { id: 'cl1', categoryId: 'c1', row: 0, value: 100, clueText: 'H2O is this compound', answer: 'Water', isDailyDouble: false },
+          { id: 'cl2', categoryId: 'c1', row: 1, value: 200, clueText: 'This planet is the Red Planet', answer: 'Mars', isDailyDouble: true },
+        ],
+      },
+      {
+        id: 'c2',
+        title: 'History',
+        order: 1,
+        clues: [{ id: 'cl3', categoryId: 'c2', row: 0, value: 100, clueText: 'First US president', answer: 'Washington', isDailyDouble: false }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function makeHostState(overrides: Partial<HostView> = {}): HostView {
   return {
     phase: 'LOBBY',
     roomCode: 'ABCD',
     roundIndex: 0,
     players: [],
+    round: null,
+    usedClueIds: [],
     currentClueId: null,
+    currentClueText: null,
+    controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
     answer: null,
@@ -246,5 +276,74 @@ describe('HostContent', () => {
     expect(screen.getByTestId('phase-indicator')).toHaveTextContent('BOARD_SELECT');
     expect(screen.getByTestId('roster-name-p1')).toHaveTextContent('Alice');
     expect(screen.getByTestId('roster-score-p1')).toHaveTextContent('0');
+  });
+});
+
+describe('HostInProgress grid and selection', () => {
+  it('renders the host grid with categories and values', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound() });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-grid')).toBeInTheDocument();
+    const headers = screen.getAllByTestId('host-category-header');
+    expect(headers).toHaveLength(2);
+    expect(headers[0]).toHaveTextContent('Science');
+    expect(headers[1]).toHaveTextContent('History');
+    expect(screen.getAllByTestId('host-clue-cell')).toHaveLength(3);
+  });
+
+  it('shows daily double markers on the host grid', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound() });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('dd-marker')).toBeInTheDocument();
+  });
+
+  it('calls onSelectClue when a usable cell is clicked', async () => {
+    const onSelectClue = vi.fn();
+    const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound() });
+    render(<HostInProgress roomCode="WXYZ" state={state} onSelectClue={onSelectClue} />);
+
+    const cell = screen.getAllByTestId('host-clue-cell')[0];
+    await userEvent.click(cell);
+
+    expect(onSelectClue).toHaveBeenCalledWith('cl1');
+  });
+
+  it('disables used cells on the host grid', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound(), usedClueIds: ['cl1'] });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getAllByTestId('host-used-cell')).toHaveLength(1);
+    expect(screen.getAllByTestId('host-clue-cell')).toHaveLength(2);
+  });
+
+  it('shows the current clue and answer', () => {
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('clue-text')).toHaveTextContent('H2O is this compound');
+    expect(screen.getByTestId('answer-text')).toHaveTextContent('Answer: Water');
+  });
+
+  it('calls onRevealAnswer when the reveal button is clicked', async () => {
+    const onRevealAnswer = vi.fn();
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onRevealAnswer={onRevealAnswer} />);
+
+    await userEvent.click(screen.getByTestId('reveal-answer-button'));
+    expect(onRevealAnswer).toHaveBeenCalledTimes(1);
   });
 });

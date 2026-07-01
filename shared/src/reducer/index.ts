@@ -10,7 +10,9 @@ export type Intent =
   | { type: 'LEAVE'; playerId: string }
   | { type: 'DISCONNECT'; playerId: string }
   | { type: 'RECONNECT'; playerId: string }
-  | { type: 'START_GAME' };
+  | { type: 'START_GAME' }
+  | { type: 'SELECT_CLUE'; clueId: string; selectorId?: string; hostOverride?: boolean }
+  | { type: 'REVEAL_ANSWER' };
 
 export type Effect =
   | { type: 'NOOP' }
@@ -56,6 +58,10 @@ export function reduce(state: GameState, intent: Intent, _ctx: ReducerCtx): Redu
       return handleReconnect(state, intent.playerId);
     case 'START_GAME':
       return handleStartGame(state);
+    case 'SELECT_CLUE':
+      return handleSelectClue(state, intent);
+    case 'REVEAL_ANSWER':
+      return handleRevealAnswer(state);
     default:
       return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Unknown intent' }] };
   }
@@ -160,6 +166,75 @@ function handleStartGame(state: GameState): ReducerResult {
       ...state,
       phase: 'BOARD_SELECT',
       controllingPlayerId: controller.id,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleSelectClue(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SELECT_CLUE' }>,
+): ReducerResult {
+  if (state.phase !== 'BOARD_SELECT') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot select a clue right now' }] };
+  }
+
+  const canSelect =
+    intent.hostOverride === true ||
+    (intent.selectorId !== undefined && intent.selectorId === state.controllingPlayerId);
+
+  if (!canSelect) {
+    return {
+      state,
+      effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling player or host can select a clue' }],
+    };
+  }
+
+  const round = state.board.rounds[state.roundIndex];
+  if (!round) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No active round' }] };
+  }
+
+  const clue = round.clues.find((c) => c.id === intent.clueId);
+  if (!clue) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clue not found' }] };
+  }
+
+  if (state.usedClueIds.includes(clue.id)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clue has already been used' }] };
+  }
+
+  const nextPhase = clue.isDailyDouble ? 'DAILY_DOUBLE_WAGER' : 'CLUE_REVEALED';
+
+  return {
+    state: {
+      ...state,
+      phase: nextPhase,
+      currentClueId: clue.id,
+      buzzWinnerId: null,
+      deadline: null,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRevealAnswer(state: GameState): ReducerResult {
+  if (state.phase !== 'CLUE_REVEALED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No clue is available to reveal' }] };
+  }
+
+  if (!state.currentClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
+  }
+
+  return {
+    state: {
+      ...state,
+      phase: 'BOARD_SELECT',
+      usedClueIds: [...state.usedClueIds, state.currentClueId],
+      currentClueId: null,
+      buzzWinnerId: null,
+      deadline: null,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

@@ -770,3 +770,190 @@ describe('game sockets', () => {
     await server.close();
   });
 });
+
+describe('clue selection sockets', () => {
+  function makePlayableBoardPayload() {
+    return {
+      name: 'Playable Socket Board',
+      includeDoubleJeopardy: false,
+      defaultTimerSeconds: 10,
+      finalTimerSeconds: 30,
+      rounds: [
+        {
+          type: 'JEOPARDY',
+          order: 0,
+          categories: [
+            {
+              title: 'Science',
+              order: 0,
+              clues: [
+                { value: 100, row: 0, clueText: 'H2O', answer: 'Water', isDailyDouble: false },
+                { value: 200, row: 1, clueText: 'Red Planet', answer: 'Mars', isDailyDouble: true },
+              ],
+            },
+            {
+              title: 'History',
+              order: 1,
+              clues: [{ value: 100, row: 0, clueText: 'First president', answer: 'Washington', isDailyDouble: false }],
+            },
+          ],
+        },
+        {
+          type: 'FINAL',
+          order: 1,
+          categories: [
+            {
+              title: 'Literature',
+              order: 0,
+              clues: [{ value: null, row: 0, clueText: 'Hobbit author', answer: 'Tolkien', isDailyDouble: false }],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  async function setupGame(server: Awaited<ReturnType<typeof createTestServer>>) {
+    const board = await boardRepository.create(makePlayableBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    const boardClient = connectClient(server.url);
+    await Promise.all([waitForConnect(host), waitForConnect(boardClient)]);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    boardClient.emit('join', { role: 'board', roomCode });
+    await Promise.all([waitForState(host), waitForState(boardClient)]);
+
+    const alice = connectClient(server.url);
+    const bob = connectClient(server.url);
+    await Promise.all([waitForConnect(alice), waitForConnect(bob)]);
+    const aliceToken = waitForToken(alice);
+    const bobToken = waitForToken(bob);
+    const aliceState = waitForState(alice);
+    const bobState = waitForState(bob);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    bob.emit('join', { role: 'contestant', roomCode, name: 'Bob' });
+    const [tokenA, tokenB] = await Promise.all([aliceToken, bobToken]);
+    await Promise.all([aliceState, bobState]);
+
+    const hostStart = waitForState(host);
+    const boardStart = waitForState(boardClient);
+    const aliceStart = waitForState(alice);
+    const bobStart = waitForState(bob);
+    host.emit('start_game');
+    await Promise.all([hostStart, boardStart, aliceStart, bobStart]);
+
+    return { roomCode, host, boardClient, alice, bob, tokenA, tokenB };
+  }
+
+  it('host selects a clue and board + contestants see the clue text', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const firstClue = state.board.rounds[0].clues[0];
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('select_clue', { clueId: firstClue.id });
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((hostState as { phase: string }).phase).toBe('CLUE_REVEALED');
+    expect((boardState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
+    expect((aliceState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
+    expect((bobState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
+    expect((hostState as { answer: string }).answer).toBe(firstClue.answer);
+    expect((boardState as { answer?: string }).answer).toBeUndefined();
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('controlling contestant selects a clue and it reveals on all views', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const state = server.engine.getState(roomCode)!;
+    const firstClue = state.board.rounds[0].clues[0];
+    const controllerId = state.controllingPlayerId;
+    const controller = controllerId === tokenA.playerId ? alice : bob;
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    controller.emit('select_clue', { clueId: firstClue.id });
+    const [boardState] = await Promise.all([boardUpdate, hostUpdate, aliceUpdate, bobUpdate]);
+
+    expect((boardState as { phase: string }).phase).toBe('CLUE_REVEALED');
+    expect((boardState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('non-controlling contestant cannot select a clue', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const state = server.engine.getState(roomCode)!;
+    const firstClue = state.board.rounds[0].clues[0];
+    const controllerId = state.controllingPlayerId;
+    const nonController = controllerId === tokenA.playerId ? bob : alice;
+
+    const errorPromise = waitForError(nonController);
+    nonController.emit('select_clue', { clueId: firstClue.id });
+    const error = await errorPromise;
+
+    expect(error.message).toMatch(/controlling player/i);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('host reveal answer returns to board select and marks the clue used', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const firstClue = state.board.rounds[0].clues[0];
+
+    host.emit('select_clue', { clueId: firstClue.id });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('reveal_answer');
+    const [hostState, boardState] = await Promise.all([hostUpdate, boardUpdate, aliceUpdate, bobUpdate]);
+
+    expect((hostState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((boardState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((boardState as { usedClueIds: string[] }).usedClueIds).toContain(firstClue.id);
+    expect((boardState as { currentClueId: string | null }).currentClueId).toBeNull();
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+});

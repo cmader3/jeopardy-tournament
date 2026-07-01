@@ -1,4 +1,4 @@
-import { GameState } from '../models/index.js';
+import { GameState, Clue } from '../models/index.js';
 
 export interface ProjectedPlayer {
   id: string;
@@ -7,17 +7,73 @@ export interface ProjectedPlayer {
   connected: boolean;
 }
 
+export interface ProjectedCluePublic {
+  id: string;
+  categoryId: string;
+  row: number;
+  value: number | null;
+}
+
+export interface ProjectedClueHost extends ProjectedCluePublic {
+  clueText: string;
+  answer: string;
+  isDailyDouble: boolean;
+}
+
+export interface ProjectedCategoryPublic {
+  id: string;
+  title: string;
+  order: number;
+  clues: ProjectedCluePublic[];
+}
+
+export interface ProjectedCategoryHost {
+  id: string;
+  title: string;
+  order: number;
+  clues: ProjectedClueHost[];
+}
+
+export interface ProjectedRoundPublic {
+  id: string;
+  type: 'JEOPARDY' | 'DOUBLE_JEOPARDY' | 'FINAL';
+  order: number;
+  categories: ProjectedCategoryPublic[];
+}
+
+export interface ProjectedRoundHost {
+  id: string;
+  type: 'JEOPARDY' | 'DOUBLE_JEOPARDY' | 'FINAL';
+  order: number;
+  categories: ProjectedCategoryHost[];
+}
+
 export interface BoardView {
   phase: GameState['phase'];
   roomCode: string;
   roundIndex: number;
   players: ProjectedPlayer[];
+  round: ProjectedRoundPublic | null;
+  usedClueIds: string[];
   currentClueId: string | null;
+  currentClueText: string | null;
+  controllingPlayerId: string | null;
   buzzWinnerId: string | null;
   deadline: number | null;
 }
 
-export interface HostView extends BoardView {
+export interface HostView {
+  phase: GameState['phase'];
+  roomCode: string;
+  roundIndex: number;
+  players: ProjectedPlayer[];
+  round: ProjectedRoundHost | null;
+  usedClueIds: string[];
+  currentClueId: string | null;
+  currentClueText: string | null;
+  controllingPlayerId: string | null;
+  buzzWinnerId: string | null;
+  deadline: number | null;
   answer: string | null;
 }
 
@@ -28,26 +84,128 @@ export interface ContestantView extends BoardView {
   canAnswer: boolean;
 }
 
+const CLUE_TEXT_PHASES = new Set<GameState['phase']>([
+  'CLUE_REVEALED',
+  'BUZZERS_ARMED',
+  'BUZZED',
+  'DAILY_DOUBLE_CLUE',
+]);
+
+function projectPlayers(state: GameState): ProjectedPlayer[] {
+  return state.players.map((p) => ({
+    id: p.id,
+    name: p.name,
+    score: p.score,
+    connected: p.connected,
+  }));
+}
+
+function getCurrentRound(state: GameState): GameState['board']['rounds'][number] | undefined {
+  return state.board.rounds[state.roundIndex];
+}
+
+function getCurrentClue(state: GameState): Clue | null {
+  const round = getCurrentRound(state);
+  if (!round || !state.currentClueId) return null;
+  return round.clues.find((c) => c.id === state.currentClueId) ?? null;
+}
+
+function projectBoardRound(round: GameState['board']['rounds'][number]): ProjectedRoundPublic {
+  const cluesByCategory = new Map<string, Clue[]>();
+  for (const clue of round.clues) {
+    const list = cluesByCategory.get(clue.categoryId) ?? [];
+    list.push(clue);
+    cluesByCategory.set(clue.categoryId, list);
+  }
+
+  return {
+    id: round.id,
+    type: round.type,
+    order: round.order,
+    categories: round.categories.map((category) => ({
+      id: category.id,
+      title: category.title,
+      order: category.order,
+      clues: (cluesByCategory.get(category.id) ?? [])
+        .sort((a, b) => a.row - b.row)
+        .map((clue) => ({
+          id: clue.id,
+          categoryId: clue.categoryId,
+          row: clue.row,
+          value: clue.value,
+        })),
+    })),
+  };
+}
+
+function projectHostRound(round: GameState['board']['rounds'][number]): ProjectedRoundHost {
+  const cluesByCategory = new Map<string, Clue[]>();
+  for (const clue of round.clues) {
+    const list = cluesByCategory.get(clue.categoryId) ?? [];
+    list.push(clue);
+    cluesByCategory.set(clue.categoryId, list);
+  }
+
+  return {
+    id: round.id,
+    type: round.type,
+    order: round.order,
+    categories: round.categories.map((category) => ({
+      id: category.id,
+      title: category.title,
+      order: category.order,
+      clues: (cluesByCategory.get(category.id) ?? [])
+        .sort((a, b) => a.row - b.row)
+        .map((clue) => ({
+          id: clue.id,
+          categoryId: clue.categoryId,
+          row: clue.row,
+          value: clue.value,
+          clueText: clue.clueText,
+          answer: clue.answer,
+          isDailyDouble: clue.isDailyDouble,
+        })),
+    })),
+  };
+}
+
 export function projectBoard(state: GameState): BoardView {
+  const round = getCurrentRound(state);
+  const currentClue = getCurrentClue(state);
+  const showClueText = currentClue ? CLUE_TEXT_PHASES.has(state.phase) : false;
+
   return {
     phase: state.phase,
     roomCode: state.roomCode,
     roundIndex: state.roundIndex,
-    players: state.players.map((p) => ({ id: p.id, name: p.name, score: p.score, connected: p.connected })),
+    players: projectPlayers(state),
+    round: round ? projectBoardRound(round) : null,
+    usedClueIds: state.usedClueIds,
     currentClueId: state.currentClueId,
+    currentClueText: showClueText ? currentClue?.clueText ?? null : null,
+    controllingPlayerId: state.controllingPlayerId,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
   };
 }
 
 export function projectHost(state: GameState): HostView {
-  const currentClue = state.currentClueId
-    ? state.board.rounds[state.roundIndex]?.clues.find((c) => c.id === state.currentClueId) ??
-      null
-    : null;
+  const round = getCurrentRound(state);
+  const currentClue = getCurrentClue(state);
+  const showClueText = currentClue ? CLUE_TEXT_PHASES.has(state.phase) : false;
 
   return {
-    ...projectBoard(state),
+    phase: state.phase,
+    roomCode: state.roomCode,
+    roundIndex: state.roundIndex,
+    players: projectPlayers(state),
+    round: round ? projectHostRound(round) : null,
+    usedClueIds: state.usedClueIds,
+    currentClueId: state.currentClueId,
+    currentClueText: showClueText ? currentClue?.clueText ?? null : null,
+    controllingPlayerId: state.controllingPlayerId,
+    buzzWinnerId: state.buzzWinnerId,
+    deadline: state.deadline,
     answer: currentClue?.answer ?? null,
   };
 }

@@ -11,6 +11,8 @@ export interface SocketState<T> {
   data: T | null;
   startGame?: () => void;
   leaveGame?: () => void;
+  selectClue?: (clueId: string) => void;
+  revealAnswer?: () => void;
 }
 
 export function useSocket<T>(
@@ -80,7 +82,15 @@ export function useSocket<T>(
     socketRef.current?.emit('leave');
   }, []);
 
-  return { connected, error, data, startGame, leaveGame };
+  const selectClue = useCallback((clueId: string) => {
+    socketRef.current?.emit('select_clue', { clueId });
+  }, []);
+
+  const revealAnswer = useCallback(() => {
+    socketRef.current?.emit('reveal_answer');
+  }, []);
+
+  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer };
 }
 
 export function getStoredContestantToken(): {

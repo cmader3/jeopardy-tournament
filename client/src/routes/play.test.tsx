@@ -13,13 +13,48 @@ vi.mock('../socket/useSocket.js', () => ({
 
 import { useSocket, clearStoredContestantToken } from '../socket/useSocket.js';
 
+beforeEach(() => {
+  localStorage.clear();
+  (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue(null);
+});
+
+function makeRound(overrides: Partial<ContestantView['round']> = {}): NonNullable<ContestantView['round']> {
+  return {
+    id: 'r1',
+    type: 'JEOPARDY',
+    order: 0,
+    categories: [
+      {
+        id: 'c1',
+        title: 'Science',
+        order: 0,
+        clues: [
+          { id: 'cl1', categoryId: 'c1', row: 0, value: 100 },
+          { id: 'cl2', categoryId: 'c1', row: 1, value: 200 },
+        ],
+      },
+      {
+        id: 'c2',
+        title: 'History',
+        order: 1,
+        clues: [{ id: 'cl3', categoryId: 'c2', row: 0, value: 100 }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function makeContestantState(overrides: Partial<ContestantView> = {}): ContestantView {
   return {
     phase: 'LOBBY',
     roomCode: 'ABCD',
     roundIndex: 0,
     players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    round: null,
+    usedClueIds: [],
     currentClueId: null,
+    currentClueText: null,
+    controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
     playerId: 'p1',
@@ -37,6 +72,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     data: state,
     startGame: vi.fn(),
     leaveGame: vi.fn(),
+    selectClue: vi.fn(),
   });
 }
 
@@ -193,5 +229,130 @@ describe('PlayRoute', () => {
     expect(leaveGame).toHaveBeenCalledTimes(1);
     expect(clearStoredContestantToken).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
+  });
+
+  it('shows the grid and lets the controlling player select a clue', async () => {
+    const selectClue = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        isControllingPlayer: true,
+        controllingPlayerId: 'p1',
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-grid')).toBeInTheDocument();
+    const cells = screen.getAllByTestId('contestant-clue-cell');
+    expect(cells).toHaveLength(3);
+    await userEvent.click(cells[0]);
+    expect(selectClue).toHaveBeenCalledWith('cl1');
+  });
+
+  it('disables clue selection for a non-controlling contestant', async () => {
+    const selectClue = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        isControllingPlayer: false,
+        controllingPlayerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-grid')).toBeInTheDocument();
+    const cells = screen.getAllByTestId('contestant-clue-cell');
+    expect(cells[0]).toBeDisabled();
+    await userEvent.click(cells[0]);
+    expect(selectClue).not.toHaveBeenCalled();
+  });
+
+  it('shows the revealed clue on the contestant device', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-clue-text')).toHaveTextContent('H2O is this compound');
+  });
+
+  it('shows a Daily Double splash during the wager phase', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-splash')).toBeInTheDocument();
   });
 });

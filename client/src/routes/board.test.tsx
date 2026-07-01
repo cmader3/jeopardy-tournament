@@ -20,13 +20,43 @@ vi.mock('../socket/useSocket.js', () => ({
 
 import { useSocket } from '../socket/useSocket.js';
 
+function makeRound(overrides: Partial<BoardView['round']> = {}): NonNullable<BoardView['round']> {
+  return {
+    id: 'r1',
+    type: 'JEOPARDY',
+    order: 0,
+    categories: [
+      {
+        id: 'c1',
+        title: 'Science',
+        order: 0,
+        clues: [
+          { id: 'cl1', categoryId: 'c1', row: 0, value: 100 },
+          { id: 'cl2', categoryId: 'c1', row: 1, value: 200 },
+        ],
+      },
+      {
+        id: 'c2',
+        title: 'History',
+        order: 1,
+        clues: [{ id: 'cl3', categoryId: 'c2', row: 0, value: 100 }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
   return {
     phase: 'LOBBY',
     roomCode: 'ABCD',
     roundIndex: 0,
     players: [],
+    round: null,
+    usedClueIds: [],
     currentClueId: null,
+    currentClueText: null,
+    controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
     ...overrides,
@@ -49,7 +79,7 @@ describe('BoardRoute', () => {
     expect(screen.getByRole('button', { name: /view board/i })).toBeDisabled();
   });
 
-  it('shows the room code and a waiting-for-players state before anyone joins', async () => {
+  it('shows the room code and a waiting-for-host state while in the lobby', async () => {
     mockUseSocket(makeBoardState());
 
     renderBoardRoute();
@@ -58,7 +88,7 @@ describe('BoardRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
     expect(await screen.findByTestId('room-code')).toHaveTextContent('ABCD');
-    expect(screen.getByText(/waiting for players/i)).toBeInTheDocument();
+    expect(screen.getByText(/waiting for the host/i)).toBeInTheDocument();
   });
 
   it('shows a scoreboard with every joined contestant name and score', async () => {
@@ -188,5 +218,100 @@ describe('BoardRoute', () => {
 
     expect(localStorage.getItem('jeopardy-board-room')).toBeNull();
     expect(screen.getByLabelText(/room code/i)).toBeInTheDocument();
+  });
+
+  it('renders the category grid after the game leaves the lobby', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('board-grid')).toBeInTheDocument();
+    const headers = screen.getAllByTestId('category-header');
+    expect(headers).toHaveLength(2);
+    expect(headers[0]).toHaveTextContent('Science');
+    expect(headers[1]).toHaveTextContent('History');
+    expect(screen.getAllByTestId('clue-cell')).toHaveLength(3);
+  });
+
+  it('renders used cells as empty', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('board-grid');
+    expect(screen.getAllByTestId('used-cell')).toHaveLength(1);
+    expect(screen.getAllByTestId('clue-cell')).toHaveLength(2);
+  });
+
+  it('shows the current clue full-screen without the answer', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('clue-text')).toHaveTextContent('H2O is this compound');
+    expect(screen.getByTestId('clue-overlay')).not.toHaveTextContent('Water');
+  });
+
+  it('shows a Daily Double splash instead of the clue text during the wager phase', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('daily-double-splash')).toBeInTheDocument();
+  });
+
+  it('highlights the controlling player on the scoreboard', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+        controllingPlayerId: 'p1',
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const scoreCards = await screen.findAllByTestId('score-card');
+    expect(scoreCards[0].className).toMatch(/controlling/);
   });
 });

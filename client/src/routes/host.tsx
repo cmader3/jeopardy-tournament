@@ -74,10 +74,61 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
 export interface HostInProgressProps {
   roomCode: string;
   state: HostView | null;
+  onSelectClue?: (clueId: string) => void;
+  onRevealAnswer?: () => void;
 }
 
-export function HostInProgress({ roomCode, state }: HostInProgressProps) {
+function HostGrid({
+  state,
+  onSelectClue,
+}: {
+  state: HostView;
+  onSelectClue?: (clueId: string) => void;
+}) {
+  if (!state.round) return <p>No active round.</p>;
+
+  const maxRow = Math.max(0, ...state.round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
+  const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
+
+  return (
+    <div
+      className="host-grid"
+      data-testid="host-grid"
+      style={{ display: 'grid', gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)`, gap: '0.5rem' }}
+    >
+      {state.round.categories.map((category) => (
+        <div key={category.id} className="host-category-header" data-testid="host-category-header">
+          {category.title}
+          {category.clues.some((c) => c.isDailyDouble) && <span data-testid="dd-marker"> (DD)</span>}
+        </div>
+      ))}
+      {rows.map((row) =>
+        state.round!.categories.map((category) => {
+          const clue = category.clues.find((c) => c.row === row);
+          if (!clue) return <div key={`${category.id}-${row}`} className="host-cell" />;
+          const used = state.usedClueIds.includes(clue.id);
+          return (
+            <button
+              key={clue.id}
+              type="button"
+              className="host-cell"
+              data-testid={used ? 'host-used-cell' : 'host-clue-cell'}
+              data-clue-id={clue.id}
+              disabled={used}
+              onClick={() => onSelectClue?.(clue.id)}
+            >
+              {used ? '' : `$${clue.value}`}
+            </button>
+          );
+        }),
+      )}
+    </div>
+  );
+}
+
+export function HostInProgress({ roomCode, state, onSelectClue, onRevealAnswer }: HostInProgressProps) {
   const players = state?.players ?? [];
+  const currentClue = state?.currentClueId ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId) : null;
 
   return (
     <main className="host-in-progress route-stub">
@@ -114,6 +165,20 @@ export function HostInProgress({ roomCode, state }: HostInProgressProps) {
             </li>
           ))}
         </ul>
+      )}
+      <h2>Board</h2>
+      {state && <HostGrid state={state} onSelectClue={onSelectClue} />}
+      {currentClue && (
+        <div className="current-clue" data-testid="current-clue">
+          <h3>Current Clue</h3>
+          <p data-testid="clue-text">{currentClue.clueText}</p>
+          <p data-testid="answer-text">Answer: {currentClue.answer}</p>
+          {state?.phase === 'CLUE_REVEALED' && (
+            <button type="button" onClick={onRevealAnswer} data-testid="reveal-answer-button">
+              Reveal Answer / Return to Board
+            </button>
+          )}
+        </div>
       )}
     </main>
   );
@@ -163,6 +228,15 @@ export function HostContent() {
   const handleStartGame = useCallback(() => {
     hostSocket.startGame?.();
   }, [hostSocket]);
+  const handleSelectClue = useCallback(
+    (clueId: string) => {
+      hostSocket.selectClue?.(clueId);
+    },
+    [hostSocket],
+  );
+  const handleRevealAnswer = useCallback(() => {
+    hostSocket.revealAnswer?.();
+  }, [hostSocket]);
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -177,7 +251,14 @@ export function HostContent() {
         />
       );
     }
-    return <HostInProgress roomCode={roomCode} state={gameState} />;
+    return (
+      <HostInProgress
+        roomCode={roomCode}
+        state={gameState}
+        onSelectClue={handleSelectClue}
+        onRevealAnswer={handleRevealAnswer}
+      />
+    );
   }
 
   if (loadingBoards) {

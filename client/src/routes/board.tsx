@@ -6,15 +6,18 @@ import styles from './board.module.css';
 
 interface ScoreboardProps {
   players: ProjectedPlayer[];
+  controllingPlayerId?: string | null;
 }
 
-function Scoreboard({ players }: ScoreboardProps) {
+function Scoreboard({ players, controllingPlayerId }: ScoreboardProps) {
   return (
     <div className={styles.scoreboard}>
       {players.map((player) => (
         <div
           key={player.id}
-          className={`${styles.scoreCard} ${!player.connected ? styles.disconnected : ''}`}
+          className={`${styles.scoreCard} ${!player.connected ? styles.disconnected : ''} ${
+            player.id === controllingPlayerId ? styles.controlling : ''
+          }`}
           data-testid="score-card"
         >
           <span className={`${styles.name} ${styles.truncated}`} data-testid="score-name">
@@ -65,6 +68,94 @@ function ShareableLink({ roomCode }: ShareableLinkProps) {
   );
 }
 
+interface BoardGridProps {
+  round: NonNullable<BoardView['round']>;
+  usedClueIds: string[];
+}
+
+function BoardGrid({ round, usedClueIds }: BoardGridProps) {
+  const maxRow = Math.max(0, ...round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
+  const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
+
+  return (
+    <div
+      className={styles.grid}
+      data-testid="board-grid"
+      style={{ gridTemplateColumns: `repeat(${round.categories.length}, 1fr)` }}
+    >
+      {round.categories.map((category) => (
+        <div key={category.id} className={styles.categoryHeader} data-testid="category-header">
+          {category.title}
+        </div>
+      ))}
+      {rows.map((row) =>
+        round.categories.map((category) => {
+          const clue = category.clues.find((c) => c.row === row);
+          if (!clue) return <div key={`${category.id}-${row}`} className={styles.cell} />;
+          const used = usedClueIds.includes(clue.id);
+          return (
+            <div
+              key={clue.id}
+              className={`${styles.cell} ${used ? styles.cellUsed : ''}`}
+              data-testid={used ? 'used-cell' : 'clue-cell'}
+              data-clue-id={clue.id}
+            >
+              {!used && clue.value !== null && (
+                <span className={styles.value}>${clue.value}</span>
+              )}
+            </div>
+          );
+        }),
+      )}
+    </div>
+  );
+}
+
+interface ClueOverlayProps {
+  clueText: string;
+  isDailyDouble?: boolean;
+}
+
+function ClueOverlay({ clueText, isDailyDouble }: ClueOverlayProps) {
+  return (
+    <div className={styles.clueOverlay} data-testid="clue-overlay">
+      {isDailyDouble ? (
+        <div className={styles.dailyDoubleSplash} data-testid="daily-double-splash">
+          DAILY DOUBLE
+        </div>
+      ) : (
+        <p className={styles.clueText} data-testid="clue-text">
+          {clueText}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function renderStage(state: BoardView) {
+  if (state.currentClueId && state.currentClueText) {
+    return <ClueOverlay clueText={state.currentClueText} />;
+  }
+
+  if (state.phase === 'DAILY_DOUBLE_WAGER') {
+    return <ClueOverlay clueText="" isDailyDouble />;
+  }
+
+  if (state.phase === 'LOBBY') {
+    return (
+      <div className={styles.lobbyStage}>
+        <p className={styles.waiting}>Waiting for the host to start the game.</p>
+      </div>
+    );
+  }
+
+  if (state.round) {
+    return <BoardGrid round={state.round} usedClueIds={state.usedClueIds} />;
+  }
+
+  return <p className={styles.waiting}>No active round</p>;
+}
+
 interface BoardDisplayProps {
   roomCode: string;
   onReset: () => void;
@@ -108,8 +199,6 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
     );
   }
 
-  const waitingForPlayers = state.phase === 'LOBBY' && state.players.length === 0;
-
   return (
     <main className={styles.board}>
       <header className={styles.header}>
@@ -118,18 +207,12 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
           Room Code: {roomCode}
         </p>
       </header>
-      <div className={styles.stage}>
-        {waitingForPlayers ? (
-          <p className={styles.waiting}>Waiting for players...</p>
-        ) : (
-          <p className={styles.waiting}>Game in progress</p>
-        )}
-      </div>
+      <div className={styles.stage}>{renderStage(state)}</div>
       <div className={styles.shareSection}>
         <p className={styles.shareLabel}>Share this board display:</p>
         <ShareableLink roomCode={roomCode} />
       </div>
-      <Scoreboard players={state.players} />
+      <Scoreboard players={state.players} controllingPlayerId={state.controllingPlayerId} />
     </main>
   );
 }

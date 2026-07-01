@@ -31,6 +31,32 @@ function makeBoard(): Board {
                 answer: 'Water',
                 isDailyDouble: false,
               },
+              {
+                id: 'cl2',
+                categoryId: 'c1',
+                row: 1,
+                value: 200,
+                clueText: 'This planet is known as the Red Planet',
+                answer: 'Mars',
+                isDailyDouble: true,
+              },
+            ],
+          },
+          {
+            id: 'c2',
+            roundId: 'r1',
+            title: 'History',
+            order: 1,
+            clues: [
+              {
+                id: 'cl3',
+                categoryId: 'c2',
+                row: 0,
+                value: 100,
+                clueText: 'First US president',
+                answer: 'Washington',
+                isDailyDouble: false,
+              },
             ],
           },
         ],
@@ -42,6 +68,24 @@ function makeBoard(): Board {
             value: 100,
             clueText: 'H2O is this compound',
             answer: 'Water',
+            isDailyDouble: false,
+          },
+          {
+            id: 'cl2',
+            categoryId: 'c1',
+            row: 1,
+            value: 200,
+            clueText: 'This planet is known as the Red Planet',
+            answer: 'Mars',
+            isDailyDouble: true,
+          },
+          {
+            id: 'cl3',
+            categoryId: 'c2',
+            row: 0,
+            value: 100,
+            clueText: 'First US president',
+            answer: 'Washington',
             isDailyDouble: false,
           },
         ],
@@ -72,11 +116,65 @@ describe('projections', () => {
     expect(view.phase).toBe('LOBBY');
     expect(view.players).toEqual([]);
     expect(view.currentClueId).toBeNull();
+    expect(view.currentClueText).toBeNull();
     expect(view.buzzWinnerId).toBeNull();
     expect(view.deadline).toBeNull();
+    expect(view.usedClueIds).toEqual([]);
+    expect(view.controllingPlayerId).toBeNull();
     expect(view).not.toHaveProperty('answer');
     expect(view).not.toHaveProperty('finalWagers');
     expect(view).not.toHaveProperty('finalAnswers');
+  });
+
+  it('projectBoard includes the current round categories and public clues', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const view = projectBoard(state);
+
+    expect(view.round).not.toBeNull();
+    expect(view.round?.categories).toHaveLength(2);
+    expect(view.round?.categories[0].title).toBe('Science');
+    expect(view.round?.categories[1].title).toBe('History');
+    expect(view.round?.categories[0].clues).toHaveLength(2);
+    expect(view.round?.categories[0].clues[0]).toEqual({
+      id: 'cl1',
+      categoryId: 'c1',
+      row: 0,
+      value: 100,
+    });
+    expect(view.round?.categories[0].clues[1]).toEqual({
+      id: 'cl2',
+      categoryId: 'c1',
+      row: 1,
+      value: 200,
+    });
+  });
+
+  it('projectBoard never exposes clue answers or daily double flags on the public clues', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const view = projectBoard(state);
+
+    const allClues = view.round?.categories.flatMap((c) => c.clues) ?? [];
+    for (const clue of allClues) {
+      expect(clue).not.toHaveProperty('answer');
+      expect(clue).not.toHaveProperty('clueText');
+      expect(clue).not.toHaveProperty('isDailyDouble');
+    }
+  });
+
+  it('projectBoard includes the current clue text only when a clue is revealed', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+
+    const select = { ...state, phase: 'CLUE_REVEALED' as const, currentClueId: 'cl1' };
+    expect(projectBoard(select).currentClueText).toBe('H2O is this compound');
+
+    const ddWager = { ...state, phase: 'DAILY_DOUBLE_WAGER' as const, currentClueId: 'cl2' };
+    expect(projectBoard(ddWager).currentClueText).toBeNull();
+
+    const noClue = { ...state, phase: 'BOARD_SELECT' as const };
+    expect(projectBoard(noClue).currentClueText).toBeNull();
   });
 
   it('projectBoard includes player connection status', () => {
@@ -97,17 +195,35 @@ describe('projections', () => {
     ]);
   });
 
-  it('projectHost includes the current clue answer but never leaks future clues', () => {
+  it('projectBoard exposes the controlling player id', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const withPlayer = { ...state, players: [alice], controllingPlayerId: alice.id };
+
+    expect(projectBoard(withPlayer).controllingPlayerId).toBe(alice.id);
+  });
+
+  it('projectHost includes the current clue answer and full round details', () => {
     const board = makeBoard();
     const state = createInitialState('s1', 'ABCD', board);
     const view = projectHost(state);
 
     expect(view.answer).toBeNull();
+    expect(view.round?.categories[0].clues[0]).toEqual(
+      expect.objectContaining({
+        id: 'cl1',
+        answer: 'Water',
+        clueText: 'H2O is this compound',
+        isDailyDouble: false,
+      }),
+    );
 
     const withClue = { ...state, currentClueId: 'cl1' };
     const hostView = projectHost(withClue);
 
     expect(hostView.answer).toBe('Water');
+    expect(hostView.round?.categories[0].clues[1].isDailyDouble).toBe(true);
     expect(hostView).not.toHaveProperty('finalWagers');
     expect(hostView).not.toHaveProperty('finalAnswers');
   });
@@ -125,5 +241,6 @@ describe('projections', () => {
     expect(view).not.toHaveProperty('answer');
     expect(view).not.toHaveProperty('finalWagers');
     expect(view).not.toHaveProperty('finalAnswers');
+    expect(view.round?.categories[0].clues[0]).not.toHaveProperty('answer');
   });
 });

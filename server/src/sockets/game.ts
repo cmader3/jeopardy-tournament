@@ -18,6 +18,10 @@ const joinPayloadSchema = z.object({
   hostToken: z.string().optional(),
 });
 
+const selectCluePayloadSchema = z.object({
+  clueId: z.string().min(1),
+});
+
 interface SocketMeta {
   role: 'host' | 'board' | 'contestant';
   roomCode: string;
@@ -78,6 +82,74 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Start game failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('select_clue', async (payload: { clueId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta) {
+        socket.emit('error', { message: 'Not joined to a session' });
+        return;
+      }
+
+      const validation = selectCluePayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid clue selection' });
+        return;
+      }
+
+      const state = engine.getState(meta.roomCode);
+      if (!state) {
+        socket.emit('error', { message: 'Session not found' });
+        return;
+      }
+
+      const isHost = meta.role === 'host';
+      const isController =
+        meta.role === 'contestant' && meta.playerId === state.controllingPlayerId;
+
+      if (!isHost && !isController) {
+        socket.emit('error', { message: 'Only the controlling player or host can select a clue' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          {
+            type: 'SELECT_CLUE',
+            clueId: validation.data.clueId,
+            selectorId: isController ? meta.playerId : undefined,
+            hostOverride: isHost,
+          },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Select clue failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('reveal_answer', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can reveal the answer' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'REVEAL_ANSWER' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Reveal answer failed';
         socket.emit('error', { message });
       }
     });
