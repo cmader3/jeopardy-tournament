@@ -21,4 +21,12 @@ describe('constantTimeCompare', () => {
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
   });
+
+  it('uses crypto.timingSafeEqual even for different-length strings', () => {
+    const spy = vi.spyOn(crypto, 'timingSafeEqual').mockReturnValue(false);
+    const result = constantTimeCompare('short', 'much longer expected');
+    expect(spy).toHaveBeenCalled();
+    expect(result).toBe(false);
+    spy.mockRestore();
+  });
 });

@@ -1,12 +1,8 @@
 import crypto from 'node:crypto';
 
 export function constantTimeCompare(provided: string, expected: string): boolean {
-  const providedBuffer = Buffer.from(provided, 'utf8');
-  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const providedDigest = crypto.createHash('sha256').update(provided, 'utf8').digest();
+  const expectedDigest = crypto.createHash('sha256').update(expected, 'utf8').digest();
 
-  if (providedBuffer.length !== expectedBuffer.length) {
-    return false;
-  }
-
-  return crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+  return crypto.timingSafeEqual(providedDigest, expectedDigest);
 }
