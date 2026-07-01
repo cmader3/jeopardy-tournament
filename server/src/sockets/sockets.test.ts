@@ -397,4 +397,42 @@ describe('game sockets', () => {
     host.disconnect();
     await server.close();
   });
+
+  it('two board tabs on the same game show identical state and update live on a join', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const boardA = connectClient(server.url);
+    const boardB = connectClient(server.url);
+    await Promise.all([waitForConnect(boardA), waitForConnect(boardB)]);
+
+    const stateAPromise = waitForState(boardA);
+    const stateBPromise = waitForState(boardB);
+    boardA.emit('join', { role: 'board', roomCode });
+    boardB.emit('join', { role: 'board', roomCode });
+
+    const [stateA, stateB] = await Promise.all([stateAPromise, stateBPromise]);
+    expect(stateA).toEqual(stateB);
+    expect((stateA as { players: unknown[] }).players).toHaveLength(0);
+    expect(stateA).not.toHaveProperty('answer');
+
+    const updateAPromise = waitForState(boardA);
+    const updateBPromise = waitForState(boardB);
+
+    const contestant = connectClient(server.url);
+    await waitForConnect(contestant);
+    contestant.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+
+    const [updateA, updateB] = await Promise.all([updateAPromise, updateBPromise]);
+    expect(updateA).toEqual(updateB);
+    expect((updateA as { players: { name: string }[] }).players).toHaveLength(1);
+    expect((updateA as { players: { name: string }[] }).players[0].name).toBe('Alice');
+    expect(updateA).not.toHaveProperty('answer');
+
+    boardA.disconnect();
+    boardB.disconnect();
+    contestant.disconnect();
+    await server.close();
+  });
 });

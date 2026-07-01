@@ -1,27 +1,94 @@
 import { useState } from 'react';
 import { useSocket } from '../socket/useSocket.js';
-import type { BoardView } from '@jeopardy/shared';
+import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
+import styles from './board.module.css';
 
-function BoardDisplay({ roomCode }: { roomCode: string }) {
+interface ScoreboardProps {
+  players: ProjectedPlayer[];
+}
+
+function Scoreboard({ players }: ScoreboardProps) {
+  return (
+    <div className={styles.scoreboard}>
+      {players.map((player) => (
+        <div
+          key={player.id}
+          className={`${styles.scoreCard} ${!player.connected ? styles.disconnected : ''}`}
+          data-testid="score-card"
+        >
+          <span className={`${styles.name} ${styles.truncated}`} data-testid="score-name">
+            {player.name}
+          </span>
+          <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`}>
+            {player.score}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface BoardDisplayProps {
+  roomCode: string;
+  onReset: () => void;
+}
+
+function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const [gameState, setGameState] = useState<BoardView | null>(null);
   const socket = useSocket<BoardView>('board', roomCode, setGameState);
+  const state = gameState ?? socket.data;
+
+  if (socket.error) {
+    return (
+      <main className={styles.placeholder}>
+        <h1 className={styles.title}>Board</h1>
+        <div className={styles.errorAlert} role="alert">
+          <p>
+            No active game found for room code <strong>{roomCode}</strong>.
+          </p>
+          <p>{socket.error}</p>
+        </div>
+        <button type="button" className={styles.resetButton} onClick={onReset}>
+          Enter another code
+        </button>
+      </main>
+    );
+  }
+
+  if (!state) {
+    return (
+      <main className={styles.board}>
+        <header className={styles.header}>
+          <h1 className={styles.headerTitle}>Board</h1>
+          <p className={styles.roomCode} data-testid="room-code">
+            Room Code: {roomCode}
+          </p>
+        </header>
+        <div className={styles.stage}>
+          <p className={styles.waiting}>Connecting...</p>
+        </div>
+      </main>
+    );
+  }
+
+  const waitingForPlayers = state.phase === 'LOBBY' && state.players.length === 0;
 
   return (
-    <main className="route-stub">
-      <h1>Board</h1>
-      <p className="room-code">Room Code: {roomCode}</p>
-      {socket.error && <p className="error">{socket.error}</p>}
-      {gameState?.players.length === 0 ? (
-        <p>Waiting for players...</p>
-      ) : (
-        <ul className="player-list">
-          {gameState?.players.map((player) => (
-            <li key={player.id} className={player.connected ? 'connected' : 'disconnected'}>
-              {player.name}: {player.score}
-            </li>
-          ))}
-        </ul>
-      )}
+    <main className={styles.board}>
+      <header className={styles.header}>
+        <h1 className={styles.headerTitle}>Board</h1>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+      </header>
+      <div className={styles.stage}>
+        {waitingForPlayers ? (
+          <p className={styles.waiting}>Waiting for players...</p>
+        ) : (
+          <p className={styles.waiting}>Game in progress</p>
+        )}
+      </div>
+      <Scoreboard players={state.players} />
     </main>
   );
 }
@@ -30,14 +97,20 @@ export function BoardRoute() {
   const [roomCode, setRoomCode] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
+  const handleReset = () => {
+    setSubmitted(false);
+    setRoomCode('');
+  };
+
   if (submitted && roomCode.trim()) {
-    return <BoardDisplay roomCode={roomCode.trim()} />;
+    return <BoardDisplay roomCode={roomCode.trim().toUpperCase()} onReset={handleReset} />;
   }
 
   return (
-    <main className="route-stub">
-      <h1>Board</h1>
+    <main className={styles.entry}>
+      <h1 className={styles.title}>Board</h1>
       <form
+        className={styles.form}
         onSubmit={(e) => {
           e.preventDefault();
           if (roomCode.trim()) {
