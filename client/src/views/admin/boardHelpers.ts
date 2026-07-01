@@ -33,7 +33,10 @@ export function isAuthoredClue(clue: Clue): boolean {
 }
 
 export function isAuthoredCategory(category: Category): boolean {
-  return category.clues.some(isAuthoredClue);
+  return (
+    category.title.trim().length > 0 ||
+    category.clues.some((clue) => isAuthoredClue(clue) || clue.isDailyDouble)
+  );
 }
 
 export function defaultValueForRow(row: number, isDouble: boolean): number {

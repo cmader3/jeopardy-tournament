@@ -163,6 +163,37 @@ describe('RoundEditor', () => {
     expect(onMoveRow).toHaveBeenCalledWith(1, 'up');
   });
 
+  it('renders the grid in row-major order with each row control beside its data row', () => {
+    renderRoundEditor();
+
+    const roundEditor = screen.getByTestId('round-editor-JEOPARDY');
+    const grid = roundEditor.querySelector('div[style*="grid-template-columns"]');
+    expect(grid).toBeInTheDocument();
+
+    const cells = Array.from(grid!.children);
+    const columnCount = 2;
+    const rowCount = 2;
+
+    // Header row: rowControlsHeader followed by each category header.
+    expect(cells[0].className).toMatch(/rowControlsHeader/);
+    for (let column = 0; column < columnCount; column += 1) {
+      expect(cells[1 + column].className).toMatch(/categoryHeader/);
+    }
+
+    // Data rows: one row control cell then one clue cell per category, in row-major order.
+    for (let row = 0; row < rowCount; row += 1) {
+      const offset = 1 + columnCount + row * (columnCount + 1);
+      expect(cells[offset].className).toMatch(/rowControls/);
+
+      for (let column = 0; column < columnCount; column += 1) {
+        const cell = cells[offset + 1 + column];
+        expect(cell.className).toMatch(/clueCell/);
+        const clueTextarea = cell.querySelector('textarea[placeholder="Clue text"]');
+        expect(clueTextarea).toHaveAttribute('id', `clue-JEOPARDY-${column}-${row}`);
+      }
+    }
+  });
+
   it('shows a daily double indicator when a cell is marked', () => {
     const round = makeRound('JEOPARDY', [
       makeCategory('Science', 0, [

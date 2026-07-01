@@ -108,7 +108,14 @@ describe('boardHelpers', () => {
     it('treats a populated category as authored based on its clues', () => {
       expect(isAuthoredCategory(makeCategory('Science', 0, [makeClue({ clueText: 'X' })]))).toBe(true);
       expect(isAuthoredCategory(makeCategory('', 0, [makeClue({ answer: 'Y' })]))).toBe(true);
-      expect(isAuthoredCategory(makeCategory('Science', 0, [makeClue()]))).toBe(false);
+      expect(isAuthoredCategory(makeCategory('Science', 0, [makeClue()]))).toBe(true);
+      expect(isAuthoredCategory(makeCategory('', 0, [makeClue()]))).toBe(false);
+    });
+
+    it('treats a category as authored when it has a non-empty title or a Daily Double mark', () => {
+      expect(isAuthoredCategory(makeCategory('Science', 0, [makeClue()]))).toBe(true);
+      expect(isAuthoredCategory(makeCategory('', 0, [makeClue({ isDailyDouble: true })]))).toBe(true);
+      expect(isAuthoredCategory(makeCategory('Science', 0, [makeClue({ isDailyDouble: true })]))).toBe(true);
       expect(isAuthoredCategory(makeCategory('', 0, [makeClue()]))).toBe(false);
     });
   });
@@ -203,8 +210,8 @@ describe('boardHelpers', () => {
       const board = makeBoard({
         rounds: [
           makeRound('JEOPARDY', [
-            makeCategory('Science', 0, [makeClue({ row: 0, value: 100 }), makeClue({ row: 1, value: 200 })]),
-            makeCategory('History', 1, [makeClue({ row: 0, value: 100 }), makeClue({ row: 1, value: 200 })]),
+            makeCategory('', 0, [makeClue({ row: 0, value: 100 }), makeClue({ row: 1, value: 200 })]),
+            makeCategory('', 1, [makeClue({ row: 0, value: 100 }), makeClue({ row: 1, value: 200 })]),
           ]),
         ],
       });
