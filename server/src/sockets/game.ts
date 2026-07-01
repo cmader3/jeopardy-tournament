@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { JoinPayload } from '@jeopardy/shared';
 import { GameEngine } from '../engine/game.js';
 import { verifyHostToken } from '../auth/token.js';
+import { constantTimeCompare } from '../auth/passcode.js';
 import { generateReconnectToken } from '../utils/reconnectToken.js';
 import { normalizeRoomCode } from '../utils/roomCode.js';
 import { projectBoard, projectHost, projectContestant } from '@jeopardy/shared';
@@ -148,7 +149,8 @@ async function handleContestantJoin(
   const roomCode = normalizeRoomCode(payload.roomCode);
 
   if (payload.reconnectToken) {
-    const player = state.players.find((p) => p.reconnectToken === payload.reconnectToken);
+    const providedToken = payload.reconnectToken;
+    const player = state.players.find((p) => constantTimeCompare(providedToken, p.reconnectToken));
     if (!player) {
       socket.emit('error', { message: 'Invalid reconnect token' });
       return;
