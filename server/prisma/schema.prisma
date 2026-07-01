@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Board {
+  id                    String        @id @default(uuid())
+  name                  String
+  includeDoubleJeopardy Boolean       @default(true)
+  defaultTimerSeconds   Int           @default(5)
+  finalTimerSeconds     Int           @default(30)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  rounds                Round[]
+  gameSessions          GameSession[]
+}
+
+model Round {
+  id         String     @id @default(uuid())
+  boardId    String
+  board      Board      @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  type       RoundType
+  order      Int
+  categories Category[]
+
+  @@unique([boardId, type])
+  @@index([boardId])
+}
+
+enum RoundType {
+  JEOPARDY
+  DOUBLE_JEOPARDY
+  FINAL
+}
+
+model Category {
+  id      String @id @default(uuid())
+  roundId String
+  round   Round  @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  title   String
+  order   Int
+  clues   Clue[]
+
+  @@index([roundId])
+}
+
+model Clue {
+  id            String   @id @default(uuid())
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  value         Int?
+  row           Int
+  clueText      String
+  answer        String
+  isDailyDouble Boolean  @default(false)
+
+  @@index([categoryId])
+}
+
+model GameSession {
+  id        String   @id @default(uuid())
+  roomCode  String   @unique
+  boardId   String
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Restrict)
+  status    String
+  snapshot  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  players   Player[]
+}
+
+model Player {
+  id             String      @id @default(uuid())
+  gameSessionId  String
+  gameSession    GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  name           String
+  score          Int         @default(0)
+  seatOrder      Int
+  reconnectToken String      @unique
+  isConnected    Boolean     @default(true)
+  joinedAt       DateTime    @default(now())
+
+  @@index([gameSessionId])
+}

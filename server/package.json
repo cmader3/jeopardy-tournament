@@ -14,11 +14,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "PORT=4000 tsx watch src/index.ts",
-    "test": "vitest run --maxWorkers=4",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "pretest": "DATABASE_URL='file:./test.db' prisma migrate deploy",
+    "test": "DATABASE_URL='file:./test.db' vitest run --maxWorkers=4",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy"
   },
   "dependencies": {
     "@jeopardy/shared": "*",
+    "@prisma/client": "^6.0.0",
     "express": "^5.2.1",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3"
@@ -27,6 +31,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.0.1",
     "@types/supertest": "^7.2.0",
+    "prisma": "^6.0.0",
     "supertest": "^7.2.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
