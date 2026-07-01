@@ -946,6 +946,7 @@
 }
 
 .previewEditInput,
+.previewEditTextarea,
 .previewCategorySelect {
   font-size: 0.9rem;
   padding: 0.3rem 0.4rem;
@@ -956,7 +957,15 @@
   width: 100%;
 }
 
+.previewEditTextarea {
+  min-height: 3.5rem;
+  resize: vertical;
+  white-space: pre-wrap;
+  field-sizing: content;
+}
+
 .previewEditInput:focus,
+.previewEditTextarea:focus,
 .previewCategorySelect:focus {
   border-color: var(--value-gold);
   outline: none;

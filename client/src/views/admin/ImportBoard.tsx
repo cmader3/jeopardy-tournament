@@ -292,25 +292,25 @@ function EditablePreview({ preview, board, onChange, onSave, isSaving, error }: 
 
                           <label className={styles.previewEditLabel}>
                             Clue
-                            <input
-                              type="text"
+                            <textarea
                               aria-label="Clue text"
                               value={clue.clueText}
                               onChange={(event) => handleTextChange(event.target.value)}
                               disabled={isSaving}
-                              className={styles.previewEditInput}
+                              className={styles.previewEditTextarea}
+                              rows={2}
                             />
                           </label>
 
                           <label className={styles.previewEditLabel}>
                             Answer
-                            <input
-                              type="text"
+                            <textarea
                               aria-label="Answer"
                               value={clue.answer}
                               onChange={(event) => handleAnswerChange(event.target.value)}
                               disabled={isSaving}
-                              className={styles.previewEditInput}
+                              className={styles.previewEditTextarea}
+                              rows={2}
                             />
                           </label>
 

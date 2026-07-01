@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ImportBoard } from './ImportBoard.js';
 import type { BoardApiClient, ImportPreview } from '../../api/boards.js';
@@ -331,6 +331,87 @@ describe('ImportBoard', () => {
 
     expect(await screen.findByText('Café', { selector: 'div' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('🐱, "meow"')).toBeInTheDocument();
+  });
+
+  it('renders multiline clue and answer text with newlines preserved in the preview', async () => {
+    const api = makeMockApi();
+    const preview = makePreview({
+      board: {
+        ...makePreview().board,
+        rounds: [
+          {
+            type: 'JEOPARDY',
+            order: 0,
+            categories: [
+              {
+                title: 'Poetry',
+                order: 0,
+                clues: [
+                  {
+                    value: 100,
+                    row: 0,
+                    clueText: 'Roses are red\nViolets are blue',
+                    answer: 'Sugar is sweet\nAnd so are you',
+                    isDailyDouble: false,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    api.importBoard = vi.fn().mockResolvedValue(preview);
+    const file = new File(['csv content'], 'multiline.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    const clueTextarea = await screen.findByLabelText(/clue text/i);
+    const answerTextarea = screen.getByLabelText(/answer/i);
+    expect(clueTextarea.tagName).toBe('TEXTAREA');
+    expect(answerTextarea.tagName).toBe('TEXTAREA');
+    expect(clueTextarea).toHaveValue('Roses are red\nViolets are blue');
+    expect(answerTextarea).toHaveValue('Sugar is sweet\nAnd so are you');
+  });
+
+  it('keeps a newline in an edited clue and answer when saving', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByText('Science', { selector: 'div' });
+    const clueTextareas = screen.getAllByLabelText(/clue text/i);
+    const answerTextareas = screen.getAllByLabelText(/answer/i);
+
+    fireEvent.change(clueTextareas[0], { target: { value: 'First line\nSecond line' } });
+    fireEvent.change(answerTextareas[0], { target: { value: 'Answer line 1\nAnswer line 2' } });
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.rounds[0].categories[0].clues[0].clueText).toBe('First line\nSecond line');
+    expect(payload.rounds[0].categories[0].clues[0].answer).toBe('Answer line 1\nAnswer line 2');
   });
 
   it('returns to the library when Back to Library is clicked', async () => {
