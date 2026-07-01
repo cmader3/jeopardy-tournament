@@ -176,6 +176,20 @@ describe('AdminBoardLibrary', () => {
     await waitFor(() => expect(api.getBoards).toHaveBeenCalledTimes(2));
   });
 
+  it('applies the visually-hidden utility class to the rename label', async () => {
+    const api = makeMockApi();
+    const summary = makeSummary({ id: 'a', name: 'Board A' });
+    api.getBoards = vi.fn().mockResolvedValue([summary]);
+
+    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={vi.fn()} />);
+    const renameButton = await screen.findByRole('button', { name: /rename Board A/i });
+
+    await userEvent.click(renameButton);
+    const label = screen.getByText('Board name');
+    expect(label.tagName).toBe('LABEL');
+    expect(label.className).toMatch(/\bvisually-hidden\b/);
+  });
+
   it('duplicates a board with a differentiated name', async () => {
     const api = makeMockApi();
     const summary = makeSummary({ id: 'a', name: 'Board A' });

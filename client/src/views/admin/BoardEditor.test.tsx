@@ -209,7 +209,9 @@ describe('BoardEditor', () => {
     await userEvent.clear(categoryInput);
     await userEvent.type(categoryInput, '1');
 
-    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.className).toMatch(/confirmDialogModal/);
     expect(screen.getByText(/delete .* authored/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
@@ -321,7 +323,9 @@ describe('BoardEditor', () => {
     const deleteButtons = screen.getAllByRole('button', { name: /remove category/i });
     await userEvent.click(deleteButtons[0]);
 
-    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.className).toMatch(/confirmDialogModal/);
     expect(screen.getByText((content) => /delete/i.test(content) && /and its clues/i.test(content))).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /delete category/i }));

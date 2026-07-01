@@ -463,7 +463,7 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
       </section>
 
       {pendingResize && (
-        <div className={styles.confirmDialog} role="alertdialog" aria-modal="true">
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
           <p>
             Shrinking the grid will delete {pendingResize.affectedCells} authored{' '}
             {pendingResize.affectedCells === 1 ? 'cell' : 'cells'}. Are you sure?
@@ -485,7 +485,7 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
       )}
 
       {pendingDelete && (
-        <div className={styles.confirmDialog} role="alertdialog" aria-modal="true">
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
           <p>
             Delete <strong>{pendingDelete.categoryTitle}</strong> and its clues?
           </p>

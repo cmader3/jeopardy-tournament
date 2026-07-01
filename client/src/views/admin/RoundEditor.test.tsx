@@ -220,6 +220,22 @@ describe('RoundEditor', () => {
     expect(markers).toHaveLength(1);
   });
 
+  it('applies the visually-hidden utility class to accessibility labels so they do not overlap controls', () => {
+    renderRoundEditor();
+
+    const labels = screen.getAllByText((content, element) => {
+      return (
+        element?.tagName === 'LABEL' &&
+        /category \d+ title|value|clue text|answer/i.test(content)
+      );
+    });
+
+    expect(labels.length).toBeGreaterThan(0);
+    for (const label of labels) {
+      expect(label.className).toMatch(/\bvisually-hidden\b/);
+    }
+  });
+
   it('renders hole markers for whitespace-only clues treated as empty', () => {
     const round = makeRound('JEOPARDY', [
       makeCategory('Science', 0, [

@@ -211,12 +211,32 @@
   text-align: center;
 }
 
+/* Viewport-anchored modal variant used only for the editor-level confirmation
+   dialogs (grid resize and category delete). This keeps the dialog on screen
+   even when the long editor page is scrolled, while the shared .confirmDialog
+   inside each board library item remains absolutely positioned over its card. */
+.confirmDialogModal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(10, 10, 42, 0.97);
+  text-align: center;
+}
+
 .confirmActions {
   display: flex;
   gap: 0.75rem;
 }
 
-.visually-hidden {
+/* Global utility class: JSX files reference this literal className, so it must
+   be preserved as a global selector rather than a hashed CSS Module name. */
+:global(.visually-hidden) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -401,6 +421,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  scroll-margin-top: 5rem;
 }
 
 .placeholderTitle {
