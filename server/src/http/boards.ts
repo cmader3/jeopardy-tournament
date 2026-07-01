@@ -83,7 +83,7 @@ boardRouter.put('/:id', async (req, res, next) => {
 boardRouter.delete('/:id', async (req, res, next) => {
   try {
     await boardRepository.delete(req.params.id);
-    res.status(204).send();
+    res.status(200).json({ success: true });
   } catch (error) {
     if (isNotFoundError(error)) {
       res.status(404).json({ error: 'Board not found' });

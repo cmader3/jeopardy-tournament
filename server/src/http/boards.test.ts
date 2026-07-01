@@ -235,7 +235,7 @@ describe('Boards REST API', () => {
       const app = createApp();
       const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
-      await authRequest(app).delete(`/api/boards/${created.body.id}`).expect(204);
+      await authRequest(app).delete(`/api/boards/${created.body.id}`).expect(200);
 
       const response = await authRequest(app).get(`/api/boards/${created.body.id}`).expect(404);
       expect(response.body.error).toBe('Board not found');
