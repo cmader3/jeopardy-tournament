@@ -1,3 +1,7 @@
+import { loadServerEnv } from './env.js';
+
+loadServerEnv();
+
 import { createServer } from 'node:http';
 import { createApp } from './http/app.js';
 import { bootstrapSocketIO } from './sockets/index.js';

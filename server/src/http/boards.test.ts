@@ -2,6 +2,15 @@ import { afterAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app.js';
 import { prisma } from '../repo/prisma.js';
+import { mintHostToken } from '../auth/token.js';
+
+function authHeader() {
+  return `Bearer ${mintHostToken()}`;
+}
+
+function authRequest(app: Parameters<typeof request>[0]) {
+  return request.agent(app).set('Authorization', authHeader());
+}
 
 function makeBoardPayload() {
   return {
@@ -59,7 +68,7 @@ describe('Boards REST API', () => {
       const app = createApp();
       const payload = makeBoardPayload();
 
-      const response = await request(app).post('/api/boards').send(payload).expect(201);
+      const response = await authRequest(app).post('/api/boards').send(payload).expect(201);
 
       expect(response.body).toMatchObject({
         name: payload.name,
@@ -83,7 +92,7 @@ describe('Boards REST API', () => {
 
     it('rejects an invalid payload with a 400 error', async () => {
       const app = createApp();
-      const response = await request(app).post('/api/boards').send({ name: '' }).expect(400);
+      const response = await authRequest(app).post('/api/boards').send({ name: '' }).expect(400);
 
       expect(response.body.error).toBe('Invalid request body');
       expect(response.body.details).toBeDefined();
@@ -95,7 +104,7 @@ describe('Boards REST API', () => {
       const payload = makeBoardPayload();
       payload.rounds[0].categories[0].clues[0].row = -1;
 
-      const response = await request(app).post('/api/boards').send(payload).expect(400);
+      const response = await authRequest(app).post('/api/boards').send(payload).expect(400);
 
       expect(response.body.error).toBe('Invalid request body');
       expect(response.body.details.some((d: { path: string }) => d.path.includes('row'))).toBe(true);
@@ -105,7 +114,7 @@ describe('Boards REST API', () => {
   describe('GET /api/boards', () => {
     it('returns an empty list when no boards exist', async () => {
       const app = createApp();
-      const response = await request(app).get('/api/boards').expect(200);
+      const response = await authRequest(app).get('/api/boards').expect(200);
 
       expect(response.body).toEqual([]);
     });
@@ -113,9 +122,9 @@ describe('Boards REST API', () => {
     it('lists all saved boards without nested content', async () => {
       const app = createApp();
       const payload = makeBoardPayload();
-      await request(app).post('/api/boards').send(payload).expect(201);
+      await authRequest(app).post('/api/boards').send(payload).expect(201);
 
-      const response = await request(app).get('/api/boards').expect(200);
+      const response = await authRequest(app).get('/api/boards').expect(200);
 
       expect(response.body).toHaveLength(1);
       expect(response.body[0].name).toBe(payload.name);
@@ -126,9 +135,9 @@ describe('Boards REST API', () => {
   describe('GET /api/boards/:id', () => {
     it('returns a board with nested rounds, categories, and clues', async () => {
       const app = createApp();
-      const created = await request(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
-      const response = await request(app).get(`/api/boards/${created.body.id}`).expect(200);
+      const response = await authRequest(app).get(`/api/boards/${created.body.id}`).expect(200);
 
       expect(response.body.id).toBe(created.body.id);
       expect(response.body.rounds).toHaveLength(2);
@@ -139,7 +148,7 @@ describe('Boards REST API', () => {
 
     it('returns 404 for an unknown board id', async () => {
       const app = createApp();
-      const response = await request(app).get('/api/boards/unknown-id').expect(404);
+      const response = await authRequest(app).get('/api/boards/unknown-id').expect(404);
 
       expect(response.body.error).toBe('Board not found');
     });
@@ -148,7 +157,7 @@ describe('Boards REST API', () => {
   describe('PUT /api/boards/:id', () => {
     it('updates a board, replacing nested content', async () => {
       const app = createApp();
-      const created = await request(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
       const originalClueId = created.body.rounds[0].categories[0].clues[0].id;
 
       const updatePayload = {
@@ -186,7 +195,7 @@ describe('Boards REST API', () => {
         ],
       };
 
-      const response = await request(app).put(`/api/boards/${created.body.id}`).send(updatePayload).expect(200);
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(updatePayload).expect(200);
 
       expect(response.body.name).toBe('Updated Board');
       expect(response.body.includeDoubleJeopardy).toBe(false);
@@ -203,16 +212,16 @@ describe('Boards REST API', () => {
 
     it('returns 404 when updating a non-existent board', async () => {
       const app = createApp();
-      const response = await request(app).put('/api/boards/non-existent').send(makeBoardPayload()).expect(404);
+      const response = await authRequest(app).put('/api/boards/non-existent').send(makeBoardPayload()).expect(404);
 
       expect(response.body.error).toBe('Board not found');
     });
 
     it('rejects an invalid payload with a 400 error', async () => {
       const app = createApp();
-      const created = await request(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
-      const response = await request(app)
+      const response = await authRequest(app)
         .put(`/api/boards/${created.body.id}`)
         .send({ name: 'Bad', rounds: [{ type: 'JEOPARDY', order: 0, categories: [{ title: '', order: 0, clues: [] }] }] })
         .expect(400);
@@ -224,11 +233,11 @@ describe('Boards REST API', () => {
   describe('DELETE /api/boards/:id', () => {
     it('deletes a board and its nested content', async () => {
       const app = createApp();
-      const created = await request(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
-      await request(app).delete(`/api/boards/${created.body.id}`).expect(204);
+      await authRequest(app).delete(`/api/boards/${created.body.id}`).expect(204);
 
-      const response = await request(app).get(`/api/boards/${created.body.id}`).expect(404);
+      const response = await authRequest(app).get(`/api/boards/${created.body.id}`).expect(404);
       expect(response.body.error).toBe('Board not found');
 
       const rounds = await prisma.round.findMany({ where: { boardId: created.body.id } });
@@ -237,7 +246,7 @@ describe('Boards REST API', () => {
 
     it('does not cascade-delete an active game session when the board is deleted', async () => {
       const app = createApp();
-      const created = await request(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
       await prisma.gameSession.create({
         data: {
@@ -258,7 +267,7 @@ describe('Boards REST API', () => {
         },
       });
 
-      const response = await request(app).delete(`/api/boards/${created.body.id}`).expect(409);
+      const response = await authRequest(app).delete(`/api/boards/${created.body.id}`).expect(409);
       expect(response.body.error).toMatch(/active game session/);
 
       const session = await prisma.gameSession.findUnique({ where: { roomCode: 'TEST01' } });

@@ -24,11 +24,11 @@ function renderRoute(path: string) {
 
 describe('App route stubs', () => {
   it.each([
-    ['/admin', 'Admin'],
-    ['/host', 'Host'],
+    ['/admin', 'Enter Host Passcode'],
+    ['/host', 'Enter Host Passcode'],
     ['/board', 'Board'],
     ['/play', 'Play'],
-  ])('renders %s with its heading', (path, heading) => {
+  ])('renders %s with its expected heading', (path, heading) => {
     renderRoute(path);
     expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
   });
