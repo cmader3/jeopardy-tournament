@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Michroma&family=Oswald:wght@400;500;700&family=Roboto+Slab:wght@400;700&display=swap');
+
+:root {
+  --jeopardy-blue: #060ce9;
+  --jeopardy-blue-dark: #000080;
+  --value-gold: #d69f28;
+  --value-gold-light: #f0d878;
+  --final-purple: #5e0a5e;
+  --correct-green: #2e7d32;
+  --incorrect-red: #b71c1c;
+  --text-light: #ffffff;
+  --text-dark: #121212;
+  --panel-bg: #0a0a2a;
+  --font-board-header: 'Anton', 'Oswald', sans-serif;
+  --font-value: 'Oswald', sans-serif;
+  --font-clue: 'Roboto Slab', 'Georgia', serif;
+  --font-display: 'Michroma', sans-serif;
+  --font-score: 'Archivo Black', 'Anton', sans-serif;
+  --font-body: 'Oswald', 'Helvetica Neue', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--panel-bg);
+  color: var(--text-light);
+}
