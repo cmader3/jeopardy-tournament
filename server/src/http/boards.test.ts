@@ -228,6 +228,33 @@ describe('Boards REST API', () => {
 
       expect(response.body.error).toBe('Invalid request body');
     });
+
+    it('rejects non-positive timer values with a 400 error', async () => {
+      const app = createApp();
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+
+      const payload = makeBoardPayload();
+      payload.defaultTimerSeconds = 0;
+
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(payload).expect(400);
+
+      expect(response.body.error).toBe('Invalid request body');
+      expect(response.body.details.some((d: { path: string }) => d.path.includes('defaultTimerSeconds'))).toBe(true);
+    });
+
+    it('allows clues with empty text and answer to represent blank cells', async () => {
+      const app = createApp();
+      const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
+
+      const payload = makeBoardPayload();
+      payload.rounds[0].categories[0].clues[0].clueText = '';
+      payload.rounds[0].categories[0].clues[0].answer = '';
+
+      const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(payload).expect(200);
+
+      expect(response.body.rounds[0].categories[0].clues[0].clueText).toBe('');
+      expect(response.body.rounds[0].categories[0].clues[0].answer).toBe('');
+    });
   });
 
   describe('DELETE /api/boards/:id', () => {

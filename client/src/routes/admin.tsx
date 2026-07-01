@@ -15,7 +15,14 @@ function AdminContent() {
   }
 
   if (selectedBoard) {
-    return <BoardEditor board={selectedBoard} onBack={() => setSelectedBoard(null)} />;
+    return (
+      <BoardEditor
+        board={selectedBoard}
+        token={token}
+        api={boardApi}
+        onBack={() => setSelectedBoard(null)}
+      />
+    );
   }
 
   return (

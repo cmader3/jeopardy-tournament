@@ -236,3 +236,181 @@
   color: var(--text-light);
   opacity: 0.7;
 }
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.unsavedIndicator {
+  font-size: 0.85rem;
+  color: var(--value-gold);
+  font-family: var(--font-body);
+}
+
+.saveButton {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  background: var(--correct-green);
+  color: var(--text-light);
+}
+
+.saveButton:hover:not(:disabled) {
+  background: #1b5e20;
+}
+
+.saveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settingsSection {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+}
+
+.sectionHeading {
+  margin: 0 0 1rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--value-gold);
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.settingField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.settingField label,
+.toggleLabel {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-light);
+  opacity: 0.9;
+}
+
+.settingField input[type='text'],
+.settingField input[type='number'] {
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--panel-bg);
+  color: var(--text-light);
+}
+
+.invalidInput {
+  border-color: var(--incorrect-red) !important;
+  outline: 2px solid var(--incorrect-red);
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  height: 100%;
+  padding-top: 1.5rem;
+}
+
+.toggleLabel input {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+}
+
+.previewSection {
+  margin-bottom: 1.5rem;
+}
+
+.roundGrid {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.categoryHeader {
+  padding: 0.5rem;
+  text-align: center;
+  font-family: var(--font-board-header);
+  font-size: 1rem;
+  text-transform: uppercase;
+  color: var(--text-light);
+  background: var(--jeopardy-blue);
+  border-radius: 0.25rem;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholderTitle {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.cellBlank,
+.cellFilled {
+  padding: 0.5rem;
+  min-height: 3.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cellBlank {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cellFilled {
+  background: rgba(6, 12, 233, 0.25);
+  border-color: var(--jeopardy-blue);
+}
+
+.cellValue {
+  font-family: var(--font-value);
+  font-size: 1.1rem;
+  color: var(--value-gold-light);
+}
+
+.cellIndicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--correct-green);
+}
+
+.roundEmpty {
+  color: var(--text-light);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.doubleDisabledNote {
+  color: var(--text-light);
+  opacity: 0.7;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+  margin-top: 0.5rem;
+}

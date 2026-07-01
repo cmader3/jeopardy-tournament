@@ -5,8 +5,8 @@ export const roundTypeSchema = z.enum(['JEOPARDY', 'DOUBLE_JEOPARDY', 'FINAL']);
 export const clueSchema = z.object({
   value: z.number().int().nullable().default(null),
   row: z.number().int().min(0),
-  clueText: z.string().min(1),
-  answer: z.string().min(1),
+  clueText: z.string().default(''),
+  answer: z.string().default(''),
   isDailyDouble: z.boolean().optional().default(false),
 });
 
