@@ -214,21 +214,24 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
     const defaultTimerValue = parsePositiveInteger(settings.defaultTimer);
     const finalTimerValue = parsePositiveInteger(settings.finalTimer);
 
+    const coercedTimerValue = (value: string): number => {
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
     if (defaultTimerValue === null || finalTimerValue === null) {
       setError('Timer values must be positive integers');
-      return;
     }
 
     const trimmedDraft = {
       ...draft,
       name: settings.name.trim(),
-      defaultTimerSeconds: defaultTimerValue,
-      finalTimerSeconds: finalTimerValue,
+      defaultTimerSeconds: defaultTimerValue ?? coercedTimerValue(settings.defaultTimer),
+      finalTimerSeconds: finalTimerValue ?? coercedTimerValue(settings.finalTimer),
     };
     const errors = findBoardValidationErrors(trimmedDraft);
     if (errors.length > 0) {
       setValidationErrors(errors);
-      return;
     }
 
     setIsSaving(true);
@@ -237,8 +240,8 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
       ...toUpdateInput(trimmedDraft),
       name: trimmedDraft.name,
       includeDoubleJeopardy: settings.includeDoubleJeopardy,
-      defaultTimerSeconds: defaultTimerValue,
-      finalTimerSeconds: finalTimerValue,
+      defaultTimerSeconds: trimmedDraft.defaultTimerSeconds,
+      finalTimerSeconds: trimmedDraft.finalTimerSeconds,
     };
 
     try {

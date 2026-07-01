@@ -89,8 +89,11 @@ function authHeaders(token: string) {
 async function handleError(response: Response): Promise<never> {
   const body = (await response.json().catch(() => ({ error: 'Request failed' }))) as {
     error?: string;
+    details?: Array<{ path: string; message: string }>;
   };
-  throw new Error(body.error ?? `Request failed: ${response.status}`);
+  const detailMessages = body.details?.map((detail) => detail.message).join('; ') ?? '';
+  const message = [body.error, detailMessages].filter(Boolean).join(': ');
+  throw new Error(message || `Request failed: ${response.status}`);
 }
 
 export const boardApi = {

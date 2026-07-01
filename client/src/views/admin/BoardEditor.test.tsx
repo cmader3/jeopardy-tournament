@@ -234,9 +234,11 @@ describe('BoardEditor', () => {
     expect(jeopardy.categories[0].title).toBe('Science');
   });
 
-  it('rejects invalid timer values and surfaces an error', async () => {
+  it('rejects invalid timer values by firing the PUT and surfacing the server 400', async () => {
     const api = createMockApi(makeBoard(), {
-      updateBoard: vi.fn().mockRejectedValue(new Error('Invalid request body')),
+      updateBoard: vi.fn().mockRejectedValue(
+        new Error('Invalid request body: defaultTimerSeconds must be a positive integer'),
+      ),
     });
     renderEditor({ api });
 
@@ -246,8 +248,10 @@ describe('BoardEditor', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /save board/i }));
 
-    expect(api.updateBoard).not.toHaveBeenCalled();
-    expect(await screen.findByRole('alert')).toHaveTextContent(/timer/i);
+    expect(api.updateBoard).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /invalid request body|defaultTimerSeconds/i,
+    );
   });
 
   it('toggles Double Jeopardy on and off', async () => {
@@ -498,39 +502,51 @@ describe('BoardEditor', () => {
     expect(screen.getAllByText(/incomplete/i).length).toBeGreaterThan(0);
   });
 
-  it('prevents saving a half-filled clue and shows inline validation', async () => {
-    const { api } = renderEditor();
+  it('fires the PUT for a half-filled clue and surfaces the server 400 inline', async () => {
+    const { api } = renderEditor({
+      updateBoard: vi.fn().mockRejectedValue(
+        new Error('Invalid request body: Answer cannot be blank when clue text is provided'),
+      ),
+    });
 
     const answerTextareas = screen.getAllByPlaceholderText(/answer/i);
     fireEvent.change(answerTextareas[0], { target: { value: '' } });
 
     await userEvent.click(screen.getByRole('button', { name: /save board/i }));
 
-    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(api.updateBoard).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 
-  it('prevents saving a whitespace-only category title', async () => {
-    const { api } = renderEditor();
+  it('fires the PUT for a whitespace-only category title and surfaces the server 400', async () => {
+    const { api } = renderEditor({
+      updateBoard: vi.fn().mockRejectedValue(
+        new Error('Invalid request body: Category title cannot be blank'),
+      ),
+    });
 
     const titleInput = screen.getByRole('textbox', { name: /category 1 title/i });
     fireEvent.change(titleInput, { target: { value: '   ' } });
 
     await userEvent.click(screen.getByRole('button', { name: /save board/i }));
 
-    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(api.updateBoard).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 
-  it('prevents saving a Final with a missing answer', async () => {
-    const { api } = renderEditor();
+  it('fires the PUT for a Final with a missing answer and surfaces the server 400', async () => {
+    const { api } = renderEditor({
+      updateBoard: vi.fn().mockRejectedValue(
+        new Error('Invalid request body: Final answer cannot be blank'),
+      ),
+    });
 
     const finalAnswerInput = screen.getByRole('textbox', { name: /final answer/i });
     fireEvent.change(finalAnswerInput, { target: { value: '' } });
 
     await userEvent.click(screen.getByRole('button', { name: /save board/i }));
 
-    expect(api.updateBoard).not.toHaveBeenCalled();
+    expect(api.updateBoard).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 
