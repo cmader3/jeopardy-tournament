@@ -17,8 +17,7 @@ export interface HostLobbyProps {
 export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
   const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
-  const inLobby = !state || state.phase === 'LOBBY';
-  const canStart = connectedCount > 0 && inLobby;
+  const canStart = connectedCount > 0;
 
   return (
     <main className="host-lobby route-stub">
@@ -49,28 +48,72 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
           ))}
         </ul>
       )}
-      {!inLobby ? (
-        <p className="game-started">Game started!</p>
-      ) : (
-        <div className="start-controls">
-          <button
-            type="button"
-            onClick={onStartGame}
-            disabled={!canStart}
-            aria-disabled={!canStart}
-            data-testid="start-game-button"
-          >
-            Start Game
+      <div className="start-controls">
+        <button
+          type="button"
+          onClick={onStartGame}
+          disabled={!canStart}
+          aria-disabled={!canStart}
+          data-testid="start-game-button"
+        >
+          Start Game
+        </button>
+        {onCreateNewGame && (
+          <button type="button" onClick={onCreateNewGame}>
+            New Game
           </button>
-          {onCreateNewGame && (
-            <button type="button" onClick={onCreateNewGame}>
-              New Game
-            </button>
-          )}
-          {connectedCount === 0 && inLobby && (
-            <p className="minimum-players">At least one connected contestant is required to start.</p>
-          )}
-        </div>
+        )}
+        {connectedCount === 0 && (
+          <p className="minimum-players">At least one connected contestant is required to start.</p>
+        )}
+      </div>
+    </main>
+  );
+}
+
+export interface HostInProgressProps {
+  roomCode: string;
+  state: HostView | null;
+}
+
+export function HostInProgress({ roomCode, state }: HostInProgressProps) {
+  const players = state?.players ?? [];
+
+  return (
+    <main className="host-in-progress route-stub">
+      <h1>Game in Progress</h1>
+      <p className="room-code" data-testid="room-code">
+        Room Code: {roomCode}
+      </p>
+      <p className="phase" data-testid="phase-indicator">
+        Phase: {state?.phase ?? '—'}
+      </p>
+      <h2>Roster</h2>
+      {players.length === 0 ? (
+        <p>No contestants connected.</p>
+      ) : (
+        <ul className="player-list" data-testid="roster">
+          {players.map((player) => (
+            <li
+              key={player.id}
+              className={player.connected ? 'connected' : 'disconnected'}
+              data-testid={`roster-item-${player.id}`}
+            >
+              <span className="player-name" data-testid={`roster-name-${player.id}`}>
+                {player.name}
+              </span>
+              <span className="player-score" data-testid={`roster-score-${player.id}`}>
+                {player.score}
+              </span>
+              <span
+                className={`player-status ${player.connected ? 'status-connected' : 'status-disconnected'}`}
+                data-testid={`player-status-${player.id}`}
+              >
+                {player.connected ? 'connected' : 'disconnected'}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </main>
   );
@@ -122,15 +165,19 @@ export function HostContent() {
   }, [hostSocket]);
 
   if (roomCode) {
-    return (
-      <HostLobby
-        roomCode={roomCode}
-        state={gameState}
-        onStartGame={handleStartGame}
-        onCreateNewGame={handleCreateNewGame}
-        startError={hostSocket.error}
-      />
-    );
+    const inLobby = !gameState || gameState.phase === 'LOBBY';
+    if (inLobby) {
+      return (
+        <HostLobby
+          roomCode={roomCode}
+          state={gameState}
+          onStartGame={handleStartGame}
+          onCreateNewGame={handleCreateNewGame}
+          startError={hostSocket.error}
+        />
+      );
+    }
+    return <HostInProgress roomCode={roomCode} state={gameState} />;
   }
 
   if (loadingBoards) {

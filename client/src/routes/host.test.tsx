@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { HostLobby, HostContent } from './host.js';
+import { HostLobby, HostInProgress, HostContent } from './host.js';
 import type { HostView } from '@jeopardy/shared';
 
 vi.mock('../auth/useHostAuth.js', () => ({ useHostAuth: vi.fn() }));
@@ -116,12 +116,46 @@ describe('HostLobby', () => {
     expect(screen.getByTestId('player-status-p2')).toHaveTextContent('disconnected');
   });
 
-  it('hides the start controls after the game has left the lobby', () => {
-    const state = makeHostState({ phase: 'BOARD_SELECT', players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }] });
+  it('keeps the start controls visible while the server phase is still LOBBY', () => {
+    const state = makeHostState({ players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }] });
     render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError={null} />);
 
-    expect(screen.queryByTestId('start-game-button')).not.toBeInTheDocument();
-    expect(screen.getByText('Game started!')).toBeInTheDocument();
+    expect(screen.getByTestId('start-game-button')).toBeInTheDocument();
+    expect(screen.queryByText('Game started!')).not.toBeInTheDocument();
+  });
+});
+
+describe('HostInProgress', () => {
+  it('renders the room code and a phase indicator', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', roomCode: 'WXYZ' });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('room-code')).toHaveTextContent('Room Code: WXYZ');
+    expect(screen.getByTestId('phase-indicator')).toHaveTextContent('BOARD_SELECT');
+  });
+
+  it('renders the roster with names and scores', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: -100, connected: true },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('roster')).toBeInTheDocument();
+    expect(screen.getByTestId('roster-name-p1')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('roster-score-p1')).toHaveTextContent('200');
+    expect(screen.getByTestId('roster-name-p2')).toHaveTextContent('Bob');
+    expect(screen.getByTestId('roster-score-p2')).toHaveTextContent('-100');
+  });
+
+  it('shows a waiting message when the roster is empty', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', players: [] });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByText('No contestants connected.')).toBeInTheDocument();
   });
 });
 
@@ -177,5 +211,40 @@ describe('HostContent', () => {
     expect(await screen.findByTestId('room-code')).toHaveTextContent('Room Code: WXYZ');
     expect(screen.queryByText('Board One')).not.toBeInTheDocument();
     expect(useSocket).toHaveBeenCalledWith('host', 'WXYZ', expect.any(Function), undefined, undefined, token);
+  });
+
+  it('switches to the in-progress view when the server projection leaves the lobby', async () => {
+    const token = 'host-token';
+    const startGame = vi.fn();
+    const inProgressState = makeHostState({
+      phase: 'BOARD_SELECT',
+      roomCode: 'WXYZ',
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    localStorage.setItem('jeopardy-host-room', 'WXYZ');
+    useHostAuth.mockReturnValue({
+      token,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    let seeded = false;
+    useSocket.mockImplementation((_role, _roomCode, onState) => {
+      if (!seeded) {
+        seeded = true;
+        onState?.(inProgressState);
+      }
+      return { connected: true, error: null, data: inProgressState, startGame };
+    });
+
+    render(<HostContent />);
+
+    expect(await screen.findByTestId('room-code')).toHaveTextContent('Room Code: WXYZ');
+    expect(screen.queryByText('Host Lobby')).not.toBeInTheDocument();
+    expect(screen.getByTestId('phase-indicator')).toHaveTextContent('BOARD_SELECT');
+    expect(screen.getByTestId('roster-name-p1')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('roster-score-p1')).toHaveTextContent('0');
   });
 });
