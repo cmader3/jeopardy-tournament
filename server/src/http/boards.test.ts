@@ -356,21 +356,32 @@ describe('Boards REST API', () => {
       expect(response.body.details.some((d: { path: string }) => d.path.includes('clueText'))).toBe(true);
     });
 
-    it('trims whitespace from strings before saving', async () => {
+    it('stores strings with intentional whitespace verbatim and converts whitespace-only to empty', async () => {
       const app = createApp();
       const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
       const payload = makeBoardPayload();
-      payload.name = '  Trimmed Board  ';
-      payload.rounds[0].categories[0].title = '  Trimmed Category  ';
-      payload.rounds[0].categories[0].clues[0].clueText = '  Trimmed clue  ';
-      payload.rounds[0].categories[0].clues[0].answer = '  Trimmed answer  ';
+      payload.name = '  Board with spaces  ';
+      payload.rounds[0].categories[0].title = '  Category with spaces  ';
+      payload.rounds[0].categories[0].clues[0].clueText = '  Clue with spaces  ';
+      payload.rounds[0].categories[0].clues[0].answer = '  Answer with spaces  ';
+      payload.rounds[0].categories[0].clues[1].clueText = '   ';
+      payload.rounds[0].categories[0].clues[1].answer = '\t\n ';
+      payload.rounds[1].categories[0].title = '  Final with spaces  ';
+      payload.rounds[1].categories[0].clues[0].clueText = '  Final clue with spaces  ';
+      payload.rounds[1].categories[0].clues[0].answer = '  Final answer with spaces  ';
 
       const response = await authRequest(app).put(`/api/boards/${created.body.id}`).send(payload).expect(200);
-      expect(response.body.name).toBe('Trimmed Board');
-      expect(response.body.rounds[0].categories[0].title).toBe('Trimmed Category');
-      expect(response.body.rounds[0].categories[0].clues[0].clueText).toBe('Trimmed clue');
-      expect(response.body.rounds[0].categories[0].clues[0].answer).toBe('Trimmed answer');
+      expect(response.body.name).toBe('  Board with spaces  ');
+      expect(response.body.rounds[0].categories[0].title).toBe('  Category with spaces  ');
+      expect(response.body.rounds[0].categories[0].clues[0].clueText).toBe('  Clue with spaces  ');
+      expect(response.body.rounds[0].categories[0].clues[0].answer).toBe('  Answer with spaces  ');
+      expect(response.body.rounds[0].categories[0].clues[1].clueText).toBe('');
+      expect(response.body.rounds[0].categories[0].clues[1].answer).toBe('');
+      expect(response.body.rounds[1].categories[0].title).toBe('  Final with spaces  ');
+      expect(response.body.rounds[1].categories[0].clues[0].clueText).toBe('  Final clue with spaces  ');
+      expect(response.body.rounds[1].categories[0].clues[0].answer).toBe('  Final answer with spaces  ');
+      expect(response.body.isComplete).toBe(false);
     });
 
     it('returns isComplete true for a fully authored board', async () => {

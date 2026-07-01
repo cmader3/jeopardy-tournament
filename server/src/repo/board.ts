@@ -155,18 +155,22 @@ function isBoardComplete(board: {
   });
 }
 
+function emptyIfWhitespaceOnly(value: string): string {
+  return value.trim().length === 0 ? '' : value;
+}
+
 function normalizeClueInput(clue: CreateClueInput): CreateClueInput {
   return {
     ...clue,
-    clueText: clue.clueText.trim(),
-    answer: clue.answer.trim(),
+    clueText: emptyIfWhitespaceOnly(clue.clueText),
+    answer: emptyIfWhitespaceOnly(clue.answer),
   };
 }
 
 function normalizeCategoryInput(category: CreateCategoryInput): CreateCategoryInput {
   return {
     ...category,
-    title: category.title.trim(),
+    title: emptyIfWhitespaceOnly(category.title),
     clues: category.clues.map(normalizeClueInput),
   };
 }
@@ -181,7 +185,7 @@ function normalizeRoundInput(round: CreateRoundInput): CreateRoundInput {
 function normalizeBoardInput(input: CreateBoardInput): CreateBoardInput {
   return {
     ...input,
-    name: input.name.trim(),
+    name: emptyIfWhitespaceOnly(input.name),
     rounds: input.rounds.map(normalizeRoundInput),
   };
 }
