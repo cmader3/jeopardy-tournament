@@ -124,6 +124,7 @@ function createMockApi(board: BoardWithRounds, updates: Partial<BoardApiClient> 
       } as BoardWithRounds),
     ),
     deleteBoard: vi.fn(),
+    importBoard: vi.fn(),
     ...updates,
   } as BoardApiClient;
 }

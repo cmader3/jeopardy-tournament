@@ -13,6 +13,33 @@
   margin-bottom: 1.5rem;
 }
 
+.libraryActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.importButton {
+  background: var(--jeopardy-blue);
+  color: var(--text-light);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.importButton:hover:not(:disabled) {
+  background: var(--jeopardy-blue-dark);
+}
+
+.importButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .editorHeader {
   display: flex;
   align-items: center;
@@ -730,4 +757,169 @@
 .finalField textarea:focus {
   border-color: var(--value-gold);
   outline: none;
+}
+
+.importUpload {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+}
+
+.importDescription {
+  margin: 0 0 1rem;
+  color: var(--text-light);
+  opacity: 0.9;
+}
+
+.importControls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.importFileLabel {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--text-light);
+  cursor: pointer;
+}
+
+.importControls input[type='file'] {
+  color: var(--text-light);
+  font-family: var(--font-body);
+  max-width: 100%;
+}
+
+.importPreview {
+  margin-bottom: 1.5rem;
+}
+
+.importPreviewHeader {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+}
+
+.previewBoardName {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--value-gold);
+}
+
+.previewMeta {
+  margin: 0;
+  color: var(--text-light);
+  opacity: 0.85;
+}
+
+.previewConfidence {
+  color: var(--value-gold);
+}
+
+.importWarnings {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(214, 159, 40, 0.15);
+  border: 1px solid rgba(214, 159, 40, 0.4);
+  border-radius: 0.5rem;
+  color: var(--text-light);
+}
+
+.importWarnings h3 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--value-gold);
+}
+
+.importWarnings ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.importWarnings li {
+  margin: 0.25rem 0;
+}
+
+.previewRounds {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.previewRound {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0.5rem;
+}
+
+.previewGrid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.previewCategoryHeader {
+  padding: 0.5rem;
+  text-align: center;
+  font-family: var(--font-board-header);
+  font-size: 1rem;
+  text-transform: uppercase;
+  color: var(--text-light);
+  background: var(--jeopardy-blue);
+  border-radius: 0.25rem;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.previewCell,
+.previewCellFinal,
+.previewCellDailyDouble {
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.03);
+  position: relative;
+  min-height: 5rem;
+}
+
+.previewCellDailyDouble {
+  border-color: var(--value-gold);
+  background: rgba(214, 159, 40, 0.1);
+}
+
+.previewCellFinal {
+  background: rgba(6, 12, 233, 0.15);
+}
+
+.previewValue {
+  font-family: var(--font-value);
+  font-size: 1.1rem;
+  color: var(--value-gold-light);
+}
+
+.previewClue {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-light);
+  line-height: 1.3;
+}
+
+.previewAnswer {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-light);
+  opacity: 0.8;
+  font-style: italic;
+  margin-top: auto;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }

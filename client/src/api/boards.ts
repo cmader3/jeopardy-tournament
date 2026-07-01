@@ -77,6 +77,12 @@ export interface CreateBoardInput {
 
 export type UpdateBoardInput = CreateBoardInput;
 
+export interface ImportPreview {
+  board: CreateBoardInput;
+  warnings: string[];
+  confidence: number;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 function authHeaders(token: string) {
@@ -139,6 +145,19 @@ export const boardApi = {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) await handleError(response);
+  },
+
+  async importBoard(file: File, token: string): Promise<ImportPreview> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/api/boards/import`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!response.ok) await handleError(response);
+    return response.json();
   },
 };
 

@@ -85,6 +85,7 @@ function makeMockApi(): BoardApiClient {
     createBoard: vi.fn(),
     updateBoard: vi.fn(),
     deleteBoard: vi.fn(),
+    importBoard: vi.fn(),
   } as unknown as BoardApiClient;
 }
 
@@ -98,7 +99,7 @@ describe('AdminBoardLibrary', () => {
     api.getBoards = vi.fn().mockResolvedValue([]);
     const onOpenBoard = vi.fn();
 
-    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} />);
+    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} onImport={vi.fn()} />);
 
     expect(await screen.findByText('No saved boards yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create new board/i })).toBeEnabled();
@@ -110,7 +111,7 @@ describe('AdminBoardLibrary', () => {
     api.getBoards = vi.fn().mockResolvedValue(boards);
     const onOpenBoard = vi.fn();
 
-    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} />);
+    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} onImport={vi.fn()} />);
 
     expect(await screen.findByText('Board A')).toBeInTheDocument();
     expect(screen.getByText('Board B')).toBeInTheDocument();
@@ -125,7 +126,7 @@ describe('AdminBoardLibrary', () => {
     api.createBoard = vi.fn().mockResolvedValue(newBoard);
     const onOpenBoard = vi.fn();
 
-    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} />);
+    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} onImport={vi.fn()} />);
     const createButton = await screen.findByRole('button', { name: /create new board/i });
 
     await userEvent.click(createButton);
@@ -146,7 +147,7 @@ describe('AdminBoardLibrary', () => {
     api.getBoard = vi.fn().mockResolvedValue(board);
     const onOpenBoard = vi.fn();
 
-    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} />);
+    render(<AdminBoardLibrary token={token} api={api} onOpenBoard={onOpenBoard} onImport={vi.fn()} />);
     const openButton = await screen.findByRole('button', { name: /open Board A/i });
 
     await userEvent.click(openButton);

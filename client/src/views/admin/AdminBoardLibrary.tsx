@@ -7,9 +7,10 @@ interface AdminBoardLibraryProps {
   token: string;
   api: BoardApiClient;
   onOpenBoard: (board: BoardWithRounds) => void;
+  onImport: () => void;
 }
 
-export function AdminBoardLibrary({ token, api, onOpenBoard }: AdminBoardLibraryProps) {
+export function AdminBoardLibrary({ token, api, onOpenBoard, onImport }: AdminBoardLibraryProps) {
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -155,15 +156,25 @@ export function AdminBoardLibrary({ token, api, onOpenBoard }: AdminBoardLibrary
     <main className={styles.library}>
       <header className={styles.libraryHeader}>
         <h1>Board Library</h1>
-        <button
-          type="button"
-          className={styles.createButton}
-          onClick={handleCreate}
-          disabled={isBusy || isCreating}
-          aria-busy={isCreating}
-        >
-          {isCreating ? 'Creating...' : 'Create New Board'}
-        </button>
+        <div className={styles.libraryActions}>
+          <button
+            type="button"
+            className={styles.importButton}
+            onClick={onImport}
+            disabled={isBusy}
+          >
+            Import Board
+          </button>
+          <button
+            type="button"
+            className={styles.createButton}
+            onClick={handleCreate}
+            disabled={isBusy || isCreating}
+            aria-busy={isCreating}
+          >
+            {isCreating ? 'Creating...' : 'Create New Board'}
+          </button>
+        </div>
       </header>
 
       {error && (
