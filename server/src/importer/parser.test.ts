@@ -365,4 +365,97 @@ describe('parseSheets', () => {
 
     expect(result.warnings.some((warning) => warning.toLowerCase().includes('structural'))).toBe(true);
   });
+
+  it('collapses multiple Final categories from a flat tabular source to one valueless clue', () => {
+    const sheets = [
+      sheet('Sheet1', [
+        ['Category', 'Value', 'Clue', 'Answer', 'Round'],
+        ['First Final', null, 'First final clue', 'First answer', 'Final'],
+        ['Second Final', 100, 'Second final clue', 'Second answer', 'Final'],
+      ]),
+    ];
+
+    const result = parseSheets(sheets);
+    const final = getRound(result.board, 'FINAL')!;
+
+    expect(final.categories).toHaveLength(1);
+    expect(final.categories[0].title).toBe('First Final');
+    expect(final.categories[0].clues).toHaveLength(1);
+    expect(final.categories[0].clues[0]).toMatchObject({
+      value: null,
+      clueText: 'First final clue',
+      answer: 'First answer',
+    });
+    expect(result.warnings.some((warning) => warning.toLowerCase().includes('final'))).toBe(true);
+  });
+
+  it('collapses multiple Final rows within a single category to one valueless clue', () => {
+    const sheets = [
+      sheet('Final', [
+        ['Category', 'Clue', 'Answer'],
+        ['Final Category', 'First final clue', 'First answer'],
+        ['Final Category', 'Second final clue', 'Second answer'],
+      ]),
+    ];
+
+    const result = parseSheets(sheets);
+    const final = getRound(result.board, 'FINAL')!;
+
+    expect(final.categories).toHaveLength(1);
+    expect(final.categories[0].clues).toHaveLength(1);
+    expect(final.categories[0].clues[0]).toMatchObject({
+      value: null,
+      clueText: 'First final clue',
+      answer: 'First answer',
+    });
+    expect(result.warnings.some((warning) => warning.toLowerCase().includes('final'))).toBe(true);
+  });
+
+  it('collapses multiple Final categories from a column-oriented source to one valueless clue', () => {
+    const sheets = [
+      sheet('Final', [
+        ['Final One', 'Final Two'],
+        ['The first item', 'The second item'],
+      ]),
+    ];
+
+    const result = parseSheets(sheets);
+    const final = getRound(result.board, 'FINAL')!;
+
+    expect(final.categories).toHaveLength(1);
+    expect(final.categories[0].title).toBe('Final One');
+    expect(final.categories[0].clues).toHaveLength(1);
+    expect(final.categories[0].clues[0]).toMatchObject({
+      value: null,
+      clueText: 'The first item',
+      answer: '',
+    });
+    expect(result.warnings.some((warning) => warning.toLowerCase().includes('final'))).toBe(true);
+  });
+
+  it('collapses multiple Final categories across sheets to one valueless clue', () => {
+    const sheets = [
+      sheet('Final', [
+        ['Category', 'Clue', 'Answer'],
+        ['Sheet Final', 'First final clue', 'First answer'],
+      ]),
+      sheet('Final Extra', [
+        ['Category', 'Clue', 'Answer'],
+        ['Extra Final', 'Second final clue', 'Second answer'],
+      ]),
+    ];
+
+    const result = parseSheets(sheets);
+    const final = getRound(result.board, 'FINAL')!;
+
+    expect(final.categories).toHaveLength(1);
+    expect(final.categories[0].title).toBe('Sheet Final');
+    expect(final.categories[0].clues).toHaveLength(1);
+    expect(final.categories[0].clues[0]).toMatchObject({
+      value: null,
+      clueText: 'First final clue',
+      answer: 'First answer',
+    });
+    expect(result.warnings.some((warning) => warning.toLowerCase().includes('final'))).toBe(true);
+  });
 });

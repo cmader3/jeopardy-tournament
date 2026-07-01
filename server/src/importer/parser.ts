@@ -501,21 +501,7 @@ function parseFlatSheet(
       return { title: category.title, mergeKey: category.mergeKey, clues: finalClues };
     });
 
-    if (type === 'FINAL') {
-      for (const category of categories) {
-        const firstClue = category.clues[0];
-        if (firstClue) {
-          category.clues = [{ ...firstClue, value: null }];
-        }
-      }
-      const trimmedCategories = categories.filter((category) => category.clues.length > 0);
-      if (trimmedCategories.length < categories.length) {
-        warnings.push('Extra rows in a Final category were ignored; only the first clue is used.');
-      }
-      rounds.push({ type, categories: trimmedCategories });
-    } else {
-      rounds.push({ type, categories });
-    }
+    rounds.push({ type, categories });
   }
 
   return rounds;
@@ -531,6 +517,43 @@ function parseSheet(sheet: SheetData, warnings: string[]): ParsedRound[] {
   }
 
   return parseColumnOrientedSheet(matrix, sheet.name, sheetRoundType, warnings);
+}
+
+function normalizeFinalRounds(rounds: ParsedRound[]): { normalized: ParsedRound[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const normalized = rounds.map((round) => {
+    if (round.type !== 'FINAL') return round;
+    if (round.categories.length === 0) return round;
+
+    const firstCategory = round.categories[0];
+    const firstClue = firstCategory.clues[0];
+
+    if (round.categories.length > 1) {
+      warnings.push(
+        `Final Jeopardy can only have one category; ${round.categories.length - 1} extra category/categories were dropped.`,
+      );
+    }
+
+    if (firstCategory.clues.length > 1) {
+      warnings.push(
+        `Final Jeopardy can only have one clue; ${firstCategory.clues.length - 1} extra clue/clues were dropped.`,
+      );
+    }
+
+    const normalizedClues: ParsedClue[] = firstClue ? [{ ...firstClue, value: null }] : [];
+
+    return {
+      ...round,
+      categories: [
+        {
+          ...firstCategory,
+          clues: normalizedClues,
+        },
+      ],
+    };
+  });
+
+  return { normalized, warnings };
 }
 
 function mergeRounds(rounds: ParsedRound[]): ParsedRound[] {
@@ -647,8 +670,10 @@ export function parseSheets(sheets: SheetData[], name = 'Imported Board'): Parse
   }
 
   const mergedRounds = mergeRounds(allRounds);
+  const { normalized: normalizedRounds, warnings: normalizationWarnings } = normalizeFinalRounds(mergedRounds);
+  warnings.push(...normalizationWarnings);
 
-  if (!hasAnyContent(mergedRounds)) {
+  if (!hasAnyContent(normalizedRounds)) {
     warnings.push('No usable content was found in the uploaded file.');
   }
 
@@ -662,16 +687,16 @@ export function parseSheets(sheets: SheetData[], name = 'Imported Board'): Parse
     warnings.push('No round information detected; all content assumed to be the Jeopardy round.');
   }
 
-  const validationIssues = validateBoard(buildBoardInput(name, mergedRounds));
+  const validationIssues = validateBoard(buildBoardInput(name, normalizedRounds));
   if (validationIssues.length > 0) {
     warnings.push('Parsed board has structural issues that should be fixed before saving:');
     warnings.push(...validationIssues);
   }
 
-  const confidence = computeConfidence(mergedRounds, hasRoundColumn || hasKnownSheetNames, warnings);
+  const confidence = computeConfidence(normalizedRounds, hasRoundColumn || hasKnownSheetNames, warnings);
 
   return {
-    board: buildBoardInput(name, mergedRounds),
+    board: buildBoardInput(name, normalizedRounds),
     warnings,
     confidence,
   };

@@ -96,4 +96,29 @@ describe('POST /api/boards/import', () => {
 
     expect(response.body.error).toBeDefined();
   });
+
+  it('rejects an oversized file with a graceful error', async () => {
+    const app = createApp();
+    const largeCsv = Buffer.alloc(6 * 1024 * 1024, 'x');
+
+    const response = await authRequest(app)
+      .post('/api/boards/import')
+      .attach('file', largeCsv, { filename: 'huge.csv', contentType: 'text/csv' })
+      .expect(413);
+
+    expect(response.body.error).toMatch(/file too large|5mb/i);
+  });
+
+  it('rejects multiple files with a graceful error', async () => {
+    const app = createApp();
+    const csv = Buffer.from('Category,Value,Clue,Answer\nScience,100,Q,A\n');
+
+    const response = await authRequest(app)
+      .post('/api/boards/import')
+      .attach('file', csv, { filename: 'one.csv', contentType: 'text/csv' })
+      .attach('file', csv, { filename: 'two.csv', contentType: 'text/csv' })
+      .expect(400);
+
+    expect(response.body.error).toMatch(/only one file|one file/i);
+  });
 });
