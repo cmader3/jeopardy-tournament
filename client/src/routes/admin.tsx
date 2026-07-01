@@ -19,7 +19,17 @@ function AdminContent() {
   }
 
   if (view === 'import') {
-    return <ImportBoard token={token} api={boardApi} onBack={() => setView('library')} />;
+    return (
+      <ImportBoard
+        token={token}
+        api={boardApi}
+        onBack={() => setView('library')}
+        onSave={(savedBoard) => {
+          setSelectedBoard(savedBoard);
+          setView('editor');
+        }}
+      />
+    );
   }
 
   if (selectedBoard) {

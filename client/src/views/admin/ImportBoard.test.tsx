@@ -142,12 +142,12 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    expect(await screen.findByText('Science')).toBeInTheDocument();
-    expect(screen.getByText('History')).toBeInTheDocument();
-    expect(screen.getByText('Water symbol?')).toBeInTheDocument();
-    expect(screen.getByText('H2O')).toBeInTheDocument();
-    expect(screen.getByText('Berlin Wall year?')).toBeInTheDocument();
-    expect(screen.getByText('1989')).toBeInTheDocument();
+    expect(await screen.findByText('Science', { selector: 'div' })).toBeInTheDocument();
+    expect(screen.getByText('History', { selector: 'div' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Water symbol?')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('H2O')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Berlin Wall year?')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1989')).toBeInTheDocument();
   });
 
   it('flags Daily Double clues in the preview', async () => {
@@ -180,10 +180,10 @@ describe('ImportBoard', () => {
     expect(await screen.findByText('Jeopardy Round')).toBeInTheDocument();
     expect(screen.getByText('Double Jeopardy Round')).toBeInTheDocument();
     expect(screen.getByText('Final Jeopardy Round')).toBeInTheDocument();
-    expect(screen.getByText('Heavy water?')).toBeInTheDocument();
-    expect(screen.getByText('D2O')).toBeInTheDocument();
-    expect(screen.getByText('He wrote The Hobbit')).toBeInTheDocument();
-    expect(screen.getByText('J.R.R. Tolkien')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Heavy water?')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('D2O')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('He wrote The Hobbit')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('J.R.R. Tolkien')).toBeInTheDocument();
   });
 
   it('shows a Final clue with no dollar value', async () => {
@@ -199,8 +199,8 @@ describe('ImportBoard', () => {
     await userEvent.click(uploadButton);
 
     expect(await screen.findByText('Final Jeopardy Round')).toBeInTheDocument();
-    expect(screen.getByText('Literature')).toBeInTheDocument();
-    expect(screen.getByText('He wrote The Hobbit')).toBeInTheDocument();
+    expect(screen.getByText('Literature', { selector: 'div' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('He wrote The Hobbit')).toBeInTheDocument();
     expect(screen.queryByText(/\$200/)).not.toBeInTheDocument();
   });
 
@@ -289,9 +289,9 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    expect(await screen.findAllByText('Science')).toHaveLength(2);
-    expect(screen.getByText('Water symbol?')).toBeInTheDocument();
-    expect(screen.getByText('Speed of light?')).toBeInTheDocument();
+    expect(await screen.findAllByText('Science', { selector: 'div' })).toHaveLength(2);
+    expect(screen.getByDisplayValue('Water symbol?')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Speed of light?')).toBeInTheDocument();
   });
 
   it('preserves unicode and delimiter-laden content in the correct cells', async () => {
@@ -329,8 +329,8 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    expect(await screen.findByText('Café')).toBeInTheDocument();
-    expect(screen.getByText('🐱, "meow"')).toBeInTheDocument();
+    expect(await screen.findByText('Café', { selector: 'div' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('🐱, "meow"')).toBeInTheDocument();
   });
 
   it('returns to the library when Back to Library is clicked', async () => {
@@ -343,5 +343,221 @@ describe('ImportBoard', () => {
     await userEvent.click(backButton);
 
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a Save Board button in the preview', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    expect(await screen.findByRole('button', { name: /save board/i })).toBeInTheDocument();
+  });
+
+  it('saves the edited board via createBoard and notifies the parent', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    const savedBoard = {
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    };
+    api.createBoard = vi.fn().mockResolvedValue(savedBoard);
+    const onSave = vi.fn();
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={onSave} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    const nameInput = await screen.findByLabelText(/board name/i);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Edited Imported Board');
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.name).toBe('Edited Imported Board');
+    expect(payload.defaultTimerSeconds).toBe(10);
+    expect(payload.finalTimerSeconds).toBe(30);
+    expect(payload.rounds[0].categories[0].clues[0].answer).toBe('H2O');
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(savedBoard));
+  });
+
+  it('reflects a changed value in the saved board payload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByText('Science', { selector: 'div' });
+    const valueInputs = screen.getAllByLabelText(/value/i);
+    await userEvent.clear(valueInputs[0]);
+    await userEvent.type(valueInputs[0], '250');
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.rounds[0].categories[0].clues[0].value).toBe(250);
+  });
+
+  it('reflects an edited answer in the saved board payload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByText('Science', { selector: 'div' });
+    const answerInputs = screen.getAllByLabelText(/answer/i);
+    await userEvent.clear(answerInputs[0]);
+    await userEvent.type(answerInputs[0], 'Dihydrogen monoxide');
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.rounds[0].categories[0].clues[0].answer).toBe('Dihydrogen monoxide');
+  });
+
+  it('reassigns a clue to a different category in the saved payload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByText('Science', { selector: 'div' });
+    const categorySelects = screen.getAllByLabelText(/category/i);
+    await userEvent.selectOptions(categorySelects[0], 'History');
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.rounds[0].categories[0].clues).toHaveLength(0);
+    const historyCategory = payload.rounds[0].categories[1];
+    expect(historyCategory.clues).toHaveLength(2);
+    expect(historyCategory.clues[1].clueText).toBe('Water symbol?');
+  });
+
+  it('does not call createBoard when the default timer is invalid', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByLabelText(/board name/i);
+    const timerInput = screen.getByLabelText(/per-clue timer/i);
+    await userEvent.clear(timerInput);
+    await userEvent.type(timerInput, '0');
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/timer must be a positive integer/i);
+    });
+    expect(api.createBoard).not.toHaveBeenCalled();
+  });
+
+  it('toggles Double Jeopardy and includes it in the saved payload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      includeDoubleJeopardy: true,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByLabelText(/board name/i);
+    const toggle = screen.getByLabelText(/include double jeopardy/i);
+    await userEvent.click(toggle);
+
+    const saveButton = screen.getByRole('button', { name: /save board/i });
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.includeDoubleJeopardy).toBe(true);
   });
 });

@@ -923,3 +923,58 @@
   padding-top: 0.35rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+.previewHeaderFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.previewHeaderFields .settingField {
+  margin-bottom: 0;
+}
+
+.previewEditLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--text-light);
+  opacity: 0.9;
+}
+
+.previewEditInput,
+.previewCategorySelect {
+  font-size: 0.9rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--panel-bg);
+  color: var(--text-light);
+  width: 100%;
+}
+
+.previewEditInput:focus,
+.previewCategorySelect:focus {
+  border-color: var(--value-gold);
+  outline: none;
+}
+
+.previewCategorySelect {
+  cursor: pointer;
+}
+
+.previewCategorySelect option {
+  background: var(--panel-bg);
+  color: var(--text-light);
+}
+
+.previewActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}

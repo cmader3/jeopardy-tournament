@@ -1,15 +1,34 @@
 import { useState } from 'react';
-import type { BoardApiClient, ImportPreview, RoundInput } from '../../api/boards.js';
+import type { BoardApiClient, BoardWithRounds, ImportPreview, RoundInput } from '../../api/boards.js';
 import styles from './admin.module.css';
+import {
+  createEditableBoard,
+  moveClueToCategory,
+  parsePositiveInteger,
+  setIncludeDoubleJeopardy,
+  updateBoardName,
+  updateClueAnswer,
+  updateClueText,
+  updateClueValue,
+  updateDefaultTimer,
+  updateFinalTimer,
+  type EditableBoard,
+} from './importHelpers.js';
 
 interface ImportBoardProps {
   token: string;
   api: BoardApiClient;
   onBack: () => void;
+  onSave?: (board: BoardWithRounds) => void;
 }
 
-interface ImportPreviewProps {
+interface EditablePreviewProps {
   preview: ImportPreview;
+  board: EditableBoard;
+  onChange: (board: EditableBoard) => void;
+  onSave: () => void;
+  isSaving: boolean;
+  error: string | null;
 }
 
 function roundTitle(type: RoundInput['type']): string {
@@ -25,34 +44,135 @@ function roundTitle(type: RoundInput['type']): string {
   }
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) {
-    return '';
+function findValidationErrors(board: EditableBoard): string[] {
+  const errors: string[] = [];
+
+  if (board.name.trim().length === 0) {
+    errors.push('Board name cannot be blank');
   }
-  return `$${value}`;
+
+  if (board.defaultTimerSeconds === undefined || board.defaultTimerSeconds <= 0) {
+    errors.push('Per-clue timer must be a positive integer');
+  }
+
+  if (board.finalTimerSeconds === undefined || board.finalTimerSeconds <= 0) {
+    errors.push('Final timer must be a positive integer');
+  }
+
+  for (const round of board.rounds) {
+    if (round.type === 'DOUBLE_JEOPARDY' && !board.includeDoubleJeopardy) continue;
+
+    for (const category of round.categories) {
+      if (category.title.trim().length === 0) {
+        errors.push(`${roundTitle(round.type)} category title cannot be blank`);
+      }
+
+      for (const clue of category.clues) {
+        const text = clue.clueText.trim();
+        const answer = clue.answer.trim();
+        const hasContent = text.length > 0 || answer.length > 0;
+        if (hasContent && (text.length === 0 || answer.length === 0)) {
+          const missing = text.length === 0 ? 'clue text' : 'answer';
+          errors.push(`Clue in "${category.title}" is missing ${missing}`);
+        }
+        if (round.type !== 'FINAL') {
+          if (clue.value === null || clue.value <= 0) {
+            errors.push(`Clue in "${category.title}" must have a positive value`);
+          }
+        }
+      }
+    }
+  }
+
+  return errors;
 }
 
-function ImportPreviewPanel({ preview }: ImportPreviewProps) {
-  const { board } = preview;
+function EditablePreview({ preview, board, onChange, onSave, isSaving, error }: EditablePreviewProps) {
+  const validationErrors = findValidationErrors(board);
+  const hasErrors = validationErrors.length > 0;
+
+  const handleNameChange = (name: string) => {
+    onChange(updateBoardName(board, name));
+  };
+
+  const handleDefaultTimerChange = (value: string) => {
+    const parsed = parsePositiveInteger(value);
+    onChange(updateDefaultTimer(board, parsed ?? 0));
+  };
+
+  const handleFinalTimerChange = (value: string) => {
+    const parsed = parsePositiveInteger(value);
+    onChange(updateFinalTimer(board, parsed ?? 0));
+  };
+
+  const handleToggleDouble = (enabled: boolean) => {
+    onChange(setIncludeDoubleJeopardy(board, enabled));
+  };
 
   return (
     <div className={styles.importPreview} data-testid="import-preview">
       <header className={styles.importPreviewHeader}>
-        <h2 className={styles.previewBoardName}>{board.name}</h2>
-        <p className={styles.previewMeta}>
-          {board.includeDoubleJeopardy ? 'Double Jeopardy' : 'Single round'}
-          {' · '}
-          {board.defaultTimerSeconds}s per clue
-          {' · '}
-          {board.finalTimerSeconds}s Final
-          {preview.confidence < 1 && (
-            <span className={styles.previewConfidence}>
-              {' · '}
-              Confidence: {Math.round(preview.confidence * 100)}%
-            </span>
-          )}
-        </p>
+        <div className={styles.previewHeaderFields}>
+          <div className={styles.settingField}>
+            <label htmlFor="preview-board-name">Board Name</label>
+            <input
+              id="preview-board-name"
+              type="text"
+              value={board.name}
+              onChange={(event) => handleNameChange(event.target.value)}
+              disabled={isSaving}
+            />
+          </div>
+          <div className={styles.settingField}>
+            <label htmlFor="preview-default-timer">Per-clue timer (seconds)</label>
+            <input
+              id="preview-default-timer"
+              type="text"
+              inputMode="numeric"
+              value={board.defaultTimerSeconds}
+              onChange={(event) => handleDefaultTimerChange(event.target.value)}
+              disabled={isSaving}
+              className={(board.defaultTimerSeconds ?? 0) <= 0 ? styles.invalidInput : undefined}
+            />
+          </div>
+          <div className={styles.settingField}>
+            <label htmlFor="preview-final-timer">Final timer (seconds)</label>
+            <input
+              id="preview-final-timer"
+              type="text"
+              inputMode="numeric"
+              value={board.finalTimerSeconds}
+              onChange={(event) => handleFinalTimerChange(event.target.value)}
+              disabled={isSaving}
+              className={(board.finalTimerSeconds ?? 0) <= 0 ? styles.invalidInput : undefined}
+            />
+          </div>
+          <div className={styles.settingField}>
+            <label className={styles.toggleLabel}>
+              <input
+                type="checkbox"
+                checked={board.includeDoubleJeopardy}
+                onChange={(event) => handleToggleDouble(event.target.checked)}
+                disabled={isSaving}
+              />
+              Include Double Jeopardy
+            </label>
+          </div>
+        </div>
       </header>
+
+      {hasErrors && (
+        <div className={styles.error} role="alert">
+          <p>Please fix the following errors before saving:</p>
+          <ul className={styles.validationList}>
+            {validationErrors.map((message, index) => (
+              // Errors are recomputed each render; index is stable enough for a simple list.
+              // eslint-disable-next-line @eslint-react/no-array-index-key
+              <li key={`error-${index}`}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {preview.warnings.length > 0 && (
         <div className={styles.importWarnings} role="region" aria-label="Import warnings">
@@ -67,8 +187,16 @@ function ImportPreviewPanel({ preview }: ImportPreviewProps) {
         </div>
       )}
 
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+
       <div className={styles.previewRounds}>
         {board.rounds.map((round) => {
+          if (round.type === 'DOUBLE_JEOPARDY' && !board.includeDoubleJeopardy) return null;
+
           const columnCount = round.categories.length;
           const rowCount = round.categories.reduce(
             (max, category) => Math.max(max, category.clues.length),
@@ -95,7 +223,7 @@ function ImportPreviewPanel({ preview }: ImportPreviewProps) {
                   ))}
 
                   {Array.from({ length: rowCount }).map((_, rowIndex) =>
-                    round.categories.map((category) => {
+                    round.categories.map((category, categoryIndex) => {
                       const clue = category.clues[rowIndex];
                       if (!clue) {
                         // Row position is part of the stable cell address in this row-major grid.
@@ -110,11 +238,82 @@ function ImportPreviewPanel({ preview }: ImportPreviewProps) {
                           ? styles.previewCellDailyDouble
                           : styles.previewCell;
 
+                      const handleCategoryChange = (targetCategoryIndex: number) => {
+                        onChange(moveClueToCategory(board, round.type, categoryIndex, rowIndex, targetCategoryIndex));
+                      };
+
+                      const handleValueChange = (value: string) => {
+                        const parsed = value === '' ? null : Number(value);
+                        if (value === '' || (parsed !== null && Number.isInteger(parsed))) {
+                          onChange(updateClueValue(board, round.type, categoryIndex, rowIndex, parsed));
+                        }
+                      };
+
+                      const handleTextChange = (clueText: string) => {
+                        onChange(updateClueText(board, round.type, categoryIndex, rowIndex, clueText));
+                      };
+
+                      const handleAnswerChange = (answer: string) => {
+                        onChange(updateClueAnswer(board, round.type, categoryIndex, rowIndex, answer));
+                      };
+
                       return (
                         <div key={`${round.type}-cell-${category.order}-${clue.row}`} className={cellClass}>
-                          {!isFinal && clue.value !== null && (
-                            <span className={styles.previewValue}>{formatCurrency(clue.value)}</span>
+                          <label className={styles.previewEditLabel}>
+                            Category
+                            <select
+                              aria-label="Category"
+                              value={categoryIndex}
+                              onChange={(event) => handleCategoryChange(Number(event.target.value))}
+                              disabled={isSaving}
+                              className={styles.previewCategorySelect}
+                            >
+                              {round.categories.map((cat, index) => (
+                                <option key={`${round.type}-opt-${cat.order}`} value={index}>
+                                  {cat.title}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          {!isFinal && (
+                            <label className={styles.previewEditLabel}>
+                              Value
+                              <input
+                                type="number"
+                                aria-label="Value"
+                                value={clue.value ?? ''}
+                                onChange={(event) => handleValueChange(event.target.value)}
+                                disabled={isSaving}
+                                className={styles.previewEditInput}
+                              />
+                            </label>
                           )}
+
+                          <label className={styles.previewEditLabel}>
+                            Clue
+                            <input
+                              type="text"
+                              aria-label="Clue text"
+                              value={clue.clueText}
+                              onChange={(event) => handleTextChange(event.target.value)}
+                              disabled={isSaving}
+                              className={styles.previewEditInput}
+                            />
+                          </label>
+
+                          <label className={styles.previewEditLabel}>
+                            Answer
+                            <input
+                              type="text"
+                              aria-label="Answer"
+                              value={clue.answer}
+                              onChange={(event) => handleAnswerChange(event.target.value)}
+                              disabled={isSaving}
+                              className={styles.previewEditInput}
+                            />
+                          </label>
+
                           {clue.isDailyDouble && (
                             <span
                               className={styles.dailyDoubleIndicator}
@@ -123,8 +322,6 @@ function ImportPreviewPanel({ preview }: ImportPreviewProps) {
                               DD
                             </span>
                           )}
-                          <span className={styles.previewClue}>{clue.clueText}</span>
-                          <span className={styles.previewAnswer}>{clue.answer}</span>
                         </div>
                       );
                     }),
@@ -135,15 +332,29 @@ function ImportPreviewPanel({ preview }: ImportPreviewProps) {
           );
         })}
       </div>
+
+      <div className={styles.previewActions}>
+        <button
+          type="button"
+          className={styles.saveButton}
+          onClick={() => void onSave()}
+          disabled={isSaving || hasErrors}
+          aria-busy={isSaving}
+        >
+          {isSaving ? 'Saving...' : 'Save Board'}
+        </button>
+      </div>
     </div>
   );
 }
 
-export function ImportBoard({ token, api, onBack }: ImportBoardProps) {
+export function ImportBoard({ token, api, onBack, onSave }: ImportBoardProps) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [editableBoard, setEditableBoard] = useState<EditableBoard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleUpload = async () => {
     if (!file) {
@@ -154,14 +365,38 @@ export function ImportBoard({ token, api, onBack }: ImportBoardProps) {
     setIsUploading(true);
     setError(null);
     setPreview(null);
+    setEditableBoard(null);
 
     try {
       const result = await api.importBoard(file, token);
       setPreview(result);
+      setEditableBoard(createEditableBoard(result.board));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editableBoard) return;
+
+    const validationErrors = findValidationErrors(editableBoard);
+    if (validationErrors.length > 0) {
+      setError('Please fix the validation errors before saving.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const saved = await api.createBoard(editableBoard, token);
+      onSave?.(saved);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save board');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -193,27 +428,36 @@ export function ImportBoard({ token, api, onBack }: ImportBoardProps) {
               setFile(selectedFile);
               setError(null);
             }}
-            disabled={isUploading}
+            disabled={isUploading || isSaving}
           />
           <button
             type="button"
             className={styles.createButton}
             onClick={() => void handleUpload()}
-            disabled={isUploading || !file}
+            disabled={isUploading || !file || isSaving}
             aria-busy={isUploading}
           >
             {isUploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
 
-        {error && (
+        {error && !editableBoard && (
           <p className={styles.error} role="alert">
             {error}
           </p>
         )}
       </section>
 
-      {preview && <ImportPreviewPanel preview={preview} />}
+      {preview && editableBoard && (
+        <EditablePreview
+          preview={preview}
+          board={editableBoard}
+          onChange={setEditableBoard}
+          onSave={handleSave}
+          isSaving={isSaving}
+          error={error}
+        />
+      )}
     </main>
   );
 }
