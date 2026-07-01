@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import type { Clue, Round } from '../../api/boards.js';
-import { rowCountForRound } from './boardHelpers.js';
+import { isClueHole, rowCountForRound } from './boardHelpers.js';
 import styles from './admin.module.css';
 
 interface RoundEditorProps {
@@ -209,6 +209,16 @@ export function RoundEditor({
             onUpdateClue(categoryIndex, clue.row, { answer: event.target.value })
           }
         />
+
+        {isClueHole(clue) && (
+          <span
+            className={styles.clueHoleMarker}
+            aria-label="Clue is incomplete"
+            data-testid="clue-hole-marker"
+          >
+            •
+          </span>
+        )}
 
         {clue.isDailyDouble && (
           <span

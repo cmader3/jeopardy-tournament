@@ -350,6 +350,10 @@ export function isClueComplete(clue: Clue): boolean {
   return clue.clueText.trim().length > 0 && clue.answer.trim().length > 0;
 }
 
+export function isClueHole(clue: Clue): boolean {
+  return !isClueComplete(clue);
+}
+
 export function isClueHalfFilled(clue: Clue): boolean {
   const text = clue.clueText.trim();
   const answer = clue.answer.trim();

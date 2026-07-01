@@ -269,6 +269,14 @@ describe('boardHelpers', () => {
       expect(isClueHalfFilled(makeClue({ clueText: '', answer: '' }))).toBe(false);
       expect(isClueHalfFilled(makeClue({ clueText: 'A', answer: 'B' }))).toBe(false);
     });
+
+    it('treats whitespace-only clue text or answer as empty', () => {
+      expect(isClueComplete(makeClue({ clueText: '   ', answer: 'B' }))).toBe(false);
+      expect(isClueComplete(makeClue({ clueText: 'A', answer: '\t\n' }))).toBe(false);
+      expect(isClueComplete(makeClue({ clueText: '   ', answer: '  ' }))).toBe(false);
+      expect(isClueHalfFilled(makeClue({ clueText: '   ', answer: 'B' }))).toBe(true);
+      expect(isClueHalfFilled(makeClue({ clueText: '   ', answer: '  ' }))).toBe(false);
+    });
   });
 
   describe('isBoardComplete', () => {

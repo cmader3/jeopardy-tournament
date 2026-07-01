@@ -206,6 +206,34 @@ describe('RoundEditor', () => {
     expect(screen.getByTestId('daily-double-indicator')).toBeInTheDocument();
   });
 
+  it('renders a hole marker for empty clue cells', () => {
+    const round = makeRound('JEOPARDY', [
+      makeCategory('Science', 0, [
+        makeClue({ row: 0, value: 100, clueText: '', answer: '' }),
+        makeClue({ row: 1, value: 200, clueText: 'Filled?', answer: 'Yes' }),
+      ]),
+    ]);
+
+    renderRoundEditor({ round });
+
+    const markers = screen.getAllByTestId('clue-hole-marker');
+    expect(markers).toHaveLength(1);
+  });
+
+  it('renders hole markers for whitespace-only clues treated as empty', () => {
+    const round = makeRound('JEOPARDY', [
+      makeCategory('Science', 0, [
+        makeClue({ row: 0, value: 100, clueText: '   ', answer: '\t\n' }),
+        makeClue({ row: 1, value: 200, clueText: 'Filled?', answer: 'Yes' }),
+      ]),
+    ]);
+
+    renderRoundEditor({ round });
+
+    const markers = screen.getAllByTestId('clue-hole-marker');
+    expect(markers).toHaveLength(1);
+  });
+
   it('disables the left move button on the first category', () => {
     renderRoundEditor();
 
