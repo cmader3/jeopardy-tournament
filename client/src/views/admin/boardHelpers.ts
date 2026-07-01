@@ -8,7 +8,7 @@ import type {
 } from '../../api/boards.js';
 
 let tempIdCounter = 0;
-function makeTempId(): string {
+export function makeTempId(): string {
   tempIdCounter += 1;
   return `temp-${tempIdCounter}`;
 }

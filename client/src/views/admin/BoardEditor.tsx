@@ -1,17 +1,28 @@
 import { useState } from 'react';
-import type { BoardApiClient, BoardWithRounds, Round } from '../../api/boards.js';
+import type { BoardApiClient, BoardWithRounds, Clue } from '../../api/boards.js';
 import {
   applyResize,
   computeBoardResizeImpact,
   deriveSettings,
   getFinalRound,
   getPlayRound,
-  isAuthoredClue,
+  isAuthoredCategory,
   parsePositiveInteger,
   rowCountForRound,
   setDoubleJeopardyEnabled,
   toUpdateInput,
 } from './boardHelpers.js';
+import {
+  addCategory,
+  moveCategory,
+  moveRow,
+  removeCategory,
+  renameCategory,
+  updateClue,
+  updateFinal,
+} from './roundEditorHelpers.js';
+import { FinalEditor } from './FinalEditor.js';
+import { RoundEditor } from './RoundEditor.js';
 import styles from './admin.module.css';
 
 interface BoardEditorProps {
@@ -27,58 +38,17 @@ interface PendingResize {
   affectedCells: number;
 }
 
-interface RoundGridPreviewProps {
-  round: Round;
-}
-
-function RoundGridPreview({ round }: RoundGridPreviewProps) {
-  const rows = rowCountForRound(round);
-  const columnCount = round.categories.length;
-
-  if (columnCount === 0) {
-    return <p className={styles.roundEmpty}>No categories yet.</p>;
-  }
-
-  const cells: React.ReactNode[] = [];
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-    for (const category of round.categories) {
-      const clue = category.clues[rowIndex];
-      const hasContent = clue !== undefined && isAuthoredClue(clue);
-      const value = clue?.value ?? null;
-      const cellKey = `${round.type}-${category.id ?? `order-${category.order}`}-${rowIndex}`;
-
-      cells.push(
-        <div key={cellKey} className={hasContent ? styles.cellFilled : styles.cellBlank}>
-          <span className={styles.cellValue}>{value === null ? '—' : `$${value}`}</span>
-          {hasContent && <span className={styles.cellIndicator} title="Has authored content" />}
-        </div>,
-      );
-    }
-  }
-
-  return (
-    <div
-      className={styles.roundGrid}
-      style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(120px, 1fr))` }}
-      data-testid={`round-grid-${round.type}`}
-    >
-      {round.categories.map((category) => (
-        <div
-          key={`${round.type}-header-${category.id ?? `order-${category.order}`}`}
-          className={styles.categoryHeader}
-        >
-          {category.title.trim() ? category.title : <span className={styles.placeholderTitle}>Category</span>}
-        </div>
-      ))}
-      {cells}
-    </div>
-  );
+interface PendingDelete {
+  roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY';
+  categoryIndex: number;
+  categoryTitle: string;
 }
 
 export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
   const [draft, setDraft] = useState<BoardWithRounds>(board);
   const [settings, setSettings] = useState(() => deriveSettings(board));
   const [pendingResize, setPendingResize] = useState<PendingResize | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
@@ -94,6 +64,65 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
       total + round.categories.reduce((catTotal, category) => catTotal + category.clues.length, 0),
     0,
   );
+
+  const updateDraft = (updater: (board: BoardWithRounds) => BoardWithRounds) => {
+    const updated = updater(draft);
+    setDraft(updated);
+    const updatedJeopardy = getPlayRound(updated, 'JEOPARDY');
+    setSettings((prev) => ({
+      ...prev,
+      categoryCount: String(updatedJeopardy?.categories.length ?? 0),
+      rowCount: String(updatedJeopardy ? rowCountForRound(updatedJeopardy) : 0),
+    }));
+    setHasChanges(true);
+  };
+
+  const handleAddCategory = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY') => {
+    updateDraft((board) => addCategory(board, roundType));
+  };
+
+  const handleRemoveCategory = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY', categoryIndex: number) => {
+    const round = roundType === 'JEOPARDY' ? getPlayRound(draft, 'JEOPARDY') : getPlayRound(draft, 'DOUBLE_JEOPARDY');
+    const category = round?.categories[categoryIndex];
+    if (!category) return;
+
+    if (isAuthoredCategory(category)) {
+      setPendingDelete({ roundType, categoryIndex, categoryTitle: category.title });
+      return;
+    }
+
+    updateDraft((board) => removeCategory(board, roundType, categoryIndex));
+  };
+
+  const confirmDeleteCategory = () => {
+    if (!pendingDelete) return;
+    updateDraft((board) => removeCategory(board, pendingDelete.roundType, pendingDelete.categoryIndex));
+    setPendingDelete(null);
+  };
+
+  const cancelDeleteCategory = () => {
+    setPendingDelete(null);
+  };
+
+  const handleRenameCategory = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY', categoryIndex: number, title: string) => {
+    updateDraft((board) => renameCategory(board, roundType, categoryIndex, title));
+  };
+
+  const handleMoveCategory = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY', categoryIndex: number, direction: 'left' | 'right') => {
+    updateDraft((board) => moveCategory(board, roundType, categoryIndex, direction));
+  };
+
+  const handleUpdateClue = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY', categoryIndex: number, row: number, patch: Partial<Clue>) => {
+    updateDraft((board) => updateClue(board, roundType, categoryIndex, row, patch));
+  };
+
+  const handleMoveRow = (roundType: 'JEOPARDY' | 'DOUBLE_JEOPARDY', rowIndex: number, direction: 'up' | 'down') => {
+    updateDraft((board) => moveRow(board, roundType, rowIndex, direction));
+  };
+
+  const handleUpdateFinal = (patch: { title?: string; clueText?: string; answer?: string }) => {
+    updateDraft((board) => updateFinal(board, patch));
+  };
 
   const attemptResize = (desiredCategories: number, desiredRows: number) => {
     if (desiredCategories === currentCategoryCount && desiredRows === currentRowCount) {
@@ -320,7 +349,15 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
       <section className={styles.previewSection}>
         <h2 className={styles.sectionHeading}>Jeopardy Round</h2>
         {jeopardyRound ? (
-          <RoundGridPreview round={jeopardyRound} />
+          <RoundEditor
+            round={jeopardyRound}
+            onAddCategory={() => handleAddCategory('JEOPARDY')}
+            onRemoveCategory={(index) => handleRemoveCategory('JEOPARDY', index)}
+            onRenameCategory={(index, title) => handleRenameCategory('JEOPARDY', index, title)}
+            onMoveCategory={(index, direction) => handleMoveCategory('JEOPARDY', index, direction)}
+            onUpdateClue={(index, row, patch) => handleUpdateClue('JEOPARDY', index, row, patch)}
+            onMoveRow={(rowIndex, direction) => handleMoveRow('JEOPARDY', rowIndex, direction)}
+          />
         ) : (
           <p className={styles.roundEmpty}>No Jeopardy round found.</p>
         )}
@@ -329,7 +366,15 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
           <>
             <h2 className={styles.sectionHeading}>Double Jeopardy Round</h2>
             {doubleRound ? (
-              <RoundGridPreview round={doubleRound} />
+              <RoundEditor
+                round={doubleRound}
+                onAddCategory={() => handleAddCategory('DOUBLE_JEOPARDY')}
+                onRemoveCategory={(index) => handleRemoveCategory('DOUBLE_JEOPARDY', index)}
+                onRenameCategory={(index, title) => handleRenameCategory('DOUBLE_JEOPARDY', index, title)}
+                onMoveCategory={(index, direction) => handleMoveCategory('DOUBLE_JEOPARDY', index, direction)}
+                onUpdateClue={(index, row, patch) => handleUpdateClue('DOUBLE_JEOPARDY', index, row, patch)}
+                onMoveRow={(rowIndex, direction) => handleMoveRow('DOUBLE_JEOPARDY', rowIndex, direction)}
+              />
             ) : (
               <p className={styles.roundEmpty}>No Double Jeopardy round found.</p>
             )}
@@ -338,6 +383,15 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
           <p className={styles.doubleDisabledNote}>
             Double Jeopardy round is hidden. Its content will be restored if you re-enable it.
           </p>
+        )}
+      </section>
+
+      <section className={styles.previewSection}>
+        <h2 className={styles.sectionHeading}>Final Jeopardy</h2>
+        {finalRound ? (
+          <FinalEditor round={finalRound} onChange={handleUpdateFinal} />
+        ) : (
+          <p className={styles.roundEmpty}>No Final Jeopardy round found.</p>
         )}
       </section>
 
@@ -357,6 +411,27 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
               Delete & Resize
             </button>
             <button type="button" onClick={cancelResize} disabled={isSaving}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div className={styles.confirmDialog} role="alertdialog" aria-modal="true">
+          <p>
+            Delete <strong>{pendingDelete.categoryTitle}</strong> and its clues?
+          </p>
+          <div className={styles.confirmActions}>
+            <button
+              type="button"
+              className={styles.deleteButton}
+              onClick={confirmDeleteCategory}
+              disabled={isSaving}
+            >
+              Delete Category
+            </button>
+            <button type="button" onClick={cancelDeleteCategory} disabled={isSaving}>
               Cancel
             </button>
           </div>
