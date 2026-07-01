@@ -22,7 +22,7 @@ export interface PlayerRecord {
 export interface GameSessionWithPlayers {
   id: string;
   roomCode: string;
-  boardId: string;
+  boardId: string | null;
   status: GameSessionStatus;
   snapshot: string;
   createdAt: Date;

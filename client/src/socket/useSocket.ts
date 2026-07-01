@@ -10,6 +10,7 @@ export interface SocketState<T> {
   error: string | null;
   data: T | null;
   startGame?: () => void;
+  leaveGame?: () => void;
 }
 
 export function useSocket<T>(
@@ -75,7 +76,11 @@ export function useSocket<T>(
     socketRef.current?.emit('start_game');
   }, []);
 
-  return { connected, error, data, startGame };
+  const leaveGame = useCallback(() => {
+    socketRef.current?.emit('leave');
+  }, []);
+
+  return { connected, error, data, startGame, leaveGame };
 }
 
 export function getStoredContestantToken(): {

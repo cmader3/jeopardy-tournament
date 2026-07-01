@@ -405,11 +405,11 @@ describe('Boards REST API', () => {
       expect(rounds).toHaveLength(0);
     });
 
-    it('does not cascade-delete an active game session when the board is deleted', async () => {
+    it('does not break an active game session when the board is deleted', async () => {
       const app = createApp();
       const created = await authRequest(app).post('/api/boards').send(makeBoardPayload()).expect(201);
 
-      await prisma.gameSession.create({
+      const session = await prisma.gameSession.create({
         data: {
           roomCode: 'TEST01',
           boardId: created.body.id,
@@ -428,13 +428,13 @@ describe('Boards REST API', () => {
         },
       });
 
-      const response = await authRequest(app).delete(`/api/boards/${created.body.id}`).expect(409);
-      expect(response.body.error).toMatch(/active game session/);
+      await authRequest(app).delete(`/api/boards/${created.body.id}`).expect(200);
 
-      const session = await prisma.gameSession.findUnique({ where: { roomCode: 'TEST01' } });
-      expect(session).not.toBeNull();
+      const afterDelete = await prisma.gameSession.findUnique({ where: { roomCode: 'TEST01' } });
+      expect(afterDelete).not.toBeNull();
+      expect(afterDelete!.boardId).toBeNull();
 
-      const players = await prisma.player.findMany({ where: { gameSessionId: session!.id } });
+      const players = await prisma.player.findMany({ where: { gameSessionId: session.id } });
       expect(players).toHaveLength(1);
     });
   });

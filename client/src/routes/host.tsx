@@ -13,7 +13,15 @@ export interface HostLobbyProps {
   startError: string | null;
 }
 
-export function HostLobby({ roomCode, state, onStartGame, startError }: HostLobbyProps) {
+export interface HostLobbyProps {
+  roomCode: string;
+  state: HostView | null;
+  onStartGame: () => void;
+  onCreateNewGame?: () => void;
+  startError: string | null;
+}
+
+export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
   const inLobby = !state || state.phase === 'LOBBY';
   const canStart = playerCount > 0 && inLobby;
@@ -60,6 +68,11 @@ export function HostLobby({ roomCode, state, onStartGame, startError }: HostLobb
           >
             Start Game
           </button>
+          {onCreateNewGame && (
+            <button type="button" onClick={onCreateNewGame}>
+              New Game
+            </button>
+          )}
           {playerCount === 0 && (
             <p className="minimum-players">At least one contestant is required to start.</p>
           )}
@@ -69,83 +82,94 @@ export function HostLobby({ roomCode, state, onStartGame, startError }: HostLobb
   );
 }
 
+const HOST_ROOM_KEY = 'jeopardy-host-room';
+
 export function HostContent() {
   const { token } = useHostAuth();
   const [boards, setBoards] = useState<BoardSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [roomCode, setRoomCode] = useState<string | null>(() => localStorage.getItem(HOST_ROOM_KEY));
+  const [loadingBoards, setLoadingBoards] = useState(() => Boolean(token && !roomCode));
   const [gameState, setGameState] = useState<HostView | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || roomCode) return;
     boardApi
       .getBoards(token)
       .then(setBoards)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load boards'))
-      .finally(() => setLoading(false));
-  }, [token]);
+      .finally(() => setLoadingBoards(false));
+  }, [token, roomCode]);
 
   const handleCreate = useCallback(
     async (boardId: string) => {
       if (!token) return;
       try {
         const result = await createGame(boardId, token);
+        localStorage.setItem(HOST_ROOM_KEY, result.roomCode);
         setRoomCode(result.roomCode);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to create game');
       }
     },
-    [token],
+    [token, setRoomCode, setError],
   );
+
+  const handleCreateNewGame = useCallback(() => {
+    localStorage.removeItem(HOST_ROOM_KEY);
+    setRoomCode(null);
+    setGameState(null);
+    setLoadingBoards(true);
+  }, [setRoomCode, setGameState, setLoadingBoards]);
 
   const hostSocket = useSocket<HostView>('host', roomCode ?? '', setGameState, undefined, undefined, token ?? '');
   const handleStartGame = useCallback(() => {
     hostSocket.startGame?.();
   }, [hostSocket]);
 
-  if (loading) {
-    return <main className="route-stub"><p>Loading boards...</p></main>;
-  }
-
-  if (error && !roomCode) {
-    return <main className="route-stub"><p className="error">{error}</p></main>;
-  }
-
-  if (!roomCode) {
+  if (roomCode) {
     return (
-      <main className="route-stub">
-        <h1>Host</h1>
-        <p>Select a board to create a game.</p>
-        {boards.length === 0 ? (
-          <p>No boards available. Create one in Admin.</p>
-        ) : (
-          <ul className="board-list">
-            {boards.map((board) => (
-              <li key={board.id}>
-                <button
-                  type="button"
-                  onClick={() => handleCreate(board.id)}
-                  disabled={!board.isComplete}
-                  title={board.isComplete ? undefined : 'This board is incomplete and cannot be used to start a game'}
-                >
-                  {board.name} {board.isComplete ? '' : '(incomplete)'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
+      <HostLobby
+        roomCode={roomCode}
+        state={gameState}
+        onStartGame={handleStartGame}
+        onCreateNewGame={handleCreateNewGame}
+        startError={hostSocket.error}
+      />
     );
   }
 
+  if (loadingBoards) {
+    return <main className="route-stub"><p>Loading boards...</p></main>;
+  }
+
+  if (error) {
+    return <main className="route-stub"><p className="error">{error}</p></main>;
+  }
+
   return (
-    <HostLobby
-      roomCode={roomCode}
-      state={gameState}
-      onStartGame={handleStartGame}
-      startError={hostSocket.error}
-    />
+    <main className="route-stub">
+      <h1>Host</h1>
+      <p>Select a board to create a game.</p>
+      {boards.length === 0 ? (
+        <p>No boards available. Create one in Admin.</p>
+      ) : (
+        <ul className="board-list">
+          {boards.map((board) => (
+            <li key={board.id}>
+              <button
+                type="button"
+                onClick={() => handleCreate(board.id)}
+                disabled={!board.isComplete}
+                title={board.isComplete ? undefined : 'This board is incomplete and cannot be used to start a game'}
+              >
+                {board.name} {board.isComplete ? '' : '(incomplete)'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </main>
   );
 }
 

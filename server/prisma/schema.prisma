@@ -72,8 +72,8 @@ enum GameSessionStatus {
 model GameSession {
   id        String            @id @default(uuid())
   roomCode  String            @unique
-  boardId   String
-  board     Board             @relation(fields: [boardId], references: [id], onDelete: Restrict)
+  boardId   String?
+  board     Board?            @relation(fields: [boardId], references: [id], onDelete: SetNull)
   status    GameSessionStatus
   snapshot  String
   createdAt DateTime          @default(now())

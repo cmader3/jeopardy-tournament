@@ -157,4 +157,27 @@ describe('BoardRoute', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /enter another code/i })).toBeInTheDocument();
   });
+
+  it('restores a stored room code and reconnects automatically', async () => {
+    localStorage.setItem('jeopardy-board-room', 'WXYZ');
+    mockUseSocket(makeBoardState({ roomCode: 'WXYZ' }));
+
+    render(<BoardRoute />);
+
+    expect(await screen.findByTestId('room-code')).toHaveTextContent('WXYZ');
+    expect(useSocket).toHaveBeenCalledWith('board', 'WXYZ', expect.any(Function));
+  });
+
+  it('clears the stored room code when entering a different room', async () => {
+    localStorage.setItem('jeopardy-board-room', 'WXYZ');
+    useSocket.mockReturnValue({ connected: false, error: 'Unknown room code', data: null });
+
+    render(<BoardRoute />);
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /enter another code/i }));
+
+    expect(localStorage.getItem('jeopardy-board-room')).toBeNull();
+    expect(screen.getByLabelText(/room code/i)).toBeInTheDocument();
+  });
 });

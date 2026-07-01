@@ -11,7 +11,7 @@ vi.mock('../socket/useSocket.js', () => ({
   __esModule: true,
 }));
 
-import { useSocket } from '../socket/useSocket.js';
+import { useSocket, clearStoredContestantToken } from '../socket/useSocket.js';
 
 function makeContestantState(overrides: Partial<ContestantView> = {}): ContestantView {
   return {
@@ -31,8 +31,16 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
 }
 
 function mockUseSocket(state: ContestantView | null, error: string | null = null) {
-  useSocket.mockReturnValue({ connected: true, error, data: state });
+  useSocket.mockReturnValue({
+    connected: true,
+    error,
+    data: state,
+    startGame: vi.fn(),
+    leaveGame: vi.fn(),
+  });
 }
+
+import { getStoredContestantToken } from '../socket/useSocket.js';
 
 describe('PlayRoute', () => {
   it('renders the contestant join form without a host passcode gate', () => {
@@ -138,5 +146,52 @@ describe('PlayRoute', () => {
     expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
     expect(screen.getByLabelText('Room Code')).toHaveValue('ABCD');
     expect(screen.getByLabelText('Your Name')).toHaveValue('');
+  });
+
+  it('restores the lobby from a stored contestant token without re-entering a name', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(makeContestantState());
+
+    render(<PlayRoute />);
+
+    expect(await screen.findByText('Welcome, Alice')).toBeInTheDocument();
+    expect(screen.getByText('Waiting for the host to start the game.')).toBeInTheDocument();
+    expect(screen.getByTestId('room-code')).toHaveTextContent('ABCD');
+    expect(useSocket).toHaveBeenCalledWith(
+      'contestant',
+      'ABCD',
+      undefined,
+      undefined,
+      'stored-token',
+    );
+  });
+
+  it('lets an explicit leave return to the join form and clears the stored token', async () => {
+    const leaveGame = vi.fn();
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState(),
+      startGame: vi.fn(),
+      leaveGame,
+    });
+
+    render(<PlayRoute />);
+
+    expect(await screen.findByText('Welcome, Alice')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /leave game/i }));
+
+    expect(leaveGame).toHaveBeenCalledTimes(1);
+    expect(clearStoredContestantToken).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
   });
 });

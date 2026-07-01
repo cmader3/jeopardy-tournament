@@ -93,13 +93,35 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   );
 }
 
+const BOARD_ROOM_KEY = 'jeopardy-board-room';
+
+function getStoredBoardRoom(): string | null {
+  try {
+    return localStorage.getItem(BOARD_ROOM_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function BoardRoute() {
-  const [roomCode, setRoomCode] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const stored = getStoredBoardRoom();
+  const [roomCode, setRoomCode] = useState(stored ?? '');
+  const [submitted, setSubmitted] = useState(Boolean(stored));
 
   const handleReset = () => {
+    localStorage.removeItem(BOARD_ROOM_KEY);
     setSubmitted(false);
     setRoomCode('');
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalized = roomCode.trim().toUpperCase();
+    if (normalized) {
+      localStorage.setItem(BOARD_ROOM_KEY, normalized);
+      setRoomCode(normalized);
+      setSubmitted(true);
+    }
   };
 
   if (submitted && roomCode.trim()) {
@@ -109,15 +131,7 @@ export function BoardRoute() {
   return (
     <main className={styles.entry}>
       <h1 className={styles.title}>Board</h1>
-      <form
-        className={styles.form}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (roomCode.trim()) {
-            setSubmitted(true);
-          }
-        }}
-      >
+      <form className={styles.form} onSubmit={handleSubmit}>
         <label htmlFor="board-room-code">Room Code</label>
         <input
           id="board-room-code"

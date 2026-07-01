@@ -1,5 +1,6 @@
 export const ClientToServer = {
   JOIN: 'join',
+  LEAVE: 'leave',
   START_GAME: 'start_game',
   SELECT_CLUE: 'select_clue',
   ARM_BUZZERS: 'arm_buzzers',

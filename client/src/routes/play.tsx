@@ -1,17 +1,28 @@
 import { useState } from 'react';
-import { useSocket, getStoredContestantToken } from '../socket/useSocket.js';
+import {
+  useSocket,
+  getStoredContestantToken,
+  clearStoredContestantToken,
+} from '../socket/useSocket.js';
 import type { ContestantView } from '@jeopardy/shared';
+
+interface JoinForm {
+  roomCode: string;
+  name: string;
+  submitted: boolean;
+}
 
 interface ContestantLobbyProps {
   roomCode: string;
   name: string;
+  onLeave: () => void;
   onTryAgain: () => void;
 }
 
-function ContestantLobby({ roomCode, name, onTryAgain }: ContestantLobbyProps) {
+function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
-  const socket = useSocket<ContestantView>('contestant', roomCode, undefined, name, reconnectToken);
+  const socket = useSocket<ContestantView>('contestant', roomCode, undefined, name || undefined, reconnectToken);
 
   const gameState = socket.data;
   const me = gameState?.players.find((p) => p.id === gameState?.playerId);
@@ -32,10 +43,21 @@ function ContestantLobby({ roomCode, name, onTryAgain }: ContestantLobbyProps) {
       )}
       {!socket.error && gameState && (
         <div className="contestant-state">
-          <p>Welcome, {me?.name ?? name}</p>
+          <p>Welcome, {me?.name ?? 'Contestant'}</p>
           <p>Score: {me?.score ?? 0}</p>
           {gameState.phase === 'LOBBY' ? (
-            <p>Waiting for the host to start the game.</p>
+            <>
+              <p>Waiting for the host to start the game.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  socket.leaveGame?.();
+                  onLeave();
+                }}
+              >
+                Leave Game
+              </button>
+            </>
           ) : (
             <p>Phase: {gameState.phase}</p>
           )}
@@ -46,22 +68,31 @@ function ContestantLobby({ roomCode, name, onTryAgain }: ContestantLobbyProps) {
   );
 }
 
+function getInitialJoinForm(): JoinForm {
+  const token = getStoredContestantToken();
+  if (token?.roomCode) {
+    return { roomCode: token.roomCode, name: '', submitted: true };
+  }
+  return { roomCode: '', name: '', submitted: false };
+}
+
 export function PlayRoute() {
-  const [roomCode, setRoomCode] = useState('');
-  const [name, setName] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [form, setForm] = useState<JoinForm>(getInitialJoinForm);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const trimmedRoomCode = roomCode.trim().toUpperCase();
-  const trimmedName = name.trim();
-  const canSubmit = roomCode.length > 0 && name.length > 0;
+  const trimmedRoomCode = form.roomCode.trim().toUpperCase();
+  const trimmedName = form.name.trim();
+  const canSubmit = form.roomCode.length > 0 && form.name.length > 0;
 
-  if (submitted) {
+  if (form.submitted) {
     const handleTryAgain = () => {
-      setSubmitted(false);
-      setName('');
+      setForm({ roomCode: form.roomCode, name: '', submitted: false });
     };
-    return <ContestantLobby roomCode={trimmedRoomCode} name={trimmedName} onTryAgain={handleTryAgain} />;
+    const handleLeave = () => {
+      clearStoredContestantToken();
+      setForm({ roomCode: '', name: '', submitted: false });
+    };
+    return <ContestantLobby roomCode={trimmedRoomCode} name={form.name} onLeave={handleLeave} onTryAgain={handleTryAgain} />;
   }
 
   return (
@@ -79,7 +110,7 @@ export function PlayRoute() {
             return;
           }
           setValidationError(null);
-          setSubmitted(true);
+          setForm({ ...form, submitted: true });
         }}
       >
         {validationError && (
@@ -90,9 +121,9 @@ export function PlayRoute() {
         <label htmlFor="play-room-code">Room Code</label>
         <input
           id="play-room-code"
-          value={roomCode}
+          value={form.roomCode}
           onChange={(e) => {
-            setRoomCode(e.target.value);
+            setForm({ ...form, roomCode: e.target.value });
             setValidationError(null);
           }}
           placeholder="ABCD"
@@ -100,9 +131,9 @@ export function PlayRoute() {
         <label htmlFor="play-name">Your Name</label>
         <input
           id="play-name"
-          value={name}
+          value={form.name}
           onChange={(e) => {
-            setName(e.target.value);
+            setForm({ ...form, name: e.target.value });
             setValidationError(null);
           }}
           placeholder="Your name"

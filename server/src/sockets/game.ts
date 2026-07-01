@@ -77,6 +77,22 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('leave', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'contestant' || !meta.playerId) {
+        socket.emit('error', { message: 'Only a contestant can leave' });
+        return;
+      }
+
+      try {
+        await engine.removePlayer(meta.roomCode, meta.playerId);
+        setSocketMeta(socket, undefined);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Leave failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('disconnect', async () => {
       const meta = getSocketMeta(socket);
       if (!meta) return;
@@ -184,7 +200,7 @@ function broadcastToRoles(io: Server, roomCode: string, state: GameState) {
   }
 }
 
-function setSocketMeta(socket: Socket, meta: SocketMeta) {
+function setSocketMeta(socket: Socket, meta: SocketMeta | undefined) {
   socket.data = socket.data ?? {};
   (socket.data as { meta?: SocketMeta }).meta = meta;
 }

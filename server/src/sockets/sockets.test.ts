@@ -435,4 +435,308 @@ describe('game sockets', () => {
     contestant.disconnect();
     await server.close();
   });
+
+  it('contestant explicit leave removes the player and frees a slot', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    await waitForState(host);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    await tokenPromise;
+
+    const hostAfterLeave = waitForState(host);
+    alice.emit('leave');
+    const hostState = (await hostAfterLeave) as { players: { name: string }[] };
+    expect(hostState.players).toHaveLength(0);
+
+    const bob = connectClient(server.url);
+    await waitForConnect(bob);
+    const bobTokenPromise = waitForToken(bob);
+    const hostAfterBob = waitForState(host);
+    bob.emit('join', { role: 'contestant', roomCode, name: 'Bob' });
+    await bobTokenPromise;
+    const hostAfterBobState = (await hostAfterBob) as { players: { name: string }[] };
+    expect(hostAfterBobState.players).toHaveLength(1);
+    expect(hostAfterBobState.players[0].name).toBe('Bob');
+
+    alice.disconnect();
+    bob.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('reconnecting with a token after an explicit leave is rejected', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    await waitForState(host);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const token = await tokenPromise;
+
+    const hostAfterLeave = waitForState(host);
+    alice.emit('leave');
+    await hostAfterLeave;
+
+    const rejoin = connectClient(server.url);
+    await waitForConnect(rejoin);
+    const errorPromise = waitForError(rejoin);
+    rejoin.emit('join', { role: 'contestant', roomCode, reconnectToken: token.reconnectToken });
+    const error = await errorPromise;
+    expect(error.message).toMatch(/invalid reconnect token/i);
+
+    alice.disconnect();
+    rejoin.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('a contestant reload reconnects to the same slot without a new name', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const token = await tokenPromise;
+    alice.disconnect();
+
+    const rejoin = connectClient(server.url);
+    await waitForConnect(rejoin);
+    const statePromise = waitForState(rejoin);
+    rejoin.emit('join', { role: 'contestant', roomCode, reconnectToken: token.reconnectToken });
+    const state = (await statePromise) as { playerId: string; players: { id: string; name: string }[] };
+
+    expect(state.playerId).toBe(token.playerId);
+    expect(state.players.find((p) => p.id === token.playerId)?.name).toBe('Alice');
+
+    rejoin.disconnect();
+    await server.close();
+  });
+
+  it('a dropped contestant shows disconnected then reconnected on host and board', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    const boardClient = connectClient(server.url);
+    await Promise.all([waitForConnect(host), waitForConnect(boardClient)]);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    boardClient.emit('join', { role: 'board', roomCode });
+    await Promise.all([waitForState(host), waitForState(boardClient)]);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const token = await tokenPromise;
+
+    const hostDisconnect = waitForState(host);
+    const boardDisconnect = waitForState(boardClient);
+    alice.disconnect();
+    const [hostAfterDrop, boardAfterDrop] = await Promise.all([hostDisconnect, boardDisconnect]);
+    expect((hostAfterDrop as { players: { connected: boolean }[] }).players[0].connected).toBe(false);
+    expect((boardAfterDrop as { players: { connected: boolean }[] }).players[0].connected).toBe(false);
+
+    const rejoin = connectClient(server.url);
+    await waitForConnect(rejoin);
+    const hostReconnect = waitForState(host);
+    const boardReconnect = waitForState(boardClient);
+    rejoin.emit('join', { role: 'contestant', roomCode, reconnectToken: token.reconnectToken });
+    const [hostAfterReconnect, boardAfterReconnect] = await Promise.all([hostReconnect, boardReconnect]);
+    expect((hostAfterReconnect as { players: { id: string; connected: boolean }[] }).players[0].id).toBe(token.playerId);
+    expect((hostAfterReconnect as { players: { connected: boolean }[] }).players[0].connected).toBe(true);
+    expect((boardAfterReconnect as { players: { connected: boolean }[] }).players[0].connected).toBe(true);
+
+    rejoin.disconnect();
+    host.disconnect();
+    boardClient.disconnect();
+    await server.close();
+  });
+
+  it('host reconnect after a transient drop resyncs to the same session', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    await waitForState(host);
+    host.disconnect();
+
+    const host2 = connectClient(server.url);
+    await waitForConnect(host2);
+    const statePromise = waitForState(host2);
+    host2.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    const state = (await statePromise) as { roomCode: string; phase: string };
+    expect(state.roomCode).toBe(roomCode);
+    expect(state.phase).toBe('LOBBY');
+
+    host2.disconnect();
+    await server.close();
+  });
+
+  it('board reconnect after a transient drop resyncs to the same session', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const boardClient = connectClient(server.url);
+    await waitForConnect(boardClient);
+    boardClient.emit('join', { role: 'board', roomCode });
+    await waitForState(boardClient);
+    boardClient.disconnect();
+
+    const board2 = connectClient(server.url);
+    await waitForConnect(board2);
+    const statePromise = waitForState(board2);
+    board2.emit('join', { role: 'board', roomCode });
+    const state = (await statePromise) as { roomCode: string; phase: string; players: unknown[] };
+    expect(state.roomCode).toBe(roomCode);
+    expect(state.phase).toBe('LOBBY');
+    expect(state.players).toHaveLength(0);
+
+    board2.disconnect();
+    await server.close();
+  });
+
+  it('two concurrent games never leak roster state across room codes', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode: roomA } = await server.engine.createSession(board.id);
+    const { roomCode: roomB } = await server.engine.createSession(board.id);
+
+    const hostA = connectClient(server.url);
+    const boardA = connectClient(server.url);
+    const hostB = connectClient(server.url);
+    const boardB = connectClient(server.url);
+    await Promise.all([
+      waitForConnect(hostA),
+      waitForConnect(boardA),
+      waitForConnect(hostB),
+      waitForConnect(boardB),
+    ]);
+
+    hostA.emit('join', { role: 'host', roomCode: roomA, hostToken: mintHostToken() });
+    boardA.emit('join', { role: 'board', roomCode: roomA });
+    hostB.emit('join', { role: 'host', roomCode: roomB, hostToken: mintHostToken() });
+    boardB.emit('join', { role: 'board', roomCode: roomB });
+    await Promise.all([waitForState(hostA), waitForState(boardA), waitForState(hostB), waitForState(boardB)]);
+
+    const contestantA = connectClient(server.url);
+    await waitForConnect(contestantA);
+    const hostAUpdate = waitForState(hostA);
+    const boardAUpdate = waitForState(boardA);
+    contestantA.emit('join', { role: 'contestant', roomCode: roomA, name: 'Alice' });
+    const [hostAState, boardAState] = await Promise.all([hostAUpdate, boardAUpdate]);
+
+    expect(server.engine.getState(roomB)?.players).toHaveLength(0);
+    expect((hostAState as { players: { name: string }[] }).players).toHaveLength(1);
+    expect((boardAState as { players: { name: string }[] }).players).toHaveLength(1);
+
+    const contestantB = connectClient(server.url);
+    await waitForConnect(contestantB);
+    const hostBUpdate = waitForState(hostB);
+    const boardBUpdate = waitForState(boardB);
+    contestantB.emit('join', { role: 'contestant', roomCode: roomB, name: 'Bob' });
+    const [hostBState, boardBState] = await Promise.all([hostBUpdate, boardBUpdate]);
+
+    expect(server.engine.getState(roomA)?.players).toHaveLength(1);
+    expect((hostBState as { players: { name: string }[] }).players[0].name).toBe('Bob');
+    expect((boardBState as { players: { name: string }[] }).players[0].name).toBe('Bob');
+
+    contestantA.disconnect();
+    contestantB.disconnect();
+    hostA.disconnect();
+    boardA.disconnect();
+    hostB.disconnect();
+    boardB.disconnect();
+    await server.close();
+  });
+
+  it('deleting a board in use leaves the live game intact', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode, sessionId } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    const boardClient = connectClient(server.url);
+    await Promise.all([waitForConnect(host), waitForConnect(boardClient)]);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    boardClient.emit('join', { role: 'board', roomCode });
+    await Promise.all([waitForState(host), waitForState(boardClient)]);
+
+    await boardRepository.delete(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const [hostState, boardState] = await Promise.all([hostUpdate, boardUpdate]);
+
+    expect((hostState as { roomCode: string }).roomCode).toBe(roomCode);
+    expect((hostState as { players: { name: string }[] }).players).toHaveLength(1);
+    expect((hostState as { players: { name: string }[] }).players[0].name).toBe('Alice');
+    expect((boardState as { roomCode: string }).roomCode).toBe(roomCode);
+    expect((boardState as { players: { name: string }[] }).players).toHaveLength(1);
+
+    const session = await prisma.gameSession.findUnique({ where: { id: sessionId } });
+    expect(session?.boardId).toBeNull();
+
+    alice.disconnect();
+    host.disconnect();
+    boardClient.disconnect();
+    await server.close();
+  });
+
+  it('editing a board after game creation does not alter the live game', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    await waitForState(host);
+
+    const originalBoard = server.engine.getState(roomCode)!.board;
+    await boardRepository.update(board.id, {
+      ...makeBoardPayload(),
+      name: 'Completely Different Name',
+    });
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const hostUpdate = waitForState(host);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const hostState = (await hostUpdate) as { roomCode: string; players: { name: string }[] };
+
+    expect(hostState.roomCode).toBe(roomCode);
+    expect(hostState.players).toHaveLength(1);
+    expect(server.engine.getState(roomCode)!.board.name).toBe(originalBoard.name);
+
+    alice.disconnect();
+    host.disconnect();
+    await server.close();
+  });
 });

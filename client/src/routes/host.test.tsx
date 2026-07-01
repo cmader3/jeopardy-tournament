@@ -122,5 +122,30 @@ describe('HostContent', () => {
     await userEvent.click(screen.getByText('Board One'));
     expect(createGame).toHaveBeenCalledWith('b1', token);
     expect(await screen.findByTestId('room-code')).toHaveTextContent('Room Code: WXYZ');
+    expect(localStorage.getItem('jeopardy-host-room')).toBe('WXYZ');
+  });
+
+  it('restores a stored room code and shows the lobby without returning to the board picker', async () => {
+    const token = 'host-token';
+    const startGame = vi.fn();
+    localStorage.setItem('jeopardy-host-room', 'WXYZ');
+    useHostAuth.mockReturnValue({
+      token,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    boardApi.getBoards.mockResolvedValue([
+      { id: 'b1', name: 'Board One', isComplete: true },
+    ]);
+    useSocket.mockReturnValue({ connected: true, error: null, data: null, startGame });
+
+    render(<HostContent />);
+
+    expect(await screen.findByTestId('room-code')).toHaveTextContent('Room Code: WXYZ');
+    expect(screen.queryByText('Board One')).not.toBeInTheDocument();
+    expect(useSocket).toHaveBeenCalledWith('host', 'WXYZ', expect.any(Function), undefined, undefined, token);
   });
 });
