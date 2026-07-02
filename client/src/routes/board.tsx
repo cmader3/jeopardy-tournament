@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useSocket } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
+import { FitText } from '../components/FitText.js';
 import { RoundBanner } from '../components/RoundBanner.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
 import styles from './board.module.css';
@@ -126,9 +127,9 @@ function ClueOverlay({ clueText, isDailyDouble }: ClueOverlayProps) {
           DAILY DOUBLE
         </div>
       ) : (
-        <p className={styles.clueText} data-testid="clue-text">
+        <FitText className={styles.clueText} data-testid="clue-text" maxFontSize={96} minFontSize={12}>
           {clueText}
-        </p>
+        </FitText>
       )}
     </div>
   );

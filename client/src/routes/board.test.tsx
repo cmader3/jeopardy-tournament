@@ -335,6 +335,27 @@ describe('BoardRoute', () => {
     expect(screen.getByTestId('clue-overlay')).not.toHaveTextContent('Water');
   });
 
+  it('keeps a very long clue fully contained within the clue overlay', async () => {
+    const longClue = 'A'.repeat(3000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: longClue,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const text = await screen.findByTestId('clue-text');
+    expect(text).toHaveTextContent(longClue);
+    expect(text).toHaveAttribute('data-fit-text', 'true');
+  });
+
   it('shows a Daily Double splash instead of the clue text during the wager phase', async () => {
     mockUseSocket(
       makeBoardState({
