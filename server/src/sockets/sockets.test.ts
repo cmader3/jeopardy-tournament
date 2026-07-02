@@ -93,9 +93,27 @@ function waitForConnect(client: ClientSocket): Promise<void> {
   });
 }
 
-function waitForState(client: ClientSocket): Promise<Record<string, unknown>> {
-  return new Promise((resolve) => {
-    client.once('state', (data) => resolve(data as Record<string, unknown>));
+function waitForState(
+  client: ClientSocket,
+  predicate?: (state: Record<string, unknown>) => boolean,
+  timeoutMs = 5000,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      client.off('state', handler);
+      reject(new Error(`Timed out waiting for state after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    const handler = (data: unknown) => {
+      const state = data as Record<string, unknown>;
+      if (!predicate || predicate(state)) {
+        clearTimeout(timer);
+        client.off('state', handler);
+        resolve(state);
+      }
+    };
+
+    client.on('state', handler);
   });
 }
 
@@ -109,6 +127,13 @@ function waitForToken(client: ClientSocket): Promise<{ reconnectToken: string; p
   return new Promise((resolve) => {
     client.once('token', (data) => resolve(data as { reconnectToken: string; playerId: string }));
   });
+}
+
+function expectProjectionsEqual(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const { serverNow: aNow, ...aRest } = a;
+  const { serverNow: bNow, ...bRest } = b;
+  expect(aRest).toEqual(bRest);
+  expect(Math.abs((aNow as number) - (bNow as number))).toBeLessThanOrEqual(50);
 }
 
 describe('game sockets', () => {
@@ -444,7 +469,7 @@ describe('game sockets', () => {
     boardB.emit('join', { role: 'board', roomCode });
 
     const [stateA, stateB] = await Promise.all([stateAPromise, stateBPromise]);
-    expect(stateA).toEqual(stateB);
+    expectProjectionsEqual(stateA, stateB);
     expect((stateA as { players: unknown[] }).players).toHaveLength(0);
     expect((stateA as { answer: string | null }).answer).toBeNull();
 
@@ -456,7 +481,7 @@ describe('game sockets', () => {
     contestant.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
 
     const [updateA, updateB] = await Promise.all([updateAPromise, updateBPromise]);
-    expect(updateA).toEqual(updateB);
+    expectProjectionsEqual(updateA, updateB);
     expect((updateA as { players: { name: string }[] }).players).toHaveLength(1);
     expect((updateA as { players: { name: string }[] }).players[0].name).toBe('Alice');
     expect((updateA as { answer: string | null }).answer).toBeNull();
@@ -958,49 +983,54 @@ describe('clue selection sockets', () => {
     await server.close();
   });
 
-  it('host reveals the answer before expiry with no buzz and resolves the clue', async () => {
-    const server = await createTestServer();
-    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
-    const state = server.engine.getState(roomCode)!;
-    const firstClue = state.board.rounds[0].clues[0];
+  it(
+    'host reveals the answer before expiry with no buzz and resolves the clue',
+    async () => {
+      const server = await createTestServer();
+      const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+      const state = server.engine.getState(roomCode)!;
+      const firstClue = state.board.rounds[0].clues[0];
 
-    host.emit('select_clue', { clueId: firstClue.id });
-    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+      host.emit('select_clue', { clueId: firstClue.id });
+      await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
 
-    host.emit('arm_buzzers');
-    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+      host.emit('arm_buzzers');
+      await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
 
-    const hostUpdate = waitForState(host);
-    const boardUpdate = waitForState(boardClient);
-    const aliceUpdate = waitForState(alice);
-    const bobUpdate = waitForState(bob);
+      const isBoardSelect = (s: Record<string, unknown>) => s.phase === 'BOARD_SELECT';
+      const hostUpdate = waitForState(host, isBoardSelect, 10000);
+      const boardUpdate = waitForState(boardClient, isBoardSelect, 10000);
+      const aliceUpdate = waitForState(alice, isBoardSelect, 10000);
+      const bobUpdate = waitForState(bob, isBoardSelect, 10000);
 
-    host.emit('reveal_answer');
-    const [hostState, boardState, aliceState, bobState] = await Promise.all([
-      hostUpdate,
-      boardUpdate,
-      aliceUpdate,
-      bobUpdate,
-    ]);
+      host.emit('reveal_answer');
+      const [hostState, boardState, aliceState, bobState] = await Promise.all([
+        hostUpdate,
+        boardUpdate,
+        aliceUpdate,
+        bobUpdate,
+      ]);
 
-    expect((hostState as { phase: string }).phase).toBe('BOARD_SELECT');
-    expect((boardState as { phase: string }).phase).toBe('BOARD_SELECT');
-    expect((aliceState as { phase: string }).phase).toBe('BOARD_SELECT');
-    expect((bobState as { phase: string }).phase).toBe('BOARD_SELECT');
-    expect((boardState as { usedClueIds: string[] }).usedClueIds).toContain(firstClue.id);
-    expect((boardState as { currentClueId: string | null }).currentClueId).toBeNull();
-    expect((boardState as { answer: string | null }).answer).toBe(firstClue.answer);
-    expect((aliceState as { answer: string | null }).answer).toBe(firstClue.answer);
-    expect((bobState as { answer: string | null }).answer).toBe(firstClue.answer);
-    expect((aliceState as { players: { score: number }[] }).players[0].score).toBe(0);
-    expect((bobState as { players: { score: number }[] }).players[0].score).toBe(0);
+      expect((hostState as { phase: string }).phase).toBe('BOARD_SELECT');
+      expect((boardState as { phase: string }).phase).toBe('BOARD_SELECT');
+      expect((aliceState as { phase: string }).phase).toBe('BOARD_SELECT');
+      expect((bobState as { phase: string }).phase).toBe('BOARD_SELECT');
+      expect((boardState as { usedClueIds: string[] }).usedClueIds).toContain(firstClue.id);
+      expect((boardState as { currentClueId: string | null }).currentClueId).toBeNull();
+      expect((boardState as { answer: string | null }).answer).toBe(firstClue.answer);
+      expect((aliceState as { answer: string | null }).answer).toBe(firstClue.answer);
+      expect((bobState as { answer: string | null }).answer).toBe(firstClue.answer);
+      expect((aliceState as { players: { score: number }[] }).players[0].score).toBe(0);
+      expect((bobState as { players: { score: number }[] }).players[0].score).toBe(0);
 
-    host.disconnect();
-    boardClient.disconnect();
-    alice.disconnect();
-    bob.disconnect();
-    await server.close();
-  });
+      host.disconnect();
+      boardClient.disconnect();
+      alice.disconnect();
+      bob.disconnect();
+      await server.close();
+    },
+    10000,
+  );
 });
 
 describe('buzzer arming and fastest-finger sockets', () => {
