@@ -531,6 +531,60 @@ describe('REVEAL_CLUE', () => {
   });
 });
 
+describe('CANCEL_DAILY_DOUBLE', () => {
+  it('returns the game to BOARD_SELECT with the clue unused and control unchanged when the controller is disconnected', () => {
+    let state = setupDailyDoubleWager(1000);
+    const controllerId = state.controllingPlayerId;
+    const ddClueId = state.currentClueId;
+    state = {
+      ...state,
+      players: state.players.map((p) => (p.id === controllerId ? { ...p, connected: false } : p)),
+    };
+
+    const result = reduce(state, { type: 'CANCEL_DAILY_DOUBLE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.dailyDoubleWager).toBeNull();
+    expect(result.state.usedClueIds).not.toContain(ddClueId);
+    expect(result.state.controllingPlayerId).toBe(controllerId);
+    expect(result.state.revealedAnswer).toBeNull();
+  });
+
+  it('rejects cancellation when the controller is still connected', () => {
+    const state = setupDailyDoubleWager(1000);
+
+    const result = reduce(state, { type: 'CANCEL_DAILY_DOUBLE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('connected') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+  });
+
+  it('rejects cancellation when a wager has already been submitted', () => {
+    let state = setupDailyDoubleWager(1000);
+    state = {
+      ...state,
+      players: state.players.map((p) => (p.id === state.controllingPlayerId ? { ...p, connected: false } : p)),
+    };
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'CANCEL_DAILY_DOUBLE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('wager') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+  });
+
+  it('rejects cancellation outside the Daily Double wager phase', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'CANCEL_DAILY_DOUBLE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('Daily Double') });
+    expect(result.state.phase).toBe('CLUE_REVEALED');
+  });
+});
+
 describe('Daily Double ruling', () => {
   it('RULE_CORRECT adds the wager to the controlling player and keeps control', () => {
     const state = setupDailyDoubleClue(1000, 400);

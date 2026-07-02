@@ -12,6 +12,7 @@ export const ClientToServer = {
   SUBMIT_FINAL_ANSWER: 'submit_final_answer',
   REVEAL_CLUE: 'reveal_clue',
   REVEAL_ANSWER: 'reveal_answer',
+  CANCEL_DAILY_DOUBLE: 'cancel_daily_double',
   ADVANCE_ROUND: 'advance_round',
   OPEN_FINAL_WAGERS: 'open_final_wagers',
   OVERRIDE_CONTROL: 'override_control',

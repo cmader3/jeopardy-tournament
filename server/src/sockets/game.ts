@@ -209,6 +209,25 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('cancel_daily_double', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can cancel the Daily Double' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'CANCEL_DAILY_DOUBLE' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Cancel Daily Double failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('submit_dd_wager', async (payload: { amount: number }) => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'contestant' || !meta.playerId) {

@@ -20,6 +20,7 @@ export type Intent =
   | { type: 'REVEAL_CLUE' }
   | { type: 'REVEAL_ANSWER' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
+  | { type: 'CANCEL_DAILY_DOUBLE' }
   | { type: 'ADVANCE_ROUND' }
   | { type: 'OVERRIDE_CONTROL'; playerId: string }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
@@ -91,6 +92,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleTimeExpire(state);
     case 'SUBMIT_DD_WAGER':
       return handleSubmitDDWager(state, intent);
+    case 'CANCEL_DAILY_DOUBLE':
+      return handleCancelDailyDouble(state);
     case 'REVEAL_CLUE':
       return handleRevealClue(state);
     case 'REVEAL_ANSWER':
@@ -657,6 +660,46 @@ function handleSubmitDDWager(
     state: {
       ...state,
       dailyDoubleWager: intent.amount,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleCancelDailyDouble(state: GameState): ReducerResult {
+  if (state.phase !== 'DAILY_DOUBLE_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Daily Double is available to cancel right now' }] };
+  }
+
+  if (state.dailyDoubleWager != null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A wager has already been submitted for this Daily Double' }] };
+  }
+
+  if (state.controllingPlayerId == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No controlling contestant is assigned' }] };
+  }
+
+  const controller = state.players.find((p) => p.id === state.controllingPlayerId);
+  if (!controller) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Controlling contestant not found' }] };
+  }
+
+  if (controller.connected) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The controlling contestant is still connected' }] };
+  }
+
+  return {
+    state: {
+      ...state,
+      phase: 'BOARD_SELECT',
+      currentClueId: null,
+      buzzWinnerId: null,
+      armedAt: null,
+      deadline: null,
+      lockedOutPlayerIds: [],
+      lockoutUntil: {},
+      revealedAnswer: null,
+      lastOutcome: null,
+      dailyDoubleWager: null,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

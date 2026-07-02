@@ -85,6 +85,7 @@ export interface HostInProgressProps {
   onRuleIncorrect?: (playerId: string) => void;
   onAdjustScore?: (playerId: string, score: number) => void;
   onUndoLastRuling?: () => void;
+  onCancelDailyDouble?: () => void;
   onAdvanceRound?: () => void;
   onOverrideControl?: (playerId: string) => void;
 }
@@ -289,6 +290,7 @@ export function HostInProgress({
   onRuleIncorrect,
   onAdjustScore,
   onUndoLastRuling,
+  onCancelDailyDouble,
   onAdvanceRound,
   onOverrideControl,
 }: HostInProgressProps) {
@@ -368,6 +370,18 @@ export function HostInProgress({
                     Reveal Daily Double Clue
                   </button>
                 )}
+                {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager == null &&
+                  state?.controllingPlayerId != null &&
+                  state?.players.find((p) => p.id === state.controllingPlayerId)?.connected === false && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={onCancelDailyDouble}
+                      data-testid="cancel-daily-double-button"
+                    >
+                      Cancel Daily Double / Return to Board
+                    </button>
+                  )}
                 {(state?.phase === 'CLUE_REVEALED' ||
                   (state?.phase === 'BUZZERS_ARMED' && state?.buzzWinnerId == null)) && (
                   <button
@@ -561,6 +575,9 @@ export function HostContent() {
   const handleUndoLastRuling = useCallback(() => {
     hostSocket.undoLastRuling?.();
   }, [hostSocket]);
+  const handleCancelDailyDouble = useCallback(() => {
+    hostSocket.cancelDailyDouble?.();
+  }, [hostSocket]);
   const handleAdvanceRound = useCallback(() => {
     hostSocket.advanceRound?.();
   }, [hostSocket]);
@@ -596,6 +613,7 @@ export function HostContent() {
         onRuleIncorrect={handleRuleIncorrect}
         onAdjustScore={handleAdjustScore}
         onUndoLastRuling={handleUndoLastRuling}
+        onCancelDailyDouble={handleCancelDailyDouble}
         onAdvanceRound={handleAdvanceRound}
         onOverrideControl={handleOverrideControl}
       />

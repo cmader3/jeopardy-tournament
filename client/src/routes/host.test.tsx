@@ -40,6 +40,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     adjustScore: vi.fn(),
     undoLastRuling: vi.fn(),
     submitDDWager: vi.fn(),
+    cancelDailyDouble: vi.fn(),
     advanceRound: vi.fn(),
     overrideControl: vi.fn(),
     clearError: vi.fn(),
@@ -491,6 +492,44 @@ describe('HostInProgress grid and selection', () => {
 
     await userEvent.click(screen.getByTestId('reveal-clue-button'));
     expect(onRevealClue).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a cancel Daily Double button when the controller is disconnected mid-wager', async () => {
+    const onCancelDailyDouble = vi.fn();
+    const state = makeHostState({
+      phase: 'DAILY_DOUBLE_WAGER',
+      round: makeRound(),
+      currentClueId: 'cl2',
+      currentClueText: null,
+      controllingPlayerId: 'p1',
+      dailyDoubleWager: null,
+      players: [
+        { id: 'p1', name: 'Alice', score: 1000, connected: false },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onCancelDailyDouble={onCancelDailyDouble} />);
+
+    const cancelButton = screen.getByTestId('cancel-daily-double-button');
+    expect(cancelButton).toBeInTheDocument();
+
+    await userEvent.click(cancelButton);
+    expect(onCancelDailyDouble).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show the cancel Daily Double button when the controller is still connected', () => {
+    const state = makeHostState({
+      phase: 'DAILY_DOUBLE_WAGER',
+      round: makeRound(),
+      currentClueId: 'cl2',
+      currentClueText: null,
+      controllingPlayerId: 'p1',
+      dailyDoubleWager: null,
+      players: [{ id: 'p1', name: 'Alice', score: 1000, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.queryByTestId('cancel-daily-double-button')).not.toBeInTheDocument();
   });
 
   it('shows the ruling buttons during DAILY_DOUBLE_CLUE and rules the controller', async () => {

@@ -1210,6 +1210,56 @@ describe('clue selection sockets', { timeout: 15000 }, () => {
     await server.close();
   });
 
+  it('host cancels a Daily Double when the controller disconnects mid-wager and returns to board select', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const ddClue = state.board.rounds[0].clues[1];
+    const controllerId = state.controllingPlayerId;
+    const controller = controllerId === tokenA.playerId ? alice : bob;
+    const other = controllerId === tokenA.playerId ? bob : alice;
+
+    host.emit('select_clue', { clueId: ddClue.id });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const disconnectedHostUpdate = waitForState(host, (s) => {
+      const players = (s as { players: { id: string; connected: boolean }[] }).players;
+      return players.find((p) => p.id === controllerId)?.connected === false;
+    });
+    const disconnectedBoardUpdate = waitForState(boardClient, (s) => {
+      const players = (s as { players: { id: string; connected: boolean }[] }).players;
+      return players.find((p) => p.id === controllerId)?.connected === false;
+    });
+    const disconnectedOtherUpdate = waitForState(other, (s) => {
+      const players = (s as { players: { id: string; connected: boolean }[] }).players;
+      return players.find((p) => p.id === controllerId)?.connected === false;
+    });
+
+    controller.disconnect();
+    await Promise.all([disconnectedHostUpdate, disconnectedBoardUpdate, disconnectedOtherUpdate]);
+
+    const hostUpdate = waitForState(host, (s) => s.phase === 'BOARD_SELECT');
+    const boardUpdate = waitForState(boardClient, (s) => s.phase === 'BOARD_SELECT');
+    const otherUpdate = waitForState(other, (s) => s.phase === 'BOARD_SELECT');
+
+    host.emit('cancel_daily_double');
+    const [hostState, boardState, otherState] = await Promise.all([hostUpdate, boardUpdate, otherUpdate]);
+
+    expect((hostState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((hostState as { usedClueIds: string[] }).usedClueIds).not.toContain(ddClue.id);
+    expect((hostState as { currentClueId: string | null }).currentClueId).toBeNull();
+    expect((hostState as { controllingPlayerId: string | null }).controllingPlayerId).toBe(controllerId);
+    expect((hostState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBeNull();
+    expect((boardState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBeNull();
+    expect((otherState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBeNull();
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
   it('host reveal answer returns to board select and marks the clue used', async () => {
     const server = await createTestServer();
     const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
