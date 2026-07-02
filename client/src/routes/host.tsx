@@ -85,6 +85,7 @@ export interface HostInProgressProps {
   onRuleIncorrect?: (playerId: string) => void;
   onAdjustScore?: (playerId: string, score: number) => void;
   onUndoLastRuling?: () => void;
+  onAdvanceRound?: () => void;
 }
 
 function HostGrid({
@@ -219,6 +220,46 @@ function HostAnswerBanner({ state }: { state: HostView }) {
   );
 }
 
+const ROUND_LABELS: Record<'DOUBLE_JEOPARDY' | 'FINAL', string> = {
+  DOUBLE_JEOPARDY: 'Double Jeopardy!',
+  FINAL: 'Final Jeopardy!',
+};
+
+interface HostRoundTransitionProps {
+  state: HostView;
+  onAdvanceRound?: () => void;
+}
+
+function HostRoundTransition({ state, onAdvanceRound }: HostRoundTransitionProps) {
+  const target = state.transitionTarget ?? 'FINAL';
+  const label = ROUND_LABELS[target];
+
+  return (
+    <div className={styles.roundTransition} data-testid="round-transition">
+      <h2 data-testid="transition-heading">{label}</h2>
+      <p>Between-round scores</p>
+      <ul className={styles.transitionScores} data-testid="transition-scores">
+        {state.players.map((player) => (
+          <li key={player.id} data-testid={`transition-score-${player.id}`}>
+            <span className={styles.playerName}>{player.name}</span>
+            <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>
+              {player.score}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className={styles.actionButton}
+        onClick={onAdvanceRound}
+        data-testid="continue-round-button"
+      >
+        Continue to {label}
+      </button>
+    </div>
+  );
+}
+
 export function HostInProgress({
   roomCode,
   state,
@@ -230,6 +271,7 @@ export function HostInProgress({
   onRuleIncorrect,
   onAdjustScore,
   onUndoLastRuling,
+  onAdvanceRound,
 }: HostInProgressProps) {
   const players = state?.players ?? [];
   const currentClue = state?.currentClueId
@@ -243,6 +285,21 @@ export function HostInProgress({
   );
 
   const showControls = currentClue || state?.answer;
+
+  if (state?.phase === 'ROUND_TRANSITION') {
+    return (
+      <main className={`${styles.hostInProgress} route-stub`}>
+        <h1>Game in Progress</h1>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+        <p className={styles.phase} data-testid="phase-indicator">
+          Phase: {state.phase}
+        </p>
+        <HostRoundTransition state={state} onAdvanceRound={onAdvanceRound} />
+      </main>
+    );
+  }
 
   return (
     <main className={`${styles.hostInProgress} route-stub`}>
@@ -373,6 +430,18 @@ export function HostInProgress({
           Undo Last Ruling
         </button>
       </div>
+      {state?.phase === 'BOARD_SELECT' && state.roundComplete && (
+        <div className={styles.actionRow} data-testid="advance-round-section">
+          <button
+            type="button"
+            className={styles.actionButton}
+            onClick={onAdvanceRound}
+            data-testid="advance-round-button"
+          >
+            Advance Round
+          </button>
+        </div>
+      )}
       <h2>Roster</h2>
       {players.length === 0 ? (
         <p>No contestants connected.</p>
@@ -471,6 +540,9 @@ export function HostContent() {
   const handleUndoLastRuling = useCallback(() => {
     hostSocket.undoLastRuling?.();
   }, [hostSocket]);
+  const handleAdvanceRound = useCallback(() => {
+    hostSocket.advanceRound?.();
+  }, [hostSocket]);
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -497,6 +569,7 @@ export function HostContent() {
         onRuleIncorrect={handleRuleIncorrect}
         onAdjustScore={handleAdjustScore}
         onUndoLastRuling={handleUndoLastRuling}
+        onAdvanceRound={handleAdvanceRound}
       />
     );
   }

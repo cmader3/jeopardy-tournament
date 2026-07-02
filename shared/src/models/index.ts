@@ -13,6 +13,7 @@ export type GamePhase =
   | 'BUZZED'
   | 'DAILY_DOUBLE_WAGER'
   | 'DAILY_DOUBLE_CLUE'
+  | 'ROUND_TRANSITION'
   | 'FINAL_INTRO'
   | 'FINAL_WAGER'
   | 'FINAL_CLUE'
@@ -94,6 +95,7 @@ export interface GameState {
   finalWagers: Record<string, number>;
   finalAnswers: Record<string, string>;
   revealedAnswer: string | null;
+  transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
   lastOutcome: {
     playerId: string;
     type: 'CORRECT' | 'INCORRECT';

@@ -267,6 +267,13 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
     gameState?.phase === 'BUZZERS_ARMED' ||
     gameState?.phase === 'BUZZED';
 
+  const transitionLabel =
+    gameState?.phase === 'ROUND_TRANSITION'
+      ? gameState.transitionTarget === 'DOUBLE_JEOPARDY'
+        ? 'Double Jeopardy!'
+        : 'Final Jeopardy!'
+      : null;
+
   return (
     <main className="route-stub">
       <h1>Play</h1>
@@ -303,6 +310,20 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 Leave Game
               </button>
             </>
+          )}
+          {gameState.phase === 'ROUND_TRANSITION' && (
+            <div data-testid="contestant-round-transition">
+              <h2 data-testid="contestant-transition-heading">{transitionLabel}</h2>
+              <p>Between-round scores</p>
+              <ul data-testid="contestant-transition-scores">
+                {gameState.players.map((player) => (
+                  <li key={player.id} data-testid="contestant-transition-score">
+                    <span>{player.name}</span>
+                    <span>{player.score}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {gameState.phase === 'BOARD_SELECT' && gameState.round && (
             <>

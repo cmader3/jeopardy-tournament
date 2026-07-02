@@ -470,3 +470,48 @@
   outline: 3px solid var(--value-gold);
   outline-offset: 2px;
 }
+
+.betweenRoundScreen {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  min-height: 0;
+}
+
+.betweenRoundHeading {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 6rem);
+  color: var(--value-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  margin: 0;
+}
+
+.betweenRoundScores {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.betweenRoundScore {
+  flex: 1 1 200px;
+  max-width: 300px;
+  background: var(--jeopardy-blue);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+

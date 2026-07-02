@@ -71,6 +71,8 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     canWager: false,
     canAnswer: false,
     dailyDoubleWager: null,
+    transitionTarget: null,
+    roundComplete: false,
     ...overrides,
   };
 }
@@ -89,6 +91,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     ruleCorrect: vi.fn(),
     ruleIncorrect: vi.fn(),
     submitDDWager: vi.fn(),
+    advanceRound: vi.fn(),
     clearError: vi.fn(),
   });
 }
@@ -776,5 +779,38 @@ describe('PlayRoute', () => {
     expect(screen.getByTestId('contestant-outcome-label')).toHaveTextContent('Correct!');
     expect(screen.getByTestId('contestant-outcome-label')).toHaveTextContent('Bob');
     expect(screen.getByTestId('contestant-outcome-label')).toHaveTextContent('+$100');
+  });
+
+  it('shows the between-round transition screen with carried-over scores', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'ROUND_TRANSITION',
+        transitionTarget: 'DOUBLE_JEOPARDY',
+        playerId: 'p1',
+        players: [
+          { id: 'p1', name: 'Alice', score: 300, connected: true },
+          { id: 'p2', name: 'Bob', score: -100, connected: true },
+        ],
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-round-transition')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-transition-heading')).toHaveTextContent('Double Jeopardy!');
+    const scores = screen.getAllByTestId('contestant-transition-score');
+    expect(scores).toHaveLength(2);
+    expect(scores[0]).toHaveTextContent('Alice');
+    expect(scores[0]).toHaveTextContent('300');
+    expect(scores[1]).toHaveTextContent('Bob');
+    expect(scores[1]).toHaveTextContent('-100');
   });
 });

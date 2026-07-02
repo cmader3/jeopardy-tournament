@@ -20,6 +20,7 @@ export type Intent =
   | { type: 'REVEAL_CLUE' }
   | { type: 'REVEAL_ANSWER' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
+  | { type: 'ADVANCE_ROUND' }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
   | { type: 'UNDO_LAST_RULING' };
 
@@ -58,6 +59,7 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     finalWagers: {},
     finalAnswers: {},
     revealedAnswer: null,
+    transitionTarget: null,
     lastOutcome: null,
   };
 }
@@ -92,6 +94,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRevealClue(state);
     case 'REVEAL_ANSWER':
       return handleRevealAnswer(state);
+    case 'ADVANCE_ROUND':
+      return handleAdvanceRound(state);
     case 'ADJUST_SCORE':
       return handleAdjustScore(state, intent, ctx);
     case 'UNDO_LAST_RULING':
@@ -283,6 +287,12 @@ function getCurrentClue(state: GameState): GameState['board']['rounds'][number][
   const round = state.board.rounds[state.roundIndex];
   if (!round || !state.currentClueId) return undefined;
   return round.clues.find((c) => c.id === state.currentClueId);
+}
+
+function isRoundComplete(state: GameState): boolean {
+  const round = state.board.rounds[state.roundIndex];
+  if (!round) return false;
+  return round.clues.length > 0 && round.clues.every((clue) => state.usedClueIds.includes(clue.id));
 }
 
 function isLockedOut(state: GameState, playerId: string, now: number): boolean {
@@ -681,6 +691,91 @@ function handleRevealAnswer(state: GameState): ReducerResult {
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
+}
+
+function handleAdvanceRound(state: GameState): ReducerResult {
+  if (state.phase !== 'BOARD_SELECT' && state.phase !== 'ROUND_TRANSITION') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot advance round right now' }] };
+  }
+
+  if (state.phase === 'BOARD_SELECT') {
+    if (!isRoundComplete(state)) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Round is not complete' }] };
+    }
+
+    const target = determineTransitionTarget(state);
+    return {
+      state: {
+        ...state,
+        phase: 'ROUND_TRANSITION',
+        transitionTarget: target,
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  // ROUND_TRANSITION -> proceed to the target round.
+  if (state.transitionTarget == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No transition target is set' }] };
+  }
+
+  const nextRoundIndex = findNextPlayableRoundIndex(state);
+
+  if (state.transitionTarget === 'DOUBLE_JEOPARDY') {
+    return {
+      state: {
+        ...state,
+        phase: 'BOARD_SELECT',
+        roundIndex: nextRoundIndex ?? state.roundIndex + 1,
+        transitionTarget: null,
+        currentClueId: null,
+        buzzWinnerId: null,
+        armedAt: null,
+        deadline: null,
+        lockedOutPlayerIds: [],
+        lockoutUntil: {},
+        revealedAnswer: null,
+        lastOutcome: null,
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  // FINAL
+  return {
+    state: {
+      ...state,
+      phase: 'FINAL_INTRO',
+      roundIndex: nextRoundIndex ?? state.roundIndex + 1,
+      transitionTarget: null,
+      currentClueId: null,
+      buzzWinnerId: null,
+      armedAt: null,
+      deadline: null,
+      lockedOutPlayerIds: [],
+      lockoutUntil: {},
+      revealedAnswer: null,
+      lastOutcome: null,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function findNextPlayableRoundIndex(state: GameState): number | null {
+  const rounds = state.board.rounds;
+  for (let i = state.roundIndex + 1; i < rounds.length; i++) {
+    const round = rounds[i];
+    if (round.type === 'DOUBLE_JEOPARDY' && !state.board.includeDoubleJeopardy) continue;
+    return i;
+  }
+  return null;
+}
+
+function determineTransitionTarget(state: GameState): 'DOUBLE_JEOPARDY' | 'FINAL' {
+  const nextIndex = findNextPlayableRoundIndex(state);
+  if (nextIndex == null) return 'FINAL';
+  const round = state.board.rounds[nextIndex];
+  return round.type === 'DOUBLE_JEOPARDY' ? 'DOUBLE_JEOPARDY' : 'FINAL';
 }
 
 function handleAdjustScore(

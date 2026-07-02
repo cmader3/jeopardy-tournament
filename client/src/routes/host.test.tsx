@@ -40,6 +40,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     adjustScore: vi.fn(),
     undoLastRuling: vi.fn(),
     submitDDWager: vi.fn(),
+    advanceRound: vi.fn(),
     clearError: vi.fn(),
     ...overrides,
   });
@@ -89,6 +90,8 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     lockedOutPlayerIds: [],
     auditLog: [],
     dailyDoubleWager: null,
+    transitionTarget: null,
+    roundComplete: false,
     serverNow: 0,
     ...overrides,
   };
@@ -631,5 +634,61 @@ describe('HostInProgress score tools', () => {
 
     await userEvent.click(screen.getByTestId('undo-last-ruling-button'));
     expect(onUndoLastRuling).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the advance round button when the round is complete', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: true });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('advance-round-button')).toBeInTheDocument();
+  });
+
+  it('does not show the advance round button while the round is incomplete', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: false });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.queryByTestId('advance-round-button')).not.toBeInTheDocument();
+  });
+
+  it('calls onAdvanceRound when the advance button is clicked', async () => {
+    const onAdvanceRound = vi.fn();
+    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: true });
+    render(<HostInProgress roomCode="WXYZ" state={state} onAdvanceRound={onAdvanceRound} />);
+
+    await userEvent.click(screen.getByTestId('advance-round-button'));
+    expect(onAdvanceRound).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the round transition screen with scores and a continue button', () => {
+    const state = makeHostState({
+      phase: 'ROUND_TRANSITION',
+      transitionTarget: 'DOUBLE_JEOPARDY',
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: -100, connected: true },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('round-transition')).toBeInTheDocument();
+    expect(screen.getByTestId('transition-heading')).toHaveTextContent('Double Jeopardy!');
+    expect(screen.getByTestId('transition-scores')).toBeInTheDocument();
+    expect(screen.getByTestId('transition-score-p1')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('transition-score-p1')).toHaveTextContent('200');
+    expect(screen.getByTestId('transition-score-p2')).toHaveTextContent('-100');
+    expect(screen.getByTestId('continue-round-button')).toHaveTextContent(/Continue to Double Jeopardy!/i);
+  });
+
+  it('calls onAdvanceRound when the continue button is clicked during ROUND_TRANSITION', async () => {
+    const onAdvanceRound = vi.fn();
+    const state = makeHostState({
+      phase: 'ROUND_TRANSITION',
+      transitionTarget: 'FINAL',
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onAdvanceRound={onAdvanceRound} />);
+
+    await userEvent.click(screen.getByTestId('continue-round-button'));
+    expect(onAdvanceRound).toHaveBeenCalledTimes(1);
   });
 });

@@ -171,6 +171,42 @@ function isRoundStart(state: BoardView): boolean {
   return !state.usedClueIds.some((id) => roundClueIds.has(id));
 }
 
+const TRANSITION_LABELS: Record<'DOUBLE_JEOPARDY' | 'FINAL', string> = {
+  DOUBLE_JEOPARDY: 'Double Jeopardy!',
+  FINAL: 'Final Jeopardy!',
+};
+
+interface BetweenRoundScreenProps {
+  state: BoardView;
+}
+
+function BetweenRoundScreen({ state }: BetweenRoundScreenProps) {
+  const target = state.transitionTarget ?? 'FINAL';
+  const label = TRANSITION_LABELS[target];
+
+  return (
+    <div className={styles.betweenRoundScreen} data-testid="between-round-screen">
+      <h2 className={styles.betweenRoundHeading} data-testid="between-round-heading">
+        {label}
+      </h2>
+      <div className={styles.betweenRoundScores} data-testid="between-round-scores">
+        {state.players.map((player) => (
+          <div
+            key={player.id}
+            className={`${styles.betweenRoundScore} ${player.id === state.controllingPlayerId ? styles.controlling : ''}`}
+            data-testid="between-round-score"
+          >
+            <span className={`${styles.name} ${styles.truncated}`}>{player.name}</span>
+            <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`}>
+              {player.score}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface AnswerBannerProps {
   state: BoardView;
 }
@@ -231,6 +267,10 @@ function IncorrectFeedback({ state }: IncorrectFeedbackProps) {
 }
 
 function renderStage(state: BoardView) {
+  if (state.phase === 'ROUND_TRANSITION') {
+    return <BetweenRoundScreen state={state} />;
+  }
+
   const clueOverlay =
     state.currentClueId && state.currentClueText ? (
       <ClueOverlay clueText={state.currentClueText} />

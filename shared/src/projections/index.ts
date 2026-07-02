@@ -63,6 +63,8 @@ export interface BoardView {
   answer: string | null;
   lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
   dailyDoubleWager: number | null;
+  transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
+  roundComplete: boolean;
   serverNow: number;
 }
 
@@ -83,6 +85,8 @@ export interface HostView {
   lockedOutPlayerIds: string[];
   auditLog: AuditRecord[];
   dailyDoubleWager: number | null;
+  transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
+  roundComplete: boolean;
   serverNow: number;
 }
 
@@ -186,6 +190,12 @@ function isLockedOut(state: GameState, playerId: string, now: number): boolean {
   return until !== undefined && until > now;
 }
 
+export function isRoundComplete(state: GameState): boolean {
+  const round = getCurrentRound(state);
+  if (!round) return false;
+  return round.clues.length > 0 && round.clues.every((clue) => state.usedClueIds.includes(clue.id));
+}
+
 export function projectBoard(state: GameState, now: number): BoardView {
   const round = getCurrentRound(state);
   const currentClue = getCurrentClue(state);
@@ -208,6 +218,8 @@ export function projectBoard(state: GameState, now: number): BoardView {
       ? { playerId: state.lastOutcome.playerId, type: state.lastOutcome.type, value: state.lastOutcome.value }
       : null,
     dailyDoubleWager: null,
+    transitionTarget: state.transitionTarget,
+    roundComplete: isRoundComplete(state),
     serverNow: now,
   };
 }
@@ -236,6 +248,8 @@ export function projectHost(state: GameState, now: number): HostView {
     lockedOutPlayerIds: state.lockedOutPlayerIds,
     auditLog: state.auditLog,
     dailyDoubleWager: state.dailyDoubleWager,
+    transitionTarget: state.transitionTarget,
+    roundComplete: isRoundComplete(state),
     serverNow: now,
   };
 }

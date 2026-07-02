@@ -62,6 +62,8 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     answer: null,
     lastOutcome: null,
     dailyDoubleWager: null,
+    transitionTarget: null,
+    roundComplete: false,
     serverNow: 0,
     ...overrides,
   };
@@ -595,5 +597,51 @@ describe('BoardRoute', () => {
     expect(screen.getByTestId('board-grid')).toBeInTheDocument();
     expect(screen.getAllByTestId('used-cell')).toHaveLength(1);
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(2);
+  });
+
+  it('shows the between-round screen during ROUND_TRANSITION with carried-over scores', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'ROUND_TRANSITION',
+        transitionTarget: 'DOUBLE_JEOPARDY',
+        players: [
+          { id: 'p1', name: 'Alice', score: 250, connected: true },
+          { id: 'p2', name: 'Bob', score: -50, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('between-round-screen')).toBeInTheDocument();
+    expect(screen.getByTestId('between-round-heading')).toHaveTextContent('Double Jeopardy!');
+    expect(screen.getByTestId('between-round-scores')).toBeInTheDocument();
+    const scores = screen.getAllByTestId('between-round-score');
+    expect(scores).toHaveLength(2);
+    expect(scores[0]).toHaveTextContent('Alice');
+    expect(scores[0]).toHaveTextContent('250');
+    expect(scores[1]).toHaveTextContent('Bob');
+    expect(scores[1]).toHaveTextContent('-50');
+  });
+
+  it('shows the Final Jeopardy between-round screen when the target is FINAL', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'ROUND_TRANSITION',
+        transitionTarget: 'FINAL',
+        players: [{ id: 'p1', name: 'Alice', score: 300, connected: true }],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('between-round-screen')).toBeInTheDocument();
+    expect(screen.getByTestId('between-round-heading')).toHaveTextContent('Final Jeopardy!');
   });
 });
