@@ -38,6 +38,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     ruleIncorrect: vi.fn(),
     adjustScore: vi.fn(),
     undoLastRuling: vi.fn(),
+    submitDDWager: vi.fn(),
     clearError: vi.fn(),
     ...overrides,
   });
@@ -86,6 +87,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     lastOutcome: null,
     lockedOutPlayerIds: [],
     auditLog: [],
+    dailyDoubleWager: null,
     serverNow: 0,
     ...overrides,
   };

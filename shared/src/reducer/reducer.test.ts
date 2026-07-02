@@ -400,6 +400,109 @@ describe('SELECT_CLUE', () => {
   });
 });
 
+function setupDailyDoubleWager(score = 0): GameState {
+  const board = makeBoard();
+  let state = createInitialState('session-1', 'ABCD', board);
+  const alice = makePlayer({ id: 'p1', name: 'Alice', score });
+  const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+  state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+  state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+  state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+  return reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+}
+
+describe('SUBMIT_DD_WAGER', () => {
+  it('accepts a valid wager and transitions to DAILY_DOUBLE_CLUE', () => {
+    const state = setupDailyDoubleWager(1000);
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(result.state.dailyDoubleWager).toBe(200);
+  });
+
+  it('rejects a wager below the default minimum of 5', () => {
+    const state = setupDailyDoubleWager(1000);
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 4 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('at least') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(result.state.dailyDoubleWager).toBeNull();
+  });
+
+  it('rejects a wager above the maximum (score vs highest clue value)', () => {
+    const state = setupDailyDoubleWager(150);
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 201 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(result.state.dailyDoubleWager).toBeNull();
+  });
+
+  it('uses the highest clue value as the maximum when it exceeds the score', () => {
+    const state = setupDailyDoubleWager(150);
+
+    const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
+    expect(atMax.state.dailyDoubleWager).toBe(200);
+    expect(atMax.state.phase).toBe('DAILY_DOUBLE_CLUE');
+
+    const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 201 }, { now: NOW });
+    expect(overMax.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
+  });
+
+  it('uses the current score as the maximum when it exceeds the highest clue value', () => {
+    const state = setupDailyDoubleWager(3000);
+
+    const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 3000 }, { now: NOW });
+    expect(atMax.state.dailyDoubleWager).toBe(3000);
+    expect(atMax.state.phase).toBe('DAILY_DOUBLE_CLUE');
+
+    const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 3001 }, { now: NOW });
+    expect(overMax.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
+  });
+
+  it('allows a zero or negative score to wager at least the minimum', () => {
+    const state = setupDailyDoubleWager(-400);
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 5 }, { now: NOW });
+
+    expect(result.state.dailyDoubleWager).toBe(5);
+    expect(result.state.phase).toBe('DAILY_DOUBLE_CLUE');
+  });
+
+  it('rejects a wager from a non-controlling player', () => {
+    const state = setupDailyDoubleWager(1000);
+    const nonController = state.players.find((p) => p.id !== state.controllingPlayerId);
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: nonController!.id, amount: 100 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('controlling') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+  });
+
+  it('rejects a wager outside the DAILY_DOUBLE_WAGER phase', () => {
+    let state = setupDailyDoubleWager(1000);
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('wager') });
+  });
+
+  it('locks a submitted wager and rejects a second submission', () => {
+    let state = setupDailyDoubleWager(1000);
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 300 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+    expect(result.state.dailyDoubleWager).toBe(200);
+  });
+});
+
 describe('REVEAL_ANSWER', () => {
   it('marks the current clue used and returns to BOARD_SELECT', () => {
     const board = makeBoard();

@@ -19,6 +19,7 @@ export interface SocketState<T> {
   ruleIncorrect?: (playerId: string) => void;
   adjustScore?: (playerId: string, score: number) => void;
   undoLastRuling?: () => void;
+  submitDDWager?: (amount: number) => void;
   clearError?: () => void;
 }
 
@@ -121,11 +122,15 @@ export function useSocket<T>(
     socketRef.current?.emit('undo_last_ruling');
   }, []);
 
+  const submitDDWager = useCallback((amount: number) => {
+    socketRef.current?.emit('submit_dd_wager', { amount });
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, clearError };
+  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, clearError };
 }
 
 export function getStoredContestantToken(): {

@@ -26,6 +26,7 @@ function makeBoardPayload() {
             order: 0,
             clues: [
               { value: 100, row: 0, clueText: 'H2O', answer: 'Water', isDailyDouble: false },
+              { value: 200, row: 1, clueText: 'This planet is known as the Red Planet', answer: 'Mars', isDailyDouble: true },
             ],
           },
         ],
@@ -956,6 +957,103 @@ describe('clue selection sockets', () => {
     const error = await errorPromise;
 
     expect(error.message).toMatch(/controlling player/i);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('controlling contestant submits a Daily Double wager and all views advance to the clue', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const ddClue = state.board.rounds[0].clues[1];
+    const controllerId = state.controllingPlayerId;
+    const controller = controllerId === tokenA.playerId ? alice : bob;
+    const other = controllerId === tokenA.playerId ? bob : alice;
+
+    host.emit('select_clue', { clueId: ddClue.id });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const hostUpdate = waitForState(host, (s) => s.phase === 'DAILY_DOUBLE_CLUE');
+    const boardUpdate = waitForState(boardClient, (s) => s.phase === 'DAILY_DOUBLE_CLUE');
+    const controllerUpdate = waitForState(controller, (s) => s.phase === 'DAILY_DOUBLE_CLUE');
+    const otherUpdate = waitForState(other, (s) => s.phase === 'DAILY_DOUBLE_CLUE');
+
+    controller.emit('submit_dd_wager', { amount: 200 });
+    const [hostState, boardState, controllerState, otherState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      controllerUpdate,
+      otherUpdate,
+    ]);
+
+    expect((hostState as { phase: string }).phase).toBe('DAILY_DOUBLE_CLUE');
+    expect((hostState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBe(200);
+    expect((controllerState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBe(200);
+    expect((boardState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBeNull();
+    expect((otherState as { dailyDoubleWager: number | null }).dailyDoubleWager).toBeNull();
+    expect((boardState as { currentClueText: string | null }).currentClueText).toBe(ddClue.clueText);
+    expect((otherState as { currentClueText: string | null }).currentClueText).toBe(ddClue.clueText);
+    expect((controllerState as { currentClueText: string | null }).currentClueText).toBe(ddClue.clueText);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('rejects a Daily Double wager from a non-controlling contestant', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const ddClue = state.board.rounds[0].clues[1];
+    const controllerId = state.controllingPlayerId;
+    const nonController = controllerId === tokenA.playerId ? bob : alice;
+
+    host.emit('select_clue', { clueId: ddClue.id });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const errorPromise = waitForError(nonController);
+    nonController.emit('submit_dd_wager', { amount: 200 });
+    const error = await errorPromise;
+
+    expect(error.message).toMatch(/controlling contestant/i);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('rejects an out-of-range Daily Double wager with a clear message', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const ddClue = state.board.rounds[0].clues[1];
+    const controllerId = state.controllingPlayerId;
+    const controller = controllerId === tokenA.playerId ? alice : bob;
+
+    host.emit('select_clue', { clueId: ddClue.id });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const lowErrorPromise = waitForError(controller);
+    controller.emit('submit_dd_wager', { amount: 4 });
+    const lowError = await lowErrorPromise;
+    expect(lowError.message).toMatch(/minimum/i);
+
+    const highErrorPromise = waitForError(controller);
+    controller.emit('submit_dd_wager', { amount: 201 });
+    const highError = await highErrorPromise;
+    expect(highError.message).toMatch(/maximum/i);
+
+    const engineState = server.engine.getState(roomCode)!;
+    expect(engineState.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(engineState.dailyDoubleWager).toBeNull();
 
     host.disconnect();
     boardClient.disconnect();

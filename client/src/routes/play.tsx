@@ -171,6 +171,70 @@ function ContestantGrid({
   );
 }
 
+function DailyDoubleWager({
+  state,
+  onSubmit,
+}: {
+  state: ContestantView;
+  onSubmit?: (amount: number) => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const me = state.players.find((p) => p.id === state.playerId);
+  const highestValue =
+    state.round?.categories
+      .flatMap((c) => c.clues)
+      .reduce((max, clue) => Math.max(max, clue.value ?? 0), 0) ?? 0;
+  const maxWager = Math.max(me?.score ?? 0, highestValue);
+  const minWager = 5;
+  const isLocked = state.dailyDoubleWager != null;
+  const controllerName = state.players.find((p) => p.id === state.controllingPlayerId)?.name ?? 'the controller';
+
+  if (!state.isControllingPlayer) {
+    return (
+      <div data-testid="daily-double-passive">
+        <p data-testid="daily-double-splash">DAILY DOUBLE</p>
+        <p>Waiting for {controllerName} to wager.</p>
+      </div>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <div data-testid="daily-double-wager-locked">
+        <p data-testid="daily-double-splash">DAILY DOUBLE</p>
+        <p data-testid="dd-wager-locked-amount">Your wager: {'$'}{state.dailyDoubleWager}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="daily-double-wager-input">
+      <p data-testid="daily-double-splash">DAILY DOUBLE</p>
+      <p>Enter your wager ({'$'}{minWager} - {'$'}{maxWager})</p>
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        min={minWager}
+        max={maxWager}
+        data-testid="dd-wager-input"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const value = Number(amount);
+          if (!Number.isNaN(value)) {
+            onSubmit?.(value);
+          }
+        }}
+        data-testid="dd-wager-submit"
+      >
+        Submit Wager
+      </button>
+    </div>
+  );
+}
+
 function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
@@ -193,7 +257,10 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
   const showClue =
     gameState?.currentClueId &&
     gameState?.currentClueText &&
-    (gameState?.phase === 'CLUE_REVEALED' || gameState?.phase === 'BUZZERS_ARMED' || gameState?.phase === 'BUZZED');
+    (gameState?.phase === 'CLUE_REVEALED' ||
+      gameState?.phase === 'BUZZERS_ARMED' ||
+      gameState?.phase === 'BUZZED' ||
+      gameState?.phase === 'DAILY_DOUBLE_CLUE');
 
   const showBuzzer =
     gameState?.phase === 'CLUE_REVEALED' ||
@@ -261,7 +328,10 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             </>
           )}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (
-            <div data-testid="daily-double-splash">DAILY DOUBLE</div>
+            <DailyDoubleWager state={gameState} onSubmit={socket.submitDDWager} />
+          )}
+          {gameState.phase === 'DAILY_DOUBLE_CLUE' && gameState.isControllingPlayer && gameState.dailyDoubleWager != null && (
+            <p data-testid="dd-wager-locked-amount">Your wager: {'$'}{gameState.dailyDoubleWager}</p>
           )}
         </div>
       )}

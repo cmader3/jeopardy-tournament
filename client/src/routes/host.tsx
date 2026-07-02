@@ -263,6 +263,11 @@ export function HostInProgress({
               <p className={styles.answerText} data-testid="answer-text">
                 Answer: {currentClue.answer}
               </p>
+              {state?.dailyDoubleWager != null && (
+                <p className={styles.wagerText} data-testid="daily-double-wager">
+                  Daily Double wager: {'$'}{state.dailyDoubleWager}
+                </p>
+              )}
               <Countdown deadline={state?.deadline ?? null} serverNow={state?.serverNow ?? 0} />
               <div className={styles.actionRow}>
                 {state?.phase === 'CLUE_REVEALED' && (

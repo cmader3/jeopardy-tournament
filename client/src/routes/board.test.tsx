@@ -61,6 +61,7 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     deadline: null,
     answer: null,
     lastOutcome: null,
+    dailyDoubleWager: null,
     serverNow: 0,
     ...overrides,
   };
@@ -371,6 +372,27 @@ describe('BoardRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
     expect(await screen.findByTestId('daily-double-splash')).toBeInTheDocument();
+    expect(screen.queryByTestId('clue-text')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+  });
+
+  it('does not expose the Daily Double wager on the board', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        dailyDoubleWager: 500,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('daily-double-splash');
+    expect(screen.queryByText(/500/)).not.toBeInTheDocument();
   });
 
   it('highlights the controlling player on the scoreboard', async () => {

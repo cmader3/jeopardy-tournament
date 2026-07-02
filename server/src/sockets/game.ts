@@ -35,6 +35,10 @@ const adjustScorePayloadSchema = z.object({
   score: z.number().int(),
 });
 
+const submitDdWagerPayloadSchema = z.object({
+  amount: z.number().int(),
+});
+
 interface SocketMeta {
   role: 'host' | 'board' | 'contestant';
   roomCode: string;
@@ -182,6 +186,46 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Arm buzzers failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('submit_dd_wager', async (payload: { amount: number }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'contestant' || !meta.playerId) {
+        socket.emit('error', { message: 'Only the controlling contestant can submit a Daily Double wager' });
+        return;
+      }
+
+      const validation = submitDdWagerPayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid wager payload' });
+        return;
+      }
+
+      const state = engine.getState(meta.roomCode);
+      if (!state) {
+        socket.emit('error', { message: 'Session not found' });
+        return;
+      }
+
+      if (state.controllingPlayerId !== meta.playerId) {
+        socket.emit('error', { message: 'Only the controlling contestant can submit a Daily Double wager' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'SUBMIT_DD_WAGER', playerId: meta.playerId, amount: validation.data.amount },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Submit wager failed';
         socket.emit('error', { message });
       }
     });

@@ -62,6 +62,7 @@ export interface BoardView {
   deadline: number | null;
   answer: string | null;
   lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
+  dailyDoubleWager: number | null;
   serverNow: number;
 }
 
@@ -81,6 +82,7 @@ export interface HostView {
   lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
   lockedOutPlayerIds: string[];
   auditLog: AuditRecord[];
+  dailyDoubleWager: number | null;
   serverNow: number;
 }
 
@@ -205,6 +207,7 @@ export function projectBoard(state: GameState, now: number): BoardView {
     lastOutcome: state.lastOutcome
       ? { playerId: state.lastOutcome.playerId, type: state.lastOutcome.type, value: state.lastOutcome.value }
       : null,
+    dailyDoubleWager: null,
     serverNow: now,
   };
 }
@@ -232,6 +235,7 @@ export function projectHost(state: GameState, now: number): HostView {
       : null,
     lockedOutPlayerIds: state.lockedOutPlayerIds,
     auditLog: state.auditLog,
+    dailyDoubleWager: state.dailyDoubleWager,
     serverNow: now,
   };
 }
@@ -240,6 +244,7 @@ export function projectContestant(state: GameState, playerId: string, now: numbe
   const board = projectBoard(state, now);
   const isControllingPlayer = state.controllingPlayerId === playerId;
   const lockoutUntil = state.lockoutUntil[playerId] ?? null;
+  const canSeeDailyDoubleWager = isControllingPlayer && (state.phase === 'DAILY_DOUBLE_WAGER' || state.phase === 'DAILY_DOUBLE_CLUE');
   return {
     ...board,
     playerId,
@@ -251,5 +256,6 @@ export function projectContestant(state: GameState, playerId: string, now: numbe
         ? isControllingPlayer
         : state.phase === 'FINAL_WAGER' && state.players.some((p) => p.id === playerId),
     canAnswer: state.phase === 'DAILY_DOUBLE_CLUE' ? isControllingPlayer : false,
+    dailyDoubleWager: canSeeDailyDoubleWager ? state.dailyDoubleWager : null,
   };
 }

@@ -18,6 +18,7 @@ export type Intent =
   | { type: 'RULE_INCORRECT'; playerId: string }
   | { type: 'TIME_EXPIRE' }
   | { type: 'REVEAL_ANSWER' }
+  | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
   | { type: 'UNDO_LAST_RULING' };
 
@@ -84,6 +85,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRuleIncorrect(state, intent.playerId, ctx);
     case 'TIME_EXPIRE':
       return handleTimeExpire(state);
+    case 'SUBMIT_DD_WAGER':
+      return handleSubmitDDWager(state, intent);
     case 'REVEAL_ANSWER':
       return handleRevealAnswer(state);
     case 'ADJUST_SCORE':
@@ -513,6 +516,54 @@ function handleTimeExpire(state: GameState): ReducerResult {
       ...resolveClueReturnToBoard(state, state.currentClueId),
       revealedAnswer: clue?.answer ?? null,
       lastOutcome: null,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+const DEFAULT_MIN_WAGER = 5;
+
+function getHighestClueValueInRound(state: GameState): number {
+  const round = state.board.rounds[state.roundIndex];
+  if (!round) return 0;
+  return round.clues.reduce((max, clue) => (clue.value != null && clue.value > max ? clue.value : max), 0);
+}
+
+function handleSubmitDDWager(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SUBMIT_DD_WAGER' }>,
+): ReducerResult {
+  if (state.dailyDoubleWager != null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A wager has already been submitted for this Daily Double' }] };
+  }
+
+  if (state.phase !== 'DAILY_DOUBLE_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Daily Double wager is being accepted right now' }] };
+  }
+
+  if (state.controllingPlayerId !== intent.playerId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling contestant can wager' }] };
+  }
+
+  const player = state.players.find((p) => p.id === intent.playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  const maxWager = Math.max(player.score, getHighestClueValueInRound(state));
+  if (intent.amount < DEFAULT_MIN_WAGER) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be at least the minimum of $${DEFAULT_MIN_WAGER}` }] };
+  }
+
+  if (intent.amount > maxWager) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: `Wager cannot exceed the maximum of $${maxWager}` }] };
+  }
+
+  return {
+    state: {
+      ...state,
+      phase: 'DAILY_DOUBLE_CLUE',
+      dailyDoubleWager: intent.amount,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

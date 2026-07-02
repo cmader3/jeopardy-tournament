@@ -70,6 +70,7 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     lockoutUntil: null,
     canWager: false,
     canAnswer: false,
+    dailyDoubleWager: null,
     ...overrides,
   };
 }
@@ -87,6 +88,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     buzz: vi.fn(),
     ruleCorrect: vi.fn(),
     ruleIncorrect: vi.fn(),
+    submitDDWager: vi.fn(),
     clearError: vi.fn(),
   });
 }
@@ -369,6 +371,114 @@ describe('PlayRoute', () => {
     await userEvent.click(button);
 
     expect(await screen.findByTestId('daily-double-splash')).toBeInTheDocument();
+  });
+
+  it('shows a wager input only to the controlling contestant during a Daily Double', async () => {
+    const submitDDWager = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        playerId: 'p1',
+        isControllingPlayer: true,
+        canWager: true,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      submitDDWager,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-wager-input')).toBeInTheDocument();
+    expect(screen.queryByTestId('daily-double-passive')).not.toBeInTheDocument();
+
+    const wagerInput = screen.getByTestId('dd-wager-input');
+    await userEvent.clear(wagerInput);
+    await userEvent.type(wagerInput, '200');
+    await userEvent.click(screen.getByTestId('dd-wager-submit'));
+
+    expect(submitDDWager).toHaveBeenCalledWith(200);
+  });
+
+  it('shows a passive Daily Double state to non-controlling contestants', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        playerId: 'p2',
+        isControllingPlayer: false,
+        controllingPlayerId: 'p1',
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Bob');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-passive')).toBeInTheDocument();
+    expect(screen.queryByTestId('daily-double-wager-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dd-wager-input')).not.toBeInTheDocument();
+  });
+
+  it('shows a locked wager to the controlling contestant after submission', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_CLUE',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        currentClueText: 'This planet is known as the Red Planet',
+        playerId: 'p1',
+        isControllingPlayer: true,
+        dailyDoubleWager: 200,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-clue-text')).toHaveTextContent('This planet is known as the Red Planet');
+    expect(screen.getByTestId('dd-wager-locked-amount')).toHaveTextContent('200');
   });
 
   it('shows the buzzer and sends a buzz when armed', async () => {

@@ -409,3 +409,60 @@ describe('projections', () => {
     expect(contestantView.players).toEqual(boardView.players);
   });
 });
+
+describe('Daily Double secrecy', () => {
+  it('projectBoard never exposes the Daily Double wager', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = { ...state, players: [alice], controllingPlayerId: alice.id, currentClueId: 'cl2', dailyDoubleWager: 500 };
+
+    const wagerView = projectBoard({ ...state, phase: 'DAILY_DOUBLE_WAGER' }, NOW);
+    const clueView = projectBoard({ ...state, phase: 'DAILY_DOUBLE_CLUE' }, NOW);
+
+    expect(wagerView.dailyDoubleWager).toBeNull();
+    expect(clueView.dailyDoubleWager).toBeNull();
+  });
+
+  it('projectBoard hides the clue text and answer during the Daily Double phases', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = { ...state, players: [alice], controllingPlayerId: alice.id, currentClueId: 'cl2', dailyDoubleWager: 500 };
+
+    const wagerView = projectBoard({ ...state, phase: 'DAILY_DOUBLE_WAGER' }, NOW);
+    const clueView = projectBoard({ ...state, phase: 'DAILY_DOUBLE_CLUE' }, NOW);
+
+    expect(wagerView.currentClueText).toBeNull();
+    expect(wagerView.answer).toBeNull();
+    expect(clueView.currentClueText).toBe('This planet is known as the Red Planet');
+    expect(clueView.answer).toBeNull();
+  });
+
+  it('projectHost exposes the Daily Double wager to the host', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = { ...state, players: [alice], controllingPlayerId: alice.id, currentClueId: 'cl2', dailyDoubleWager: 500 };
+
+    const hostView = projectHost({ ...state, phase: 'DAILY_DOUBLE_WAGER' }, NOW);
+
+    expect(hostView.dailyDoubleWager).toBe(500);
+  });
+
+  it('projectContestant exposes the wager only to the controlling contestant', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = { ...state, players: [alice, bob], controllingPlayerId: alice.id, currentClueId: 'cl2', dailyDoubleWager: 500 };
+
+    const controllerView = projectContestant({ ...state, phase: 'DAILY_DOUBLE_WAGER' }, alice.id, NOW);
+    const otherView = projectContestant({ ...state, phase: 'DAILY_DOUBLE_WAGER' }, bob.id, NOW);
+
+    expect(controllerView.dailyDoubleWager).toBe(500);
+    expect(controllerView.canWager).toBe(true);
+    expect(otherView.dailyDoubleWager).toBeNull();
+    expect(otherView.canWager).toBe(false);
+  });
+});
