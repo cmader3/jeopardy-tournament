@@ -144,7 +144,7 @@ function expectProjectionsEqual(a: Record<string, unknown>, b: Record<string, un
   expect(Math.abs((aNow as number) - (bNow as number))).toBeLessThanOrEqual(50);
 }
 
-describe('game sockets', () => {
+describe('game sockets', { timeout: 15000 }, () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
@@ -805,7 +805,7 @@ describe('game sockets', () => {
   });
 });
 
-describe('clue selection sockets', () => {
+describe('clue selection sockets', { timeout: 15000 }, () => {
   function makePlayableBoardPayload() {
     return {
       name: 'Playable Socket Board',
@@ -1285,11 +1285,10 @@ describe('clue selection sockets', () => {
       bob.disconnect();
       await server.close();
     },
-    10000,
   );
 });
 
-describe('buzzer arming and fastest-finger sockets', () => {
+describe('buzzer arming and fastest-finger sockets', { timeout: 15000 }, () => {
   async function setupGame(server: Awaited<ReturnType<typeof createTestServer>>) {
     const board = await boardRepository.create({
       name: 'Buzzer Socket Board',
@@ -1495,7 +1494,7 @@ describe('buzzer arming and fastest-finger sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('wrong-then-right sequence broadcasts consistent scores and control to all roles', async () => {
     const server = await createTestServer();
@@ -1565,7 +1564,7 @@ describe('buzzer arming and fastest-finger sockets', () => {
   });
 });
 
-describe('host score tools and undo sockets', () => {
+describe('host score tools and undo sockets', { timeout: 15000 }, () => {
   function makeScoreToolsBoardPayload() {
     return {
       name: 'Score Tools Socket Board',

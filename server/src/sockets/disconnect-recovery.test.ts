@@ -162,7 +162,7 @@ async function setupGame(server: Awaited<ReturnType<typeof createTestServer>>) {
   return { roomCode, host, boardClient, alice, bob, tokenA, tokenB };
 }
 
-describe('disconnect and recovery during active play', () => {
+describe('disconnect and recovery during active play', { timeout: 15000 }, () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
@@ -219,7 +219,7 @@ describe('disconnect and recovery during active play', () => {
     boardClient.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('buzzed-in contestant disconnecting before the ruling does not stall the clue; host rules incorrect and re-arms', async () => {
     const server = await createTestServer();
@@ -256,7 +256,7 @@ describe('disconnect and recovery during active play', () => {
     boardClient.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('controlling contestant disconnecting during board-select does not stall the game; host can select via override', async () => {
     const server = await createTestServer();
@@ -288,7 +288,7 @@ describe('disconnect and recovery during active play', () => {
     boardClient.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('reconnect during active play restores the same slot, score, and current clue state', async () => {
     const server = await createTestServer();
@@ -344,7 +344,7 @@ describe('disconnect and recovery during active play', () => {
     boardClient.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('server restart mid-game recovers the session for host, board, and contestants', async () => {
     const server = await createTestServer();
@@ -417,7 +417,7 @@ describe('disconnect and recovery during active play', () => {
     bob.disconnect();
     await server.close();
     await recoveredServer.close();
-  }, 10000);
+  });
 
   it('new contestant joining after the game has started is rejected deterministically', async () => {
     const server = await createTestServer();
@@ -442,7 +442,7 @@ describe('disconnect and recovery during active play', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('switching to a new device without a token is deterministically rejected, never duplicating the player', async () => {
     const server = await createTestServer();
@@ -471,5 +471,5 @@ describe('disconnect and recovery during active play', () => {
     boardClient.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 });

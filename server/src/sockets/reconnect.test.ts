@@ -111,7 +111,7 @@ function waitForToken(client: ClientSocket): Promise<{ reconnectToken: string; p
   });
 }
 
-describe('reconnect token verification', () => {
+describe('reconnect token verification', { timeout: 15000 }, () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });

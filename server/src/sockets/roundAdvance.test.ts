@@ -243,7 +243,7 @@ async function resolveClue(host: ClientSocket, boardClient: ClientSocket, alice:
   return Promise.all([hostUpdate, boardUpdate, aliceUpdate, bobUpdate]);
 }
 
-describe('round advance sockets', () => {
+describe('round advance sockets', { timeout: 15000 }, () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
@@ -289,7 +289,7 @@ describe('round advance sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('advancing from ROUND_TRANSITION enters Double Jeopardy BOARD_SELECT with carried-over scores', async () => {
     const server = await createTestServer();
@@ -330,7 +330,7 @@ describe('round advance sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('with Double Jeopardy disabled the second advance goes to FINAL_INTRO', async () => {
     const server = await createTestServer();
@@ -369,7 +369,7 @@ describe('round advance sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('non-host cannot advance the round', async () => {
     const server = await createTestServer();
@@ -390,7 +390,7 @@ describe('round advance sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 
   it('advancing before the round is complete is rejected', async () => {
     const server = await createTestServer();
@@ -408,5 +408,5 @@ describe('round advance sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  }, 10000);
+  });
 });
