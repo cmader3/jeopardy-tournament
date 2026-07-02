@@ -623,3 +623,32 @@
   text-transform: uppercase;
 }
 
+.finalWager {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  min-height: 0;
+}
+
+.finalWagerStatus {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.finalWagerHeading {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  color: var(--value-gold);
+  text-transform: uppercase;
+  margin: 0;
+}
+

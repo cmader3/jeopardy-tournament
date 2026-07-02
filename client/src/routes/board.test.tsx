@@ -65,6 +65,7 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     transitionTarget: null,
     finalNoEligiblePlayers: false,
     finalEligiblePlayerIds: [],
+    finalWagerSubmissionStatus: {},
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -729,5 +730,51 @@ describe('BoardRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
     expect(await screen.findByTestId('final-no-eligible')).toBeInTheDocument();
+  });
+
+  it('shows the Final wager phase with submission status and no amounts', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_WAGER',
+        players: [
+          { id: 'p1', name: 'Alice', score: 200, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+        finalEligiblePlayerIds: ['p1', 'p2'],
+        finalWagerSubmissionStatus: { p1: true, p2: false },
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('final-wager')).toBeInTheDocument();
+    expect(screen.getByTestId('final-wager-status')).toBeInTheDocument();
+    expect(screen.getAllByTestId('final-wager-player')).toHaveLength(2);
+    expect(screen.getAllByTestId('final-wager-submitted')).toHaveLength(1);
+    expect(screen.getAllByTestId('final-wager-pending')).toHaveLength(1);
+    expect(screen.queryByText('$150')).not.toBeInTheDocument();
+  });
+
+  it('shows the Final clue text during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('clue-text')).toHaveTextContent('He wrote The Hobbit');
   });
 });

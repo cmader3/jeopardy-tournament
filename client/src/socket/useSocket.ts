@@ -21,6 +21,8 @@ export interface SocketState<T> {
   adjustScore?: (playerId: string, score: number) => void;
   undoLastRuling?: () => void;
   submitDDWager?: (amount: number) => void;
+  submitFinalWager?: (amount: number) => void;
+  forceFinalWagers?: () => void;
   cancelDailyDouble?: () => void;
   advanceRound?: () => void;
   openFinalWagers?: () => void;
@@ -135,6 +137,14 @@ export function useSocket<T>(
     socketRef.current?.emit('submit_dd_wager', { amount });
   }, []);
 
+  const submitFinalWager = useCallback((amount: number) => {
+    socketRef.current?.emit('submit_final_wager', { amount });
+  }, []);
+
+  const forceFinalWagers = useCallback(() => {
+    socketRef.current?.emit('force_final_wagers');
+  }, []);
+
   const cancelDailyDouble = useCallback(() => {
     socketRef.current?.emit('cancel_daily_double');
   }, []);
@@ -155,7 +165,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, clearError };
+  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, clearError };
 }
 
 export function getStoredContestantToken(): {

@@ -270,6 +270,45 @@ interface FinalIntroProps {
   state: BoardView;
 }
 
+interface FinalWagerProps {
+  state: BoardView;
+}
+
+function FinalWager({ state }: FinalWagerProps) {
+  const category = state.round?.categories[0];
+  const eligibleSet = new Set(state.finalEligiblePlayerIds);
+
+  return (
+    <div className={styles.finalWager} data-testid="final-wager">
+      <RoundBanner roundType="FINAL" />
+      <div className={styles.finalCategory} data-testid="final-category">
+        {category?.title ?? 'Final Category'}
+      </div>
+      <div className={styles.finalWagerStatus} data-testid="final-wager-status">
+        <h3 className={styles.finalWagerHeading}>Wagers are being submitted</h3>
+        <div className={styles.finalPlayerList} data-testid="final-wager-player-list">
+          {state.players.map((player) => {
+            const eligible = eligibleSet.has(player.id);
+            const submitted = state.finalWagerSubmissionStatus[player.id] ?? false;
+            return (
+              <div
+                key={player.id}
+                className={`${styles.finalPlayer} ${eligible ? styles.finalEligible : styles.finalIneligible}`}
+                data-testid="final-wager-player"
+              >
+                <span className={styles.finalPlayerName}>{player.name}</span>
+                <span className={styles.finalPlayerStatus} data-testid={eligible ? (submitted ? 'final-wager-submitted' : 'final-wager-pending') : 'final-wager-not-participating'}>
+                  {eligible ? (submitted ? 'Wager submitted' : 'Pending') : 'Not participating'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FinalIntro({ state }: FinalIntroProps) {
   const category = state.round?.categories[0];
   const eligibleSet = new Set(state.finalEligiblePlayerIds);
@@ -336,6 +375,10 @@ function renderStage(state: BoardView) {
 
   if (state.phase === 'FINAL_INTRO') {
     return <FinalIntro state={state} />;
+  }
+
+  if (state.phase === 'FINAL_WAGER') {
+    return <FinalWager state={state} />;
   }
 
   if (state.phase === 'COMPLETE') {

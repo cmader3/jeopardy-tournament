@@ -20,6 +20,8 @@ export type Intent =
   | { type: 'REVEAL_CLUE' }
   | { type: 'REVEAL_ANSWER' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
+  | { type: 'SUBMIT_FINAL_WAGER'; playerId: string; amount: number }
+  | { type: 'FORCE_FINAL_WAGERS' }
   | { type: 'CANCEL_DAILY_DOUBLE' }
   | { type: 'ADVANCE_ROUND' }
   | { type: 'OVERRIDE_CONTROL'; playerId: string }
@@ -94,6 +96,10 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleTimeExpire(state);
     case 'SUBMIT_DD_WAGER':
       return handleSubmitDDWager(state, intent);
+    case 'SUBMIT_FINAL_WAGER':
+      return handleSubmitFinalWager(state, intent);
+    case 'FORCE_FINAL_WAGERS':
+      return handleForceFinalWagers(state);
     case 'CANCEL_DAILY_DOUBLE':
       return handleCancelDailyDouble(state);
     case 'REVEAL_CLUE':
@@ -845,6 +851,79 @@ function handleOverrideControl(state: GameState, playerId: string): ReducerResul
 
 function getFinalEligiblePlayers(players: Player[]): Player[] {
   return players.filter((p) => p.score > 0);
+}
+
+function getFinalRoundClueId(state: GameState): string | null {
+  const round = state.board.rounds[state.roundIndex];
+  if (!round || round.type !== 'FINAL') return null;
+  return round.clues[0]?.id ?? null;
+}
+
+function closeFinalWagerPhase(state: GameState): GameState {
+  const eligible = getFinalEligiblePlayers(state.players);
+  const finalWagers = { ...state.finalWagers };
+  for (const player of eligible) {
+    if (finalWagers[player.id] === undefined) {
+      finalWagers[player.id] = 0;
+    }
+  }
+  return {
+    ...state,
+    phase: 'FINAL_CLUE',
+    finalWagers,
+    currentClueId: getFinalRoundClueId(state),
+  };
+}
+
+function handleSubmitFinalWager(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SUBMIT_FINAL_WAGER' }>,
+): ReducerResult {
+  if (state.phase !== 'FINAL_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final wager is being accepted right now' }] };
+  }
+
+  const player = state.players.find((p) => p.id === intent.playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  if (player.score <= 0) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only eligible contestants can submit a Final wager' }] };
+  }
+
+  if (state.finalWagers[player.id] !== undefined) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final wager has already been submitted' }] };
+  }
+
+  if (!Number.isInteger(intent.amount)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Wager must be a whole number' }] };
+  }
+
+  if (intent.amount < 0 || intent.amount > player.score) {
+    return {
+      state,
+      effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be between 0 and $${player.score}` }],
+    };
+  }
+
+  const updated = { ...state, finalWagers: { ...state.finalWagers, [player.id]: intent.amount } };
+  const eligible = getFinalEligiblePlayers(updated.players);
+  const allSubmitted = eligible.length > 0 && eligible.every((p) => updated.finalWagers[p.id] !== undefined);
+
+  if (allSubmitted) {
+    return { state: closeFinalWagerPhase(updated), effects: [{ type: 'BROADCAST_STATE' }] };
+  }
+
+  return { state: updated, effects: [{ type: 'BROADCAST_STATE' }] };
+}
+
+function handleForceFinalWagers(state: GameState): ReducerResult {
+  if (state.phase !== 'FINAL_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Final wagers cannot be forced right now' }] };
+  }
+
+  return { state: closeFinalWagerPhase(state), effects: [{ type: 'BROADCAST_STATE' }] };
 }
 
 function handleOpenFinalWagers(state: GameState): ReducerResult {

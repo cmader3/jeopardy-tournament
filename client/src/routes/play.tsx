@@ -279,6 +279,103 @@ function DailyDoubleWager({
   );
 }
 
+function FinalWager({
+  state,
+  error,
+  onSubmit,
+  clearError,
+}: {
+  state: ContestantView;
+  error?: string | null;
+  onSubmit?: (amount: number) => void;
+  clearError?: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const me = state.players.find((p) => p.id === state.playerId);
+  const maxWager = me?.score ?? 0;
+  const isLocked = state.finalWagerSubmitted;
+
+  if (!state.isEligibleForFinal) {
+    return (
+      <div data-testid="final-wager-ineligible">
+        <p>You are not eligible for Final Jeopardy.</p>
+      </div>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <div data-testid="final-wager-locked">
+        <p data-testid="final-wager-locked-message">Your Final Jeopardy wager is locked in.</p>
+        <p data-testid="final-wager-locked-amount">Your wager: {'$'}{state.myFinalWager}</p>
+      </div>
+    );
+  }
+
+  const isWagerError = (msg?: string | null) => Boolean(msg && /wager/i.test(msg));
+  const displayError = validationError || (isWagerError(error) ? error : null);
+
+  const handleAmountChange = (value: string) => {
+    setAmount(value);
+    if (validationError) {
+      setValidationError(null);
+    }
+    if (error && isWagerError(error)) {
+      clearError?.();
+    }
+  };
+
+  const handleSubmit = () => {
+    const parsed = Number(amount);
+    if (amount === '' || Number.isNaN(parsed) || !Number.isInteger(parsed)) {
+      setValidationError(`Please enter a valid whole-dollar wager amount between $0 and $${maxWager}.`);
+      return;
+    }
+    if (parsed < 0) {
+      setValidationError(`Wager cannot be negative (allowed range: $0 - $${maxWager}).`);
+      return;
+    }
+    if (parsed > maxWager) {
+      setValidationError(`Wager cannot exceed $${maxWager} (allowed range: $0 - $${maxWager}).`);
+      return;
+    }
+    onSubmit?.(parsed);
+  };
+
+  return (
+    <div data-testid="final-wager-input">
+      <p data-testid="final-wager-heading">Final Jeopardy Wager</p>
+      <p>Enter your wager ({'$'}0 - {'$'}{maxWager})</p>
+      <input
+        type="number"
+        step="1"
+        value={amount}
+        onChange={(e) => handleAmountChange(e.target.value)}
+        min={0}
+        max={maxWager}
+        data-testid="final-wager-amount-input"
+        aria-invalid={displayError ? 'true' : undefined}
+        aria-describedby={displayError ? 'final-wager-error' : undefined}
+      />
+      {displayError && (
+        <p
+          id="final-wager-error"
+          data-testid="final-wager-error"
+          className="error"
+          role="alert"
+          aria-live="polite"
+        >
+          {displayError}
+        </p>
+      )}
+      <button type="button" onClick={handleSubmit} data-testid="final-wager-submit">
+        Submit Wager
+      </button>
+    </div>
+  );
+}
+
 function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
@@ -304,7 +401,8 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
     (gameState?.phase === 'CLUE_REVEALED' ||
       gameState?.phase === 'BUZZERS_ARMED' ||
       gameState?.phase === 'BUZZED' ||
-      gameState?.phase === 'DAILY_DOUBLE_CLUE');
+      gameState?.phase === 'DAILY_DOUBLE_CLUE' ||
+      gameState?.phase === 'FINAL_CLUE');
 
   const showBuzzer =
     gameState?.phase === 'CLUE_REVEALED' ||
@@ -381,6 +479,14 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 <p data-testid="contestant-final-ineligible">You are not eligible for Final Jeopardy.</p>
               )}
             </div>
+          )}
+          {gameState.phase === 'FINAL_WAGER' && (
+            <FinalWager
+              state={gameState}
+              onSubmit={socket.submitFinalWager}
+              error={error}
+              clearError={clearError}
+            />
           )}
           {gameState.phase === 'BOARD_SELECT' && gameState.round && (
             <>

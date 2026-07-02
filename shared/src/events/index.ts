@@ -10,6 +10,7 @@ export const ClientToServer = {
   SUBMIT_DD_WAGER: 'submit_dd_wager',
   SUBMIT_FINAL_WAGER: 'submit_final_wager',
   SUBMIT_FINAL_ANSWER: 'submit_final_answer',
+  FORCE_FINAL_WAGERS: 'force_final_wagers',
   REVEAL_CLUE: 'reveal_clue',
   REVEAL_ANSWER: 'reveal_answer',
   CANCEL_DAILY_DOUBLE: 'cancel_daily_double',
@@ -52,6 +53,8 @@ export interface SubmitWagerPayload {
 export interface SubmitFinalAnswerPayload {
   answer: string;
 }
+
+export type ForceFinalWagersPayload = Record<string, never>;
 
 export interface RevealAnswerPayload {
   playerId?: string;

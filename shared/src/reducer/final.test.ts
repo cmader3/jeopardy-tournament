@@ -163,3 +163,119 @@ describe('OPEN_FINAL_WAGERS', () => {
     ]);
   });
 });
+
+function setupFinalWager(scores: Record<string, number>): GameState {
+  const intro = setupFinalIntro(scores);
+  const opened = reduce(intro, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW });
+  return opened.state;
+}
+
+describe('SUBMIT_FINAL_WAGER', () => {
+  it('accepts a wager of 0', () => {
+    const state = setupFinalWager({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 0 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalWagers['p1']).toBe(0);
+  });
+
+  it('accepts a wager equal to the full current score', () => {
+    const state = setupFinalWager({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 200 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalWagers['p1']).toBe(200);
+  });
+
+  it('rejects a negative wager', () => {
+    const state = setupFinalWager({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: -1 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('between') });
+    expect(result.state.finalWagers['p1']).toBeUndefined();
+  });
+
+  it('rejects a wager greater than the current score', () => {
+    const state = setupFinalWager({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 201 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('between') });
+    expect(result.state.finalWagers['p1']).toBeUndefined();
+  });
+
+  it('rejects a wager from an ineligible contestant', () => {
+    const state = setupFinalWager({ p1: 200, p2: 0 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p2', amount: 0 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('eligible') });
+    expect(result.state.finalWagers['p2']).toBeUndefined();
+  });
+
+  it('is rejected outside of FINAL_WAGER', () => {
+    const intro = setupFinalIntro({ p1: 200 });
+
+    const result = reduce(intro, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 100 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+
+  it('locks the wager so it cannot be changed', () => {
+    const state = setupFinalWager({ p1: 200, p2: 100 });
+    const first = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 50 }, { now: NOW });
+
+    const second = reduce(first.state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 100 }, { now: NOW });
+
+    expect(second.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+    expect(second.state.finalWagers['p1']).toBe(50);
+  });
+
+  it('advances to FINAL_CLUE when all eligible contestants have submitted', () => {
+    const state = setupFinalWager({ p1: 200, p2: 100 });
+
+    const first = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 200 }, { now: NOW });
+    expect(first.state.phase).toBe('FINAL_WAGER');
+
+    const second = reduce(first.state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p2', amount: 100 }, { now: NOW });
+
+    expect(second.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(second.state.phase).toBe('FINAL_CLUE');
+    expect(second.state.currentClueId).toBe('cl-final');
+    expect(second.state.finalWagers).toEqual({ p1: 200, p2: 100 });
+  });
+
+  it('does not auto-advance when some eligible contestants have not submitted', () => {
+    const state = setupFinalWager({ p1: 200, p2: 100 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 200 }, { now: NOW });
+
+    expect(result.state.phase).toBe('FINAL_WAGER');
+    expect(result.state.finalWagers).toEqual({ p1: 200 });
+  });
+});
+
+describe('FORCE_FINAL_WAGERS', () => {
+  it('advances to FINAL_CLUE and defaults missing wagers to 0', () => {
+    const state = setupFinalWager({ p1: 200, p2: 100 });
+    const partial = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 50 }, { now: NOW });
+
+    const result = reduce(partial.state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('FINAL_CLUE');
+    expect(result.state.currentClueId).toBe('cl-final');
+    expect(result.state.finalWagers).toEqual({ p1: 50, p2: 0 });
+  });
+
+  it('is rejected outside of FINAL_WAGER', () => {
+    const intro = setupFinalIntro({ p1: 200 });
+
+    const result = reduce(intro, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+});

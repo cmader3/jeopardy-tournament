@@ -43,6 +43,8 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     cancelDailyDouble: vi.fn(),
     advanceRound: vi.fn(),
     openFinalWagers: vi.fn(),
+    submitFinalWager: vi.fn(),
+    forceFinalWagers: vi.fn(),
     overrideControl: vi.fn(),
     clearError: vi.fn(),
     ...overrides,
@@ -123,6 +125,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     transitionTarget: null,
     finalNoEligiblePlayers: false,
     finalEligiblePlayerIds: [],
+    finalWagerSubmissionStatus: {},
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -869,5 +872,43 @@ describe('HostInProgress score tools', () => {
 
     expect(screen.getByTestId('host-no-eligible')).toBeInTheDocument();
     expect(screen.queryByTestId('open-final-wagers-button')).not.toBeInTheDocument();
+  });
+
+  it('shows the Final wager phase with submission status and force button', () => {
+    const state = makeHostState({
+      phase: 'FINAL_WAGER',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 100, connected: true },
+        { id: 'p3', name: 'Carol', score: 0, connected: true },
+      ],
+      finalEligiblePlayerIds: ['p1', 'p2'],
+      finalWagerSubmissionStatus: { p1: true, p2: false, p3: false },
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-final-wager')).toBeInTheDocument();
+    expect(screen.getByTestId('host-final-wager-list')).toBeInTheDocument();
+    expect(screen.getAllByTestId('host-final-wager-submitted')).toHaveLength(1);
+    expect(screen.getAllByTestId('host-final-wager-pending')).toHaveLength(1);
+    expect(screen.getAllByTestId('host-final-wager-not-participating')).toHaveLength(1);
+  });
+
+  it('calls onForceFinalWagers when the force button is clicked', async () => {
+    const onForceFinalWagers = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_WAGER',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      finalEligiblePlayerIds: ['p1'],
+      finalWagerSubmissionStatus: { p1: false },
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onForceFinalWagers={onForceFinalWagers} />);
+
+    await userEvent.click(screen.getByTestId('force-final-wagers-button'));
+    expect(onForceFinalWagers).toHaveBeenCalledTimes(1);
   });
 });

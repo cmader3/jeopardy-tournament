@@ -91,13 +91,16 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     transitionTarget: null,
     finalNoEligiblePlayers: false,
     finalEligiblePlayerIds: [],
+    finalWagerSubmissionStatus: {},
     isEligibleForFinal: false,
+    finalWagerSubmitted: false,
+    myFinalWager: null,
     roundComplete: false,
     ...overrides,
   };
 }
 
-function mockUseSocket(state: ContestantView | null, error: string | null = null) {
+function mockUseSocket(state: ContestantView | null, error: string | null = null, overrides: Record<string, unknown> = {}) {
   useSocket.mockReturnValue({
     connected: true,
     error,
@@ -111,9 +114,12 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     ruleCorrect: vi.fn(),
     ruleIncorrect: vi.fn(),
     submitDDWager: vi.fn(),
+    submitFinalWager: vi.fn(),
+    forceFinalWagers: vi.fn(),
     advanceRound: vi.fn(),
     openFinalWagers: vi.fn(),
     clearError: vi.fn(),
+    ...overrides,
   });
 }
 
@@ -1021,5 +1027,162 @@ describe('PlayRoute', () => {
     expect(screen.getByTestId('contestant-final-category')).toHaveTextContent('Literature');
     expect(screen.getByTestId('contestant-final-ineligible')).toBeInTheDocument();
     expect(screen.queryByTestId('contestant-final-eligible')).not.toBeInTheDocument();
+  });
+
+  it('shows the Final wager input to an eligible contestant', async () => {
+    const submitFinalWager = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_WAGER',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        isEligibleForFinal: true,
+        canWager: true,
+        finalWagerSubmitted: false,
+        myFinalWager: null,
+      }),
+      null,
+      { submitFinalWager },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-wager-input')).toBeInTheDocument();
+    expect(screen.getByTestId('final-wager-heading')).toHaveTextContent('Final Jeopardy Wager');
+
+    await userEvent.type(screen.getByTestId('final-wager-amount-input'), '150');
+    await userEvent.click(screen.getByTestId('final-wager-submit'));
+    expect(submitFinalWager).toHaveBeenCalledWith(150);
+  });
+
+  it('shows a locked confirmation after an eligible contestant submits a Final wager', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_WAGER',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        isEligibleForFinal: true,
+        canWager: false,
+        finalWagerSubmitted: true,
+        myFinalWager: 150,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-wager-locked')).toBeInTheDocument();
+    expect(screen.getByTestId('final-wager-locked-amount')).toHaveTextContent('$150');
+  });
+
+  it('shows an ineligible message to a contestant during FINAL_WAGER', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_WAGER',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 200, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+        isEligibleForFinal: false,
+        canWager: false,
+        finalWagerSubmitted: false,
+        myFinalWager: null,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Bob');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-wager-ineligible')).toBeInTheDocument();
+  });
+
+  it('shows an inline validation error for an out-of-range Final wager', async () => {
+    const submitFinalWager = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_WAGER',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        isEligibleForFinal: true,
+        canWager: true,
+        finalWagerSubmitted: false,
+        myFinalWager: null,
+      }),
+      null,
+      { submitFinalWager },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-wager-input')).toBeInTheDocument();
+    await userEvent.type(screen.getByTestId('final-wager-amount-input'), '250');
+    await userEvent.click(screen.getByTestId('final-wager-submit'));
+    expect(submitFinalWager).not.toHaveBeenCalled();
+    expect(screen.getByTestId('final-wager-error')).toHaveTextContent(/cannot exceed/i);
+  });
+
+  it('shows the Final clue text during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-clue-text')).toHaveTextContent('He wrote The Hobbit');
   });
 });

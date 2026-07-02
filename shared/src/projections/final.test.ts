@@ -186,3 +186,70 @@ describe('Final intro projections', () => {
     expect(view.finalEligiblePlayerIds).toEqual([]);
   });
 });
+
+describe('Final wager projections', () => {
+  it('projectBoard tracks submission status but never exposes wager amounts during FINAL_WAGER', () => {
+    const state = { ...setupFinalIntro({ p1: 200, p2: 100 }), phase: 'FINAL_WAGER' as const, finalWagers: { p1: 150 } };
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalWagerSubmissionStatus).toEqual({ p1: true, p2: false });
+    expect(view).not.toHaveProperty('finalWagers');
+  });
+
+  it('projectHost tracks submission status but never exposes wager amounts during FINAL_WAGER', () => {
+    const state = { ...setupFinalIntro({ p1: 200, p2: 100 }), phase: 'FINAL_WAGER' as const, finalWagers: { p1: 150 } };
+
+    const view = projectHost(state, NOW);
+
+    expect(view.finalWagerSubmissionStatus).toEqual({ p1: true, p2: false });
+    expect(view).not.toHaveProperty('finalWagers');
+  });
+
+  it('projectContestant exposes only the submitting contestant own wager amount', () => {
+    const state = { ...setupFinalIntro({ p1: 200, p2: 100 }), phase: 'FINAL_WAGER' as const, finalWagers: { p1: 150 } };
+
+    const p1 = projectContestant(state, 'p1', NOW);
+    const p2 = projectContestant(state, 'p2', NOW);
+
+    expect(p1.myFinalWager).toBe(150);
+    expect(p1.finalWagerSubmitted).toBe(true);
+    expect(p2.myFinalWager).toBeNull();
+    expect(p2.finalWagerSubmitted).toBe(false);
+    expect(p2).not.toHaveProperty('finalWagers');
+  });
+
+  it('eligible contestants can wager until they submit, then canWager becomes false', () => {
+    const state = { ...setupFinalIntro({ p1: 200 }), phase: 'FINAL_WAGER' as const, finalWagers: {} };
+
+    const before = projectContestant(state, 'p1', NOW);
+    expect(before.canWager).toBe(true);
+
+    const afterState = { ...state, finalWagers: { p1: 50 } };
+    const after = projectContestant(afterState, 'p1', NOW);
+    expect(after.canWager).toBe(false);
+    expect(after.finalWagerSubmitted).toBe(true);
+  });
+
+  it('ineligible contestants cannot wager during FINAL_WAGER', () => {
+    const state = { ...setupFinalIntro({ p1: 200, p2: 0 }), phase: 'FINAL_WAGER' as const, finalWagers: {} };
+
+    const p2 = projectContestant(state, 'p2', NOW);
+    expect(p2.canWager).toBe(false);
+    expect(p2.isEligibleForFinal).toBe(false);
+  });
+
+  it('the Final clue text is visible on the board during FINAL_CLUE', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50 },
+    };
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.currentClueText).toBe('He wrote The Hobbit');
+    expect(view.finalWagerSubmissionStatus).toEqual({ p1: true });
+  });
+});
