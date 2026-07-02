@@ -266,9 +266,80 @@ function IncorrectFeedback({ state }: IncorrectFeedbackProps) {
   );
 }
 
+interface FinalIntroProps {
+  state: BoardView;
+}
+
+function FinalIntro({ state }: FinalIntroProps) {
+  const category = state.round?.categories[0];
+  const eligibleSet = new Set(state.finalEligiblePlayerIds);
+
+  return (
+    <div className={styles.finalIntro} data-testid="final-intro">
+      <RoundBanner roundType="FINAL" />
+      <div className={styles.finalCategory} data-testid="final-category">
+        {category?.title ?? 'Final Category'}
+      </div>
+      <div className={styles.finalEligibility}>
+        <h3 className={styles.finalEligibilityHeading}>Final Jeopardy Eligibility</h3>
+        {state.players.length === 0 ? (
+          <p className={styles.finalNoPlayers}>No contestants joined.</p>
+        ) : (
+          <div className={styles.finalPlayerList} data-testid="final-player-list">
+            {state.players.map((player) => {
+              const eligible = eligibleSet.has(player.id);
+              return (
+                <div
+                  key={player.id}
+                  className={`${styles.finalPlayer} ${eligible ? styles.finalEligible : styles.finalIneligible}`}
+                  data-testid="final-player"
+                >
+                  <span className={styles.finalPlayerName}>{player.name}</span>
+                  <span className={styles.finalPlayerStatus} data-testid={eligible ? 'eligible' : 'not-participating'}>
+                    {eligible ? 'Eligible' : 'Not participating'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface CompleteScreenProps {
+  state: BoardView;
+}
+
+function CompleteScreen({ state }: CompleteScreenProps) {
+  if (state.finalNoEligiblePlayers) {
+    return (
+      <div className={styles.finalIntro} data-testid="final-no-eligible">
+        <RoundBanner roundType="FINAL" />
+        <p className={styles.finalNoEligibleMessage}>No contestants were eligible for Final Jeopardy.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.finalIntro} data-testid="game-complete">
+      <h2 className={styles.finalCompleteHeading}>Game Complete</h2>
+    </div>
+  );
+}
+
 function renderStage(state: BoardView) {
   if (state.phase === 'ROUND_TRANSITION') {
     return <BetweenRoundScreen state={state} />;
+  }
+
+  if (state.phase === 'FINAL_INTRO') {
+    return <FinalIntro state={state} />;
+  }
+
+  if (state.phase === 'COMPLETE') {
+    return <CompleteScreen state={state} />;
   }
 
   const clueOverlay =

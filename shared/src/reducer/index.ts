@@ -24,7 +24,8 @@ export type Intent =
   | { type: 'ADVANCE_ROUND' }
   | { type: 'OVERRIDE_CONTROL'; playerId: string }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
-  | { type: 'UNDO_LAST_RULING' };
+  | { type: 'UNDO_LAST_RULING' }
+  | { type: 'OPEN_FINAL_WAGERS' };
 
 export type Effect =
   | { type: 'NOOP' }
@@ -62,6 +63,7 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     finalAnswers: {},
     revealedAnswer: null,
     transitionTarget: null,
+    finalNoEligiblePlayers: false,
     lastOutcome: null,
   };
 }
@@ -106,6 +108,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleAdjustScore(state, intent, ctx);
     case 'UNDO_LAST_RULING':
       return handleUndoLastRuling(state);
+    case 'OPEN_FINAL_WAGERS':
+      return handleOpenFinalWagers(state);
     default:
       return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Unknown intent' }] };
   }
@@ -835,6 +839,29 @@ function handleOverrideControl(state: GameState, playerId: string): ReducerResul
 
   return {
     state: { ...state, controllingPlayerId: playerId },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function getFinalEligiblePlayers(players: Player[]): Player[] {
+  return players.filter((p) => p.score > 0);
+}
+
+function handleOpenFinalWagers(state: GameState): ReducerResult {
+  if (state.phase !== 'FINAL_INTRO') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot open Final wagers right now' }] };
+  }
+
+  const eligible = getFinalEligiblePlayers(state.players);
+  if (eligible.length === 0) {
+    return {
+      state: { ...state, phase: 'COMPLETE', finalNoEligiblePlayers: true },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  return {
+    state: { ...state, phase: 'FINAL_WAGER', finalNoEligiblePlayers: false },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

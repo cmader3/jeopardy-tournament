@@ -369,6 +369,19 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               </ul>
             </div>
           )}
+          {gameState.phase === 'FINAL_INTRO' && (
+            <div data-testid="contestant-final-intro">
+              <h2 data-testid="contestant-final-heading">Final Jeopardy!</h2>
+              <p data-testid="contestant-final-category">
+                Category: {gameState.round?.categories[0]?.title ?? 'Final Category'}
+              </p>
+              {gameState.isEligibleForFinal ? (
+                <p data-testid="contestant-final-eligible">You are eligible for Final Jeopardy. Wait for the host to open wagers.</p>
+              ) : (
+                <p data-testid="contestant-final-ineligible">You are not eligible for Final Jeopardy.</p>
+              )}
+            </div>
+          )}
           {gameState.phase === 'BOARD_SELECT' && gameState.round && (
             <>
               {gameState.answer && <AnswerBanner state={gameState} />}

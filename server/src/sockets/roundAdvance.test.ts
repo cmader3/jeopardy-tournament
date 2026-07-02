@@ -551,4 +551,91 @@ describe('round advance sockets', { timeout: 15000 }, () => {
     boardClient.disconnect();
     await server.close();
   });
+
+  it('advances from FINAL_INTRO to FINAL_WAGER when at least one contestant is eligible', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server, makeBoardWithoutDoubleJeopardy());
+    const state = server.engine.getState(roomCode)!;
+    const clueId = state.board.rounds[0].clues[0].id;
+
+    await resolveClue(host, boardClient, alice, bob, clueId);
+
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    host.emit('adjust_score', { playerId: aliceId, score: 100 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === aliceId)?.score === 100);
+
+    host.emit('advance_round');
+    await Promise.all([
+      waitForState(host, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(boardClient, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(alice, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(bob, (s) => s.phase === 'ROUND_TRANSITION'),
+    ]);
+
+    const hostUpdate = waitForState(host, (s) => s.phase === 'FINAL_INTRO');
+    const boardUpdate = waitForState(boardClient, (s) => s.phase === 'FINAL_INTRO');
+    const aliceUpdate = waitForState(alice, (s) => s.phase === 'FINAL_INTRO');
+    const bobUpdate = waitForState(bob, (s) => s.phase === 'FINAL_INTRO');
+    host.emit('advance_round');
+    await Promise.all([hostUpdate, boardUpdate, aliceUpdate, bobUpdate]);
+
+    const hostWager = waitForState(host, (s) => s.phase === 'FINAL_WAGER');
+    const boardWager = waitForState(boardClient, (s) => s.phase === 'FINAL_WAGER');
+    const aliceWager = waitForState(alice, (s) => s.phase === 'FINAL_WAGER');
+    const bobWager = waitForState(bob, (s) => s.phase === 'FINAL_WAGER');
+    host.emit('open_final_wagers');
+    const [hostState, boardState, aliceState] = await Promise.all([hostWager, boardWager, aliceWager, bobWager]);
+
+    expect((hostState as { phase: string }).phase).toBe('FINAL_WAGER');
+    expect((boardState as { phase: string }).phase).toBe('FINAL_WAGER');
+    expect((aliceState as { phase: string }).phase).toBe('FINAL_WAGER');
+    expect((aliceState as { finalEligiblePlayerIds: string[] }).finalEligiblePlayerIds).toContain(aliceId);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('skips Final and goes to COMPLETE when no contestants are eligible', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server, makeBoardWithoutDoubleJeopardy());
+    const state = server.engine.getState(roomCode)!;
+    const clueId = state.board.rounds[0].clues[0].id;
+
+    await resolveClue(host, boardClient, alice, bob, clueId);
+
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    host.emit('adjust_score', { playerId: aliceId, score: 0 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === aliceId)?.score === 0);
+
+    host.emit('advance_round');
+    await Promise.all([
+      waitForState(host, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(boardClient, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(alice, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(bob, (s) => s.phase === 'ROUND_TRANSITION'),
+    ]);
+
+    const hostIntro = waitForState(host, (s) => s.phase === 'FINAL_INTRO');
+    const boardIntro = waitForState(boardClient, (s) => s.phase === 'FINAL_INTRO');
+    const aliceIntro = waitForState(alice, (s) => s.phase === 'FINAL_INTRO');
+    const bobIntro = waitForState(bob, (s) => s.phase === 'FINAL_INTRO');
+    host.emit('advance_round');
+    await Promise.all([hostIntro, boardIntro, aliceIntro, bobIntro]);
+
+    const hostComplete = waitForState(host, (s) => s.phase === 'COMPLETE' && s.finalNoEligiblePlayers === true);
+    const boardComplete = waitForState(boardClient, (s) => s.phase === 'COMPLETE' && s.finalNoEligiblePlayers === true);
+    const aliceComplete = waitForState(alice, (s) => s.phase === 'COMPLETE' && s.finalNoEligiblePlayers === true);
+    const bobComplete = waitForState(bob, (s) => s.phase === 'COMPLETE' && s.finalNoEligiblePlayers === true);
+    host.emit('open_final_wagers');
+    await Promise.all([hostComplete, boardComplete, aliceComplete, bobComplete]);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });

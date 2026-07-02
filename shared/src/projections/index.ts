@@ -64,6 +64,8 @@ export interface BoardView {
   lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
   dailyDoubleWager: number | null;
   transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
+  finalNoEligiblePlayers: boolean;
+  finalEligiblePlayerIds: string[];
   roundComplete: boolean;
   serverNow: number;
 }
@@ -86,6 +88,8 @@ export interface HostView {
   auditLog: AuditRecord[];
   dailyDoubleWager: number | null;
   transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
+  finalNoEligiblePlayers: boolean;
+  finalEligiblePlayerIds: string[];
   roundComplete: boolean;
   serverNow: number;
 }
@@ -97,6 +101,7 @@ export interface ContestantView extends BoardView {
   lockoutUntil: number | null;
   canWager: boolean;
   canAnswer: boolean;
+  isEligibleForFinal: boolean;
 }
 
 const CLUE_TEXT_PHASES = new Set<GameState['phase']>([
@@ -196,6 +201,10 @@ export function isRoundComplete(state: GameState): boolean {
   return round.clues.length > 0 && round.clues.every((clue) => state.usedClueIds.includes(clue.id));
 }
 
+function getFinalEligiblePlayerIds(state: GameState): string[] {
+  return state.players.filter((p) => p.score > 0).map((p) => p.id);
+}
+
 export function projectBoard(state: GameState, now: number): BoardView {
   const round = getCurrentRound(state);
   const currentClue = getCurrentClue(state);
@@ -219,6 +228,8 @@ export function projectBoard(state: GameState, now: number): BoardView {
       : null,
     dailyDoubleWager: null,
     transitionTarget: state.transitionTarget,
+    finalNoEligiblePlayers: state.finalNoEligiblePlayers,
+    finalEligiblePlayerIds: getFinalEligiblePlayerIds(state),
     roundComplete: isRoundComplete(state),
     serverNow: now,
   };
@@ -249,6 +260,8 @@ export function projectHost(state: GameState, now: number): HostView {
     auditLog: state.auditLog,
     dailyDoubleWager: state.dailyDoubleWager,
     transitionTarget: state.transitionTarget,
+    finalNoEligiblePlayers: state.finalNoEligiblePlayers,
+    finalEligiblePlayerIds: getFinalEligiblePlayerIds(state),
     roundComplete: isRoundComplete(state),
     serverNow: now,
   };
@@ -259,6 +272,8 @@ export function projectContestant(state: GameState, playerId: string, now: numbe
   const isControllingPlayer = state.controllingPlayerId === playerId;
   const lockoutUntil = state.lockoutUntil[playerId] ?? null;
   const canSeeDailyDoubleWager = isControllingPlayer && (state.phase === 'DAILY_DOUBLE_WAGER' || state.phase === 'DAILY_DOUBLE_CLUE');
+  const me = state.players.find((p) => p.id === playerId);
+  const isEligibleForFinal = me ? me.score > 0 : false;
   return {
     ...board,
     playerId,
@@ -268,8 +283,9 @@ export function projectContestant(state: GameState, playerId: string, now: numbe
     canWager:
       state.phase === 'DAILY_DOUBLE_WAGER'
         ? isControllingPlayer
-        : state.phase === 'FINAL_WAGER' && state.players.some((p) => p.id === playerId),
+        : state.phase === 'FINAL_WAGER' && isEligibleForFinal,
     canAnswer: state.phase === 'DAILY_DOUBLE_CLUE' ? isControllingPlayer : false,
     dailyDoubleWager: canSeeDailyDoubleWager ? state.dailyDoubleWager : null,
+    isEligibleForFinal,
   };
 }

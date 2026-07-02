@@ -96,6 +96,7 @@ export interface GameState {
   finalAnswers: Record<string, string>;
   revealedAnswer: string | null;
   transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
+  finalNoEligiblePlayers: boolean;
   lastOutcome: {
     playerId: string;
     type: 'CORRECT' | 'INCORRECT';

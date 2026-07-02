@@ -87,6 +87,7 @@ export interface HostInProgressProps {
   onUndoLastRuling?: () => void;
   onCancelDailyDouble?: () => void;
   onAdvanceRound?: () => void;
+  onOpenFinalWagers?: () => void;
   onOverrideControl?: (playerId: string) => void;
 }
 
@@ -279,6 +280,57 @@ function HostRoundTransition({ state, onAdvanceRound }: HostRoundTransitionProps
   );
 }
 
+interface HostFinalIntroProps {
+  state: HostView;
+  onOpenFinalWagers?: () => void;
+}
+
+function HostFinalIntro({ state, onOpenFinalWagers }: HostFinalIntroProps) {
+  const category = state.round?.categories[0];
+  const eligibleSet = new Set(state.finalEligiblePlayerIds);
+  const hasEligible = eligibleSet.size > 0;
+
+  return (
+    <div className={styles.hostFinalIntro} data-testid="host-final-intro">
+      <h2 data-testid="host-final-heading">Final Jeopardy!</h2>
+      <div className={styles.hostFinalCategory} data-testid="host-final-category">
+        {category?.title ?? 'Final Category'}
+      </div>
+      <h3>Eligibility</h3>
+      <ul className={styles.hostFinalEligibility} data-testid="host-final-eligibility">
+        {state.players.map((player) => {
+          const eligible = eligibleSet.has(player.id);
+          return (
+            <li
+              key={player.id}
+              className={eligible ? styles.hostFinalEligible : styles.hostFinalIneligible}
+              data-testid={eligible ? 'host-final-eligible' : 'host-final-ineligible'}
+            >
+              <span className={styles.playerName}>{player.name}</span>
+              <span className={styles.playerScore}>{player.score}</span>
+              <span>{eligible ? 'Eligible' : 'Not participating'}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {hasEligible ? (
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={onOpenFinalWagers}
+          data-testid="open-final-wagers-button"
+        >
+          Open Final Wagers
+        </button>
+      ) : (
+        <p className={styles.hostNoEligible} data-testid="host-no-eligible">
+          No contestants are eligible for Final Jeopardy. The game will proceed to final standings.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function HostInProgress({
   roomCode,
   state,
@@ -292,6 +344,7 @@ export function HostInProgress({
   onUndoLastRuling,
   onCancelDailyDouble,
   onAdvanceRound,
+  onOpenFinalWagers,
   onOverrideControl,
 }: HostInProgressProps) {
   const players = state?.players ?? [];
@@ -318,6 +371,21 @@ export function HostInProgress({
           Phase: {state.phase}
         </p>
         <HostRoundTransition state={state} onAdvanceRound={onAdvanceRound} />
+      </main>
+    );
+  }
+
+  if (state?.phase === 'FINAL_INTRO') {
+    return (
+      <main className={`${styles.hostInProgress} route-stub`}>
+        <h1>Game in Progress</h1>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+        <p className={styles.phase} data-testid="phase-indicator">
+          Phase: {state.phase}
+        </p>
+        <HostFinalIntro state={state} onOpenFinalWagers={onOpenFinalWagers} />
       </main>
     );
   }
@@ -581,6 +649,9 @@ export function HostContent() {
   const handleAdvanceRound = useCallback(() => {
     hostSocket.advanceRound?.();
   }, [hostSocket]);
+  const handleOpenFinalWagers = useCallback(() => {
+    hostSocket.openFinalWagers?.();
+  }, [hostSocket]);
   const handleOverrideControl = useCallback(
     (playerId: string) => {
       hostSocket.overrideControl?.(playerId);
@@ -615,6 +686,7 @@ export function HostContent() {
         onUndoLastRuling={handleUndoLastRuling}
         onCancelDailyDouble={handleCancelDailyDouble}
         onAdvanceRound={handleAdvanceRound}
+        onOpenFinalWagers={handleOpenFinalWagers}
         onOverrideControl={handleOverrideControl}
       />
     );

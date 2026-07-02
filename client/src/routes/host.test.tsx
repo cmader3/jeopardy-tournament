@@ -42,6 +42,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     submitDDWager: vi.fn(),
     cancelDailyDouble: vi.fn(),
     advanceRound: vi.fn(),
+    openFinalWagers: vi.fn(),
     overrideControl: vi.fn(),
     clearError: vi.fn(),
     ...overrides,
@@ -74,6 +75,33 @@ function makeRound(overrides: Partial<HostView['round']> = {}): NonNullable<Host
   };
 }
 
+function makeFinalRound(overrides: Partial<HostView['round']> = {}): NonNullable<HostView['round']> {
+  return {
+    id: 'r-final',
+    type: 'FINAL',
+    order: 1,
+    categories: [
+      {
+        id: 'c-final',
+        title: 'Literature',
+        order: 0,
+        clues: [
+          {
+            id: 'cl-final',
+            categoryId: 'c-final',
+            row: 0,
+            value: null,
+            clueText: 'He wrote The Hobbit',
+            answer: 'J.R.R. Tolkien',
+            isDailyDouble: false,
+          },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function makeHostState(overrides: Partial<HostView> = {}): HostView {
   return {
     phase: 'LOBBY',
@@ -93,6 +121,8 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     auditLog: [],
     dailyDoubleWager: null,
     transitionTarget: null,
+    finalNoEligiblePlayers: false,
+    finalEligiblePlayerIds: [],
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -768,5 +798,76 @@ describe('HostInProgress score tools', () => {
 
     await userEvent.click(screen.getByTestId('continue-round-button'));
     expect(onAdvanceRound).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the Final Jeopardy intro with category and eligibility', () => {
+    const state = makeHostState({
+      phase: 'FINAL_INTRO',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+        { id: 'p3', name: 'Carol', score: -100, connected: true },
+      ],
+      finalEligiblePlayerIds: ['p1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-final-intro')).toBeInTheDocument();
+    expect(screen.getByTestId('host-final-heading')).toHaveTextContent('Final Jeopardy!');
+    expect(screen.getByTestId('host-final-category')).toHaveTextContent('Literature');
+    expect(screen.getByTestId('host-final-eligibility')).toBeInTheDocument();
+    expect(screen.getAllByTestId('host-final-eligible')).toHaveLength(1);
+    expect(screen.getAllByTestId('host-final-ineligible')).toHaveLength(2);
+  });
+
+  it('shows the open final wagers button when at least one contestant is eligible', () => {
+    const onOpenFinalWagers = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_INTRO',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+      finalEligiblePlayerIds: ['p1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onOpenFinalWagers={onOpenFinalWagers} />);
+
+    expect(screen.getByTestId('open-final-wagers-button')).toBeInTheDocument();
+  });
+
+  it('calls onOpenFinalWagers when the open final wagers button is clicked', async () => {
+    const onOpenFinalWagers = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_INTRO',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      finalEligiblePlayerIds: ['p1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onOpenFinalWagers={onOpenFinalWagers} />);
+
+    await userEvent.click(screen.getByTestId('open-final-wagers-button'));
+    expect(onOpenFinalWagers).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a no-eligible message when no contestants are eligible', () => {
+    const state = makeHostState({
+      phase: 'FINAL_INTRO',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true },
+        { id: 'p2', name: 'Bob', score: -100, connected: true },
+      ],
+      finalEligiblePlayerIds: [],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-no-eligible')).toBeInTheDocument();
+    expect(screen.queryByTestId('open-final-wagers-button')).not.toBeInTheDocument();
   });
 });

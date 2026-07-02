@@ -63,6 +63,8 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     lastOutcome: null,
     dailyDoubleWager: null,
     transitionTarget: null,
+    finalNoEligiblePlayers: false,
+    finalEligiblePlayerIds: [],
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -71,6 +73,32 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
 
 function mockUseSocket(state: BoardView | null, error: string | null = null) {
   useSocket.mockReturnValue({ connected: true, error, data: state });
+}
+
+function makeFinalRound(overrides: Partial<NonNullable<BoardView['round']>> = {}): NonNullable<BoardView['round']> {
+  return {
+    id: 'r-final',
+    type: 'FINAL',
+    order: 1,
+    categories: [
+      {
+        id: 'c-final',
+        title: 'Literature',
+        order: 0,
+        clues: [{ id: 'cl-final', categoryId: 'c-final', row: 0, value: null }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function makeFinalIntroState(overrides: Partial<BoardView> = {}): BoardView {
+  return makeBoardState({
+    phase: 'FINAL_INTRO',
+    roundIndex: 1,
+    round: makeFinalRound(),
+    ...overrides,
+  });
 }
 
 describe('BoardRoute', () => {
@@ -643,5 +671,63 @@ describe('BoardRoute', () => {
 
     expect(await screen.findByTestId('between-round-screen')).toBeInTheDocument();
     expect(screen.getByTestId('between-round-heading')).toHaveTextContent('Final Jeopardy!');
+  });
+
+  it('shows the Final Jeopardy banner and category during FINAL_INTRO', async () => {
+    mockUseSocket(makeFinalIntroState());
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('final-intro')).toBeInTheDocument();
+    expect(screen.getByTestId('round-banner')).toHaveTextContent('Final Jeopardy!');
+    expect(screen.getByTestId('final-category')).toHaveTextContent('Literature');
+    expect(screen.queryByTestId('clue-text')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+  });
+
+  it('shows eligible and not-participating contestants during FINAL_INTRO', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        players: [
+          { id: 'p1', name: 'Alice', score: 100, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+          { id: 'p3', name: 'Carol', score: -50, connected: true },
+        ],
+        finalEligiblePlayerIds: ['p1'],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const players = await screen.findAllByTestId('final-player');
+    expect(players).toHaveLength(3);
+    expect(screen.getAllByTestId('eligible')).toHaveLength(1);
+    expect(screen.getAllByTestId('not-participating')).toHaveLength(2);
+  });
+
+  it('shows a no-eligible-players message when the Final was skipped', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'COMPLETE',
+        finalNoEligiblePlayers: true,
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: -100, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('final-no-eligible')).toBeInTheDocument();
   });
 });

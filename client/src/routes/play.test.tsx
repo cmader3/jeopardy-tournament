@@ -48,6 +48,23 @@ function makeRound(overrides: Partial<ContestantView['round']> = {}): NonNullabl
   };
 }
 
+function makeFinalRound(overrides: Partial<ContestantView['round']> = {}): NonNullable<ContestantView['round']> {
+  return {
+    id: 'r-final',
+    type: 'FINAL',
+    order: 1,
+    categories: [
+      {
+        id: 'c-final',
+        title: 'Literature',
+        order: 0,
+        clues: [{ id: 'cl-final', categoryId: 'c-final', row: 0, value: null }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function makeContestantState(overrides: Partial<ContestantView> = {}): ContestantView {
   return {
     phase: 'LOBBY',
@@ -72,6 +89,9 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     canAnswer: false,
     dailyDoubleWager: null,
     transitionTarget: null,
+    finalNoEligiblePlayers: false,
+    finalEligiblePlayerIds: [],
+    isEligibleForFinal: false,
     roundComplete: false,
     ...overrides,
   };
@@ -92,6 +112,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     ruleIncorrect: vi.fn(),
     submitDDWager: vi.fn(),
     advanceRound: vi.fn(),
+    openFinalWagers: vi.fn(),
     clearError: vi.fn(),
   });
 }
@@ -941,5 +962,64 @@ describe('PlayRoute', () => {
     expect(scores[0]).toHaveTextContent('300');
     expect(scores[1]).toHaveTextContent('Bob');
     expect(scores[1]).toHaveTextContent('-100');
+  });
+
+  it('shows the Final Jeopardy category and eligible message to an eligible contestant', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_INTRO',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        isEligibleForFinal: true,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-final-intro')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-final-category')).toHaveTextContent('Literature');
+    expect(screen.getByTestId('contestant-final-eligible')).toBeInTheDocument();
+    expect(screen.queryByTestId('contestant-final-ineligible')).not.toBeInTheDocument();
+  });
+
+  it('shows the Final Jeopardy category and not-eligible message to an ineligible contestant', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_INTRO',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 200, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+        isEligibleForFinal: false,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Bob');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-final-intro')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-final-category')).toHaveTextContent('Literature');
+    expect(screen.getByTestId('contestant-final-ineligible')).toBeInTheDocument();
+    expect(screen.queryByTestId('contestant-final-eligible')).not.toBeInTheDocument();
   });
 });

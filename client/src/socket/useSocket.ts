@@ -23,6 +23,7 @@ export interface SocketState<T> {
   submitDDWager?: (amount: number) => void;
   cancelDailyDouble?: () => void;
   advanceRound?: () => void;
+  openFinalWagers?: () => void;
   overrideControl?: (playerId: string) => void;
   clearError?: () => void;
 }
@@ -142,6 +143,10 @@ export function useSocket<T>(
     socketRef.current?.emit('advance_round');
   }, []);
 
+  const openFinalWagers = useCallback(() => {
+    socketRef.current?.emit('open_final_wagers');
+  }, []);
+
   const overrideControl = useCallback((playerId: string) => {
     socketRef.current?.emit('override_control', { playerId });
   }, []);
@@ -150,7 +155,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, cancelDailyDouble, advanceRound, overrideControl, clearError };
+  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, clearError };
 }
 
 export function getStoredContestantToken(): {

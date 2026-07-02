@@ -364,6 +364,25 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('open_final_wagers', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can open Final wagers' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'OPEN_FINAL_WAGERS' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Open Final wagers failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('override_control', async (payload: { playerId: string }) => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

@@ -25,6 +25,14 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
+    answer: null,
+    lastOutcome: null,
+    dailyDoubleWager: null,
+    transitionTarget: null,
+    finalNoEligiblePlayers: false,
+    finalEligiblePlayerIds: [],
+    roundComplete: false,
+    serverNow: 0,
     ...overrides,
   };
 }
