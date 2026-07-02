@@ -465,4 +465,22 @@ describe('Daily Double secrecy', () => {
     expect(otherView.dailyDoubleWager).toBeNull();
     expect(otherView.canWager).toBe(false);
   });
+
+  it('projectContestant exposes the locked wager and clue only to the controlling contestant in DAILY_DOUBLE_CLUE', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = { ...state, players: [alice, bob], controllingPlayerId: alice.id, currentClueId: 'cl2', dailyDoubleWager: 500 };
+
+    const controllerView = projectContestant({ ...state, phase: 'DAILY_DOUBLE_CLUE' }, alice.id, NOW);
+    const otherView = projectContestant({ ...state, phase: 'DAILY_DOUBLE_CLUE' }, bob.id, NOW);
+
+    expect(controllerView.dailyDoubleWager).toBe(500);
+    expect(controllerView.currentClueText).toBe('This planet is known as the Red Planet');
+    expect(controllerView.canWager).toBe(false);
+    expect(otherView.dailyDoubleWager).toBeNull();
+    expect(otherView.currentClueText).toBe('This planet is known as the Red Planet');
+    expect(otherView.canWager).toBe(false);
+  });
 });

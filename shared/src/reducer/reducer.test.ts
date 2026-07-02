@@ -412,13 +412,13 @@ function setupDailyDoubleWager(score = 0): GameState {
 }
 
 describe('SUBMIT_DD_WAGER', () => {
-  it('accepts a valid wager and transitions to DAILY_DOUBLE_CLUE', () => {
+  it('accepts a valid wager and locks it while staying in DAILY_DOUBLE_WAGER', () => {
     const state = setupDailyDoubleWager(1000);
 
     const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
 
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
-    expect(result.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
     expect(result.state.dailyDoubleWager).toBe(200);
   });
 
@@ -447,7 +447,7 @@ describe('SUBMIT_DD_WAGER', () => {
 
     const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
     expect(atMax.state.dailyDoubleWager).toBe(200);
-    expect(atMax.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(atMax.state.phase).toBe('DAILY_DOUBLE_WAGER');
 
     const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 201 }, { now: NOW });
     expect(overMax.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
@@ -458,7 +458,7 @@ describe('SUBMIT_DD_WAGER', () => {
 
     const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 3000 }, { now: NOW });
     expect(atMax.state.dailyDoubleWager).toBe(3000);
-    expect(atMax.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(atMax.state.phase).toBe('DAILY_DOUBLE_WAGER');
 
     const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 3001 }, { now: NOW });
     expect(overMax.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
@@ -470,7 +470,7 @@ describe('SUBMIT_DD_WAGER', () => {
     const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 5 }, { now: NOW });
 
     expect(result.state.dailyDoubleWager).toBe(5);
-    expect(result.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
   });
 
   it('rejects a wager from a non-controlling player', () => {
@@ -483,15 +483,6 @@ describe('SUBMIT_DD_WAGER', () => {
     expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
   });
 
-  it('rejects a wager outside the DAILY_DOUBLE_WAGER phase', () => {
-    let state = setupDailyDoubleWager(1000);
-    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
-
-    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
-
-    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('wager') });
-  });
-
   it('locks a submitted wager and rejects a second submission', () => {
     let state = setupDailyDoubleWager(1000);
     state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
@@ -500,6 +491,124 @@ describe('SUBMIT_DD_WAGER', () => {
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
     expect(result.state.dailyDoubleWager).toBe(200);
+  });
+});
+
+function setupDailyDoubleClue(controllerScore = 1000, wager = 200): GameState {
+  let state = setupDailyDoubleWager(controllerScore);
+  state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: wager }, { now: NOW }).state;
+  return reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
+}
+
+describe('REVEAL_CLUE', () => {
+  it('reveals the Daily Double clue only after a wager is submitted', () => {
+    let state = setupDailyDoubleWager(1000);
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(result.state.currentClueId).toBe(state.currentClueId);
+    expect(result.state.dailyDoubleWager).toBe(200);
+  });
+
+  it('rejects revealing the clue before a wager is submitted', () => {
+    const state = setupDailyDoubleWager(1000);
+
+    const result = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('wager') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+  });
+
+  it('rejects revealing the clue outside the Daily Double', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('Daily Double') });
+  });
+});
+
+describe('Daily Double ruling', () => {
+  it('RULE_CORRECT adds the wager to the controlling player and keeps control', () => {
+    const state = setupDailyDoubleClue(1000, 400);
+    const controllerId = state.controllingPlayerId;
+
+    const result = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.players.find((p) => p.id === controllerId)?.score).toBe(1400);
+    expect(result.state.controllingPlayerId).toBe(controllerId);
+    expect(result.state.usedClueIds).toContain(state.currentClueId);
+    expect(result.state.revealedAnswer).toBe('Mars');
+    expect(result.state.lastOutcome).toEqual({ playerId: controllerId, type: 'CORRECT', value: 400 });
+    expect(result.state.auditLog).toContainEqual(
+      expect.objectContaining({ type: 'CORRECT', playerId: controllerId, value: 400, scoreBefore: 1000, scoreAfter: 1400 }),
+    );
+  });
+
+  it('RULE_INCORRECT subtracts the wager from the controlling player and keeps control', () => {
+    const state = setupDailyDoubleClue(0, 200);
+    const controllerId = state.controllingPlayerId;
+
+    const result = reduce(state, { type: 'RULE_INCORRECT', playerId: controllerId! }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.players.find((p) => p.id === controllerId)?.score).toBe(-200);
+    expect(result.state.controllingPlayerId).toBe(controllerId);
+    expect(result.state.usedClueIds).toContain(state.currentClueId);
+    expect(result.state.revealedAnswer).toBe('Mars');
+    expect(result.state.lastOutcome).toEqual({ playerId: controllerId, type: 'INCORRECT', value: 200 });
+    expect(result.state.auditLog).toContainEqual(
+      expect.objectContaining({ type: 'INCORRECT', playerId: controllerId, value: 200, scoreBefore: 0, scoreAfter: -200 }),
+    );
+  });
+
+  it('RULE_INCORRECT only accepts the controlling player', () => {
+    const state = setupDailyDoubleClue(1000, 200);
+    const nonController = state.players.find((p) => p.id !== state.controllingPlayerId);
+
+    const result = reduce(state, { type: 'RULE_INCORRECT', playerId: nonController!.id }, { now: NOW + 100 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('controlling') });
+    expect(result.state.phase).toBe('DAILY_DOUBLE_CLUE');
+  });
+
+  it('rejects a ruling before the clue is revealed', () => {
+    let state = setupDailyDoubleWager(1000);
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
+
+    const correct = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
+    expect(correct.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('Daily Double') });
+
+    const incorrect = reduce(state, { type: 'RULE_INCORRECT', playerId: state.controllingPlayerId! }, { now: NOW + 100 });
+    expect(incorrect.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('Daily Double') });
+  });
+
+  it('resolves a Daily Double even if the controlling player is disconnected', () => {
+    let state = setupDailyDoubleClue(1000, 500);
+    const controllerId = state.controllingPlayerId;
+    state = {
+      ...state,
+      players: state.players.map((p) => (p.id === controllerId ? { ...p, connected: false } : p)),
+    };
+
+    const result = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.players.find((p) => p.id === controllerId)?.score).toBe(1500);
+    expect(result.state.controllingPlayerId).toBe(controllerId);
+  });
+
+  it('does not change any other player score on a Daily Double ruling', () => {
+    const state = setupDailyDoubleClue(1000, 300);
+    const otherPlayer = state.players.find((p) => p.id !== state.controllingPlayerId);
+
+    const result = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
+
+    expect(result.state.players.find((p) => p.id === otherPlayer?.id)?.score).toBe(otherPlayer?.score);
   });
 });
 

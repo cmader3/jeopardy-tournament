@@ -31,6 +31,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     startGame: vi.fn(),
     leaveGame: vi.fn(),
     selectClue: vi.fn(),
+    revealClue: vi.fn(),
     revealAnswer: vi.fn(),
     armBuzzers: vi.fn(),
     buzz: vi.fn(),
@@ -451,6 +452,77 @@ describe('HostInProgress grid and selection', () => {
 
     await userEvent.click(screen.getByTestId('rule-incorrect-button'));
     expect(onRuleIncorrect).toHaveBeenCalledWith('p2');
+  });
+
+  it('shows the reveal clue button once the Daily Double wager is submitted', () => {
+    const onRevealClue = vi.fn();
+    const state = makeHostState({
+      phase: 'DAILY_DOUBLE_WAGER',
+      round: makeRound(),
+      currentClueId: 'cl2',
+      currentClueText: null,
+      controllingPlayerId: 'p1',
+      dailyDoubleWager: 200,
+      players: [{ id: 'p1', name: 'Alice', score: 1000, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onRevealClue={onRevealClue} />);
+
+    expect(screen.getByTestId('reveal-clue-button')).toBeInTheDocument();
+    expect(screen.getByTestId('daily-double-wager')).toHaveTextContent('200');
+    expect(screen.queryByTestId('rule-correct-button')).not.toBeInTheDocument();
+  });
+
+  it('calls onRevealClue when the reveal clue button is clicked', async () => {
+    const onRevealClue = vi.fn();
+    const state = makeHostState({
+      phase: 'DAILY_DOUBLE_WAGER',
+      round: makeRound(),
+      currentClueId: 'cl2',
+      currentClueText: null,
+      controllingPlayerId: 'p1',
+      dailyDoubleWager: 200,
+      players: [{ id: 'p1', name: 'Alice', score: 1000, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onRevealClue={onRevealClue} />);
+
+    await userEvent.click(screen.getByTestId('reveal-clue-button'));
+    expect(onRevealClue).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the ruling buttons during DAILY_DOUBLE_CLUE and rules the controller', async () => {
+    const onRuleCorrect = vi.fn();
+    const onRuleIncorrect = vi.fn();
+    const state = makeHostState({
+      phase: 'DAILY_DOUBLE_CLUE',
+      round: makeRound(),
+      currentClueId: 'cl2',
+      currentClueText: 'This planet is the Red Planet',
+      answer: 'Mars',
+      controllingPlayerId: 'p1',
+      dailyDoubleWager: 200,
+      players: [
+        { id: 'p1', name: 'Alice', score: 1000, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+    });
+    render(
+      <HostInProgress
+        roomCode="WXYZ"
+        state={state}
+        onRuleCorrect={onRuleCorrect}
+        onRuleIncorrect={onRuleIncorrect}
+      />,
+    );
+
+    expect(screen.getByTestId('rule-correct-button')).toBeInTheDocument();
+    expect(screen.getByTestId('rule-incorrect-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('reveal-clue-button')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('rule-correct-button'));
+    expect(onRuleCorrect).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByTestId('rule-incorrect-button'));
+    expect(onRuleIncorrect).toHaveBeenCalledWith('p1');
   });
 });
 

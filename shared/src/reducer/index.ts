@@ -17,6 +17,7 @@ export type Intent =
   | { type: 'RULE_CORRECT' }
   | { type: 'RULE_INCORRECT'; playerId: string }
   | { type: 'TIME_EXPIRE' }
+  | { type: 'REVEAL_CLUE' }
   | { type: 'REVEAL_ANSWER' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
@@ -87,6 +88,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleTimeExpire(state);
     case 'SUBMIT_DD_WAGER':
       return handleSubmitDDWager(state, intent);
+    case 'REVEAL_CLUE':
+      return handleRevealClue(state);
     case 'REVEAL_ANSWER':
       return handleRevealAnswer(state);
     case 'ADJUST_SCORE':
@@ -376,7 +379,75 @@ function resolveClueReturnToBoard(state: GameState, clueId: string): GameState {
   };
 }
 
+function handleDailyDoubleRuling(
+  state: GameState,
+  ctx: ReducerCtx,
+  type: 'CORRECT' | 'INCORRECT',
+  playerId?: string,
+): ReducerResult {
+  if (state.phase !== 'DAILY_DOUBLE_CLUE') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Daily Double is available to rule right now' }] };
+  }
+
+  if (state.dailyDoubleWager == null || state.currentClueId == null || state.controllingPlayerId == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Daily Double is not ready to be ruled' }] };
+  }
+
+  const clue = getCurrentClue(state);
+  if (!clue) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Current clue not found' }] };
+  }
+
+  if (type === 'INCORRECT' && playerId !== state.controllingPlayerId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling contestant can be ruled on a Daily Double' }] };
+  }
+
+  const controllerId = state.controllingPlayerId;
+  const playerIndex = state.players.findIndex((p) => p.id === controllerId);
+  if (playerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Controlling contestant not found' }] };
+  }
+
+  const player = state.players[playerIndex];
+  const value = state.dailyDoubleWager;
+  const scoreBefore = player.score;
+  const scoreAfter = type === 'CORRECT' ? scoreBefore + value : scoreBefore - value;
+  const updatedPlayers = [...state.players];
+  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+
+  const auditEntry = createAuditRecord(
+    type,
+    controllerId,
+    value,
+    scoreBefore,
+    scoreAfter,
+    state.controllingPlayerId,
+    ctx.now,
+    clue.id,
+  );
+
+  return {
+    state: {
+      ...resolveClueReturnToBoard(state, clue.id),
+      players: updatedPlayers,
+      controllingPlayerId: controllerId,
+      auditLog: [...state.auditLog, auditEntry],
+      revealedAnswer: clue.answer,
+      lastOutcome: { playerId: controllerId, type, value },
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
 function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
+  if (state.phase === 'DAILY_DOUBLE_CLUE') {
+    return handleDailyDoubleRuling(state, ctx, 'CORRECT');
+  }
+
+  if (state.phase === 'DAILY_DOUBLE_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Daily Double clue must be revealed before it can be ruled' }] };
+  }
+
   if (state.phase !== 'BUZZED') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is buzzed in' }] };
   }
@@ -427,6 +498,14 @@ function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
 }
 
 function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx): ReducerResult {
+  if (state.phase === 'DAILY_DOUBLE_CLUE') {
+    return handleDailyDoubleRuling(state, ctx, 'INCORRECT', playerId);
+  }
+
+  if (state.phase === 'DAILY_DOUBLE_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Daily Double clue must be revealed before it can be ruled' }] };
+  }
+
   if (state.phase !== 'BUZZED') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is buzzed in' }] };
   }
@@ -562,9 +641,23 @@ function handleSubmitDDWager(
   return {
     state: {
       ...state,
-      phase: 'DAILY_DOUBLE_CLUE',
       dailyDoubleWager: intent.amount,
     },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRevealClue(state: GameState): ReducerResult {
+  if (state.phase !== 'DAILY_DOUBLE_WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Daily Double clue is waiting to be revealed' }] };
+  }
+
+  if (state.dailyDoubleWager == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Daily Double wager must be submitted before the clue is revealed' }] };
+  }
+
+  return {
+    state: { ...state, phase: 'DAILY_DOUBLE_CLUE' },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

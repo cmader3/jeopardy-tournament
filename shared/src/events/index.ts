@@ -10,6 +10,7 @@ export const ClientToServer = {
   SUBMIT_DD_WAGER: 'submit_dd_wager',
   SUBMIT_FINAL_WAGER: 'submit_final_wager',
   SUBMIT_FINAL_ANSWER: 'submit_final_answer',
+  REVEAL_CLUE: 'reveal_clue',
   REVEAL_ANSWER: 'reveal_answer',
   ADVANCE_ROUND: 'advance_round',
   OPEN_FINAL_WAGERS: 'open_final_wagers',

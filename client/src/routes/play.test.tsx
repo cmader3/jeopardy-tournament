@@ -449,6 +449,39 @@ describe('PlayRoute', () => {
     expect(screen.queryByTestId('dd-wager-input')).not.toBeInTheDocument();
   });
 
+  it('shows a locked wager to the controlling contestant while waiting for host reveal', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        playerId: 'p1',
+        isControllingPlayer: true,
+        canWager: false,
+        dailyDoubleWager: 200,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-wager-locked')).toBeInTheDocument();
+    expect(screen.getByTestId('dd-wager-locked-amount')).toHaveTextContent('200');
+    expect(screen.queryByTestId('contestant-clue-text')).not.toBeInTheDocument();
+  });
+
   it('shows a locked wager to the controlling contestant after submission', async () => {
     useSocket.mockReturnValue({
       connected: true,
