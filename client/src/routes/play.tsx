@@ -31,6 +31,8 @@ function useClientTime(serverNow: number): number {
   );
 }
 
+const TOO_EARLY_DISPLAY_MS = 1500;
+
 function Buzzer({
   state,
   onBuzz,
@@ -39,35 +41,49 @@ function Buzzer({
   onBuzz?: (playerId: string) => void;
 }) {
   const clientTime = useClientTime(state.serverNow ?? 0);
-  const isLocked = state.isLockedOut || (state.lockoutUntil != null && state.lockoutUntil > clientTime);
+  const [lastTooEarlyAt, setLastTooEarlyAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (lastTooEarlyAt == null) return;
+    const id = setTimeout(() => setLastTooEarlyAt(null), TOO_EARLY_DISPLAY_MS);
+    return () => clearTimeout(id);
+  }, [lastTooEarlyAt]);
+
+  const isServerLocked = state.isLockedOut || (state.lockoutUntil != null && state.lockoutUntil > clientTime);
   const isWinner = state.buzzWinnerId === state.playerId;
   const isLoser = state.buzzWinnerId != null && state.buzzWinnerId !== state.playerId;
 
+  const displayLockout = lastTooEarlyAt != null && clientTime - lastTooEarlyAt < TOO_EARLY_DISPLAY_MS;
+
   let label = 'Buzz In';
   if (state.phase === 'CLUE_REVEALED') {
-    label = isLocked ? 'Too Early' : 'Wait for Host';
+    label = isServerLocked || displayLockout ? 'Too Early' : 'Wait for Host';
   } else if (state.phase === 'BUZZERS_ARMED') {
-    label = isLocked ? 'Locked Out' : 'Buzz In';
+    label = isServerLocked ? 'Locked Out' : 'Buzz In';
   } else if (state.phase === 'BUZZED') {
     label = isWinner ? 'You\'re In!' : 'Locked Out';
   }
 
   const canBuzz =
-    state.phase === 'BUZZERS_ARMED' &&
-    !isLocked &&
-    !isWinner &&
-    !isLoser;
+    (state.phase === 'CLUE_REVEALED' && !isServerLocked && !displayLockout) ||
+    (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !isWinner && !isLoser);
+
+  const showTooEarly = state.phase === 'CLUE_REVEALED' && (isServerLocked || displayLockout);
 
   const handlePress = useCallback(() => {
-    if (canBuzz) {
+    if (state.phase === 'CLUE_REVEALED' && !isServerLocked && !displayLockout) {
+      setLastTooEarlyAt(clientTime);
+      onBuzz?.(state.playerId);
+    } else if (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !isWinner && !isLoser) {
       onBuzz?.(state.playerId);
     }
-  }, [canBuzz, onBuzz, state.playerId]);
+  }, [state.phase, isServerLocked, displayLockout, isWinner, isLoser, onBuzz, state.playerId, clientTime]);
 
   return (
     <button
       type="button"
       data-testid="contestant-buzzer"
+      data-too-early={showTooEarly ? 'true' : undefined}
       aria-label={label}
       disabled={!canBuzz}
       onClick={handlePress}
@@ -241,7 +257,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           {showBuzzer && (
             <>
               <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
-              <Buzzer state={gameState} onBuzz={socket.buzz} />
+              <Buzzer key={gameState.currentClueId} state={gameState} onBuzz={socket.buzz} />
             </>
           )}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (

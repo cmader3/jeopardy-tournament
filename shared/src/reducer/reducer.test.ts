@@ -541,6 +541,24 @@ describe('BUZZ', () => {
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('locked out') });
   });
 
+  it('an early buzz records a lockout but never makes the player the winner when arming occurs', () => {
+    const state = setupClueRevealed();
+
+    const early = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW });
+    expect(early.state.phase).toBe('CLUE_REVEALED');
+    expect(early.state.buzzWinnerId).toBeNull();
+    expect(early.state.lockoutUntil['p1']).toBe(NOW + 250);
+    expect(early.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+
+    const armed = reduce(early.state, { type: 'ARM_BUZZERS' }, { now: NOW + 50 });
+    expect(armed.state.phase).toBe('BUZZERS_ARMED');
+
+    const rebuzz = reduce(armed.state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 100 });
+    expect(rebuzz.state.phase).toBe('BUZZERS_ARMED');
+    expect(rebuzz.state.buzzWinnerId).toBeNull();
+    expect(rebuzz.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('locked out') });
+  });
+
   it('allows a player to buzz after their early-buzz lockout expires', () => {
     let state = setupClueRevealed();
     state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW }).state;

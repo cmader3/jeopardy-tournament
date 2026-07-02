@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PlayRoute } from './play.js';
 import type { ContestantView } from '@jeopardy/shared';
@@ -16,6 +16,10 @@ import { useSocket, clearStoredContestantToken } from '../socket/useSocket.js';
 beforeEach(() => {
   localStorage.clear();
   (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue(null);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function makeRound(overrides: Partial<ContestantView['round']> = {}): NonNullable<ContestantView['round']> {
@@ -400,6 +404,127 @@ describe('PlayRoute', () => {
     expect(buzzer).toHaveTextContent('Buzz In');
     await userEvent.click(buzzer);
     expect(buzz).toHaveBeenCalledWith('p1');
+  });
+
+  it('presses the buzzer before arming and shows a visible Too Early state', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: false,
+        lockoutUntil: null,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toHaveTextContent('Wait for Host');
+    expect(buzzer).not.toHaveAttribute('data-too-early');
+    expect(buzzer).toBeEnabled();
+
+    await userEvent.click(buzzer);
+
+    expect(buzz).toHaveBeenCalledWith('p1');
+    expect(buzzer).toHaveTextContent('Too Early');
+    expect(buzzer).toHaveAttribute('data-too-early', 'true');
+    expect(buzzer).toBeDisabled();
+  });
+
+  it('returns to Wait for Host after the too-early display lockout expires', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: false,
+        lockoutUntil: null,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    await userEvent.click(buzzer);
+    expect(buzzer).toHaveTextContent('Too Early');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+    });
+
+    expect(buzzer).toHaveTextContent('Wait for Host');
+    expect(buzzer).not.toHaveAttribute('data-too-early');
+    expect(buzzer).toBeEnabled();
+  });
+
+  it('shows Too Early when the contestant is already locked out before arming', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: true,
+        lockoutUntil: Date.now() + 250,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toHaveTextContent('Too Early');
+    expect(buzzer).toHaveAttribute('data-too-early', 'true');
+    expect(buzzer).toBeDisabled();
   });
 
   it('disables the buzzer when the contestant is locked out', async () => {

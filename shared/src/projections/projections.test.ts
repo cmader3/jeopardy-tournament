@@ -296,6 +296,24 @@ describe('projections', () => {
     expect(view.answer).toBeNull();
   });
 
+  it('projectContestant reflects the early-buzz lockout for the affected player', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = {
+      ...state,
+      players: [alice],
+      phase: 'CLUE_REVEALED' as const,
+      currentClueId: 'cl1',
+      lockoutUntil: { p1: NOW + 250 },
+    };
+
+    const view = projectContestant(state, alice.id, NOW);
+
+    expect(view.isLockedOut).toBe(true);
+    expect(view.lockoutUntil).toBe(NOW + 250);
+  });
+
   it('all role projections agree on scores, phase, control, and revealed answer after a correct ruling', () => {
     const board = makeBoard();
     let state = createInitialState('s1', 'ABCD', board);
