@@ -546,6 +546,42 @@ describe('new round grid and control', () => {
     });
   });
 
+  it('prefers a connected contestant over the lowest-score disconnected contestant for new-round control', () => {
+    const board = makeBoardWithDoubleJeopardy();
+    let state = setupGame(board);
+    state = resolveClue(state, 'cl1');
+    state = resolveClue(state, 'cl2');
+    state = resolveClue(state, 'cl3');
+
+    // Give Alice a positive score so Bob is trailing; then disconnect Bob.
+    expect(state.players.find((p) => p.id === 'p1')?.score).toBeGreaterThan(0);
+    state = reduce(state, { type: 'DISCONNECT', playerId: 'p2' }, { now: NOW }).state;
+    expect(state.players.find((p) => p.id === 'p2')?.connected).toBe(false);
+
+    const advanced = advanceToDoubleJeopardy(state);
+    expect(advanced.controllingPlayerId).toBe('p1');
+  });
+
+  it('falls back to the all-contestants selection when no contestant is connected', () => {
+    const board = makeBoardWithDoubleJeopardy();
+    let state = setupGame(board);
+    state = resolveClue(state, 'cl1');
+    state = resolveClue(state, 'cl2');
+    state = resolveClue(state, 'cl3');
+
+    // Disconnect both contestants.
+    state = reduce(state, { type: 'DISCONNECT', playerId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'DISCONNECT', playerId: 'p2' }, { now: NOW }).state;
+    expect(state.players.every((p) => !p.connected)).toBe(true);
+
+    const advanced = advanceToDoubleJeopardy(state);
+    // Fallback to existing deterministic tie-break among all contestants: lowest score, then seat order.
+    const trailing = advanced.players.reduce((lowest, p) =>
+      p.score < lowest.score || (p.score === lowest.score && p.seatOrder < lowest.seatOrder) ? p : lowest
+    );
+    expect(advanced.controllingPlayerId).toBe(trailing.id);
+  });
+
   it('allows the host to override the new-round control assignment', () => {
     const board = makeBoardWithDoubleJeopardy();
     let state = setupGame(board);
@@ -559,6 +595,22 @@ describe('new round grid and control', () => {
     const result = reduce(advanced, { type: 'OVERRIDE_CONTROL', playerId: otherPlayer.id }, { now: NOW });
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
     expect(result.state.controllingPlayerId).toBe(otherPlayer.id);
+  });
+
+  it('allows the host to override control to a disconnected contestant', () => {
+    const board = makeBoardWithDoubleJeopardy();
+    let state = setupGame(board);
+    state = resolveClue(state, 'cl1');
+    state = resolveClue(state, 'cl2');
+    state = resolveClue(state, 'cl3');
+    const advanced = advanceToDoubleJeopardy(state);
+    const disconnectedPlayer = advanced.players.find((p) => p.id === 'p2')!;
+    state = reduce(advanced, { type: 'DISCONNECT', playerId: disconnectedPlayer.id }, { now: NOW }).state;
+    expect(state.players.find((p) => p.id === disconnectedPlayer.id)?.connected).toBe(false);
+
+    const result = reduce(state, { type: 'OVERRIDE_CONTROL', playerId: disconnectedPlayer.id }, { now: NOW });
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.controllingPlayerId).toBe(disconnectedPlayer.id);
   });
 
   it('rejects override control for an unknown player', () => {

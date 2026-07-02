@@ -741,7 +741,7 @@ function handleRevealAnswer(state: GameState): ReducerResult {
   };
 }
 
-function determineTrailingController(players: Player[]): string | null {
+function pickTrailingPlayer(players: Player[]): Player | null {
   if (players.length === 0) return null;
   let trailing = players[0];
   for (const player of players) {
@@ -749,7 +749,13 @@ function determineTrailingController(players: Player[]): string | null {
       trailing = player;
     }
   }
-  return trailing.id;
+  return trailing;
+}
+
+function determineTrailingController(players: Player[]): string | null {
+  const connected = players.filter((p) => p.connected);
+  const candidatePool = connected.length > 0 ? connected : players;
+  return pickTrailingPlayer(candidatePool)?.id ?? null;
 }
 
 function handleAdvanceRound(state: GameState): ReducerResult {

@@ -462,4 +462,93 @@ describe('round advance sockets', { timeout: 15000 }, () => {
     bob.disconnect();
     await server.close();
   });
+
+  it('new round control prefers a connected contestant over a disconnected trailing contestant', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server, makeBoardWithDoubleJeopardy());
+    const state = server.engine.getState(roomCode)!;
+    const clueId = state.board.rounds[0].clues[0].id;
+    const doubleJeopardyClueId = state.board.rounds[1].clues[0].id;
+
+    await resolveClue(host, boardClient, alice, bob, clueId);
+
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    const bobId = state.players.find((p) => p.name === 'Bob')!.id;
+    host.emit('adjust_score', { playerId: aliceId, score: 100 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === aliceId)?.score === 100);
+    host.emit('adjust_score', { playerId: bobId, score: 200 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === bobId)?.score === 200);
+
+    // Disconnect the trailing contestant (Alice) before the round transition.
+    alice.disconnect();
+    await waitForState(host, (s) => s.players.find((p: { id: string; connected: boolean }) => p.id === aliceId)?.connected === false);
+
+    host.emit('advance_round');
+    await Promise.all([
+      waitForState(host, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(boardClient, (s) => s.phase === 'ROUND_TRANSITION'),
+    ]);
+
+    const hostUpdate = waitForState(host, (s) => s.phase === 'BOARD_SELECT' && s.roundIndex === 1);
+    const boardUpdate = waitForState(boardClient, (s) => s.phase === 'BOARD_SELECT' && s.roundIndex === 1);
+    host.emit('advance_round');
+    const [hostState] = await Promise.all([hostUpdate, boardUpdate]);
+
+    const typedHost = hostState as { controllingPlayerId: string | null; roundIndex: number; phase: string };
+    expect(typedHost.phase).toBe('BOARD_SELECT');
+    expect(typedHost.roundIndex).toBe(1);
+    expect(typedHost.controllingPlayerId).toBe(bobId);
+
+    // Bob (connected) can select the next round's first clue.
+    const bobReveal = waitForState(bob, (s) => s.phase === 'CLUE_REVEALED');
+    bob.emit('select_clue', { clueId: doubleJeopardyClueId });
+    await bobReveal;
+
+    host.disconnect();
+    boardClient.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('falls back to the all-contestants selection when no contestant is connected', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server, makeBoardWithDoubleJeopardy());
+    const state = server.engine.getState(roomCode)!;
+    const clueId = state.board.rounds[0].clues[0].id;
+
+    await resolveClue(host, boardClient, alice, bob, clueId);
+
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    const bobId = state.players.find((p) => p.name === 'Bob')!.id;
+    host.emit('adjust_score', { playerId: aliceId, score: 100 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === aliceId)?.score === 100);
+    host.emit('adjust_score', { playerId: bobId, score: 200 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === bobId)?.score === 200);
+
+    // Disconnect both contestants before the round transition.
+    alice.disconnect();
+    bob.disconnect();
+    await waitForState(host, (s) => s.players.every((p: { connected: boolean }) => !p.connected));
+
+    host.emit('advance_round');
+    await Promise.all([
+      waitForState(host, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(boardClient, (s) => s.phase === 'ROUND_TRANSITION'),
+    ]);
+
+    const hostUpdate = waitForState(host, (s) => s.phase === 'BOARD_SELECT' && s.roundIndex === 1);
+    const boardUpdate = waitForState(boardClient, (s) => s.phase === 'BOARD_SELECT' && s.roundIndex === 1);
+    host.emit('advance_round');
+    const [hostState] = await Promise.all([hostUpdate, boardUpdate]);
+
+    const typedHost = hostState as { controllingPlayerId: string | null; roundIndex: number; phase: string };
+    expect(typedHost.phase).toBe('BOARD_SELECT');
+    expect(typedHost.roundIndex).toBe(1);
+    // Fallback uses the existing deterministic tie-break among all contestants: Alice has the lowest score.
+    expect(typedHost.controllingPlayerId).toBe(aliceId);
+
+    host.disconnect();
+    boardClient.disconnect();
+    await server.close();
+  });
 });
