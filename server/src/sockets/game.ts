@@ -296,7 +296,7 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
-    socket.on('undo_last_ruling', async () => {
+    socket.on('undo_last_ruling', async (ack?: (response: { ok: true }) => void) => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {
         socket.emit('error', { message: 'Only the host can undo the last ruling' });
@@ -308,6 +308,10 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
         if (rejected) {
           socket.emit('error', { message: rejected.reason });
+          return;
+        }
+        if (typeof ack === 'function') {
+          ack({ ok: true });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Undo failed';

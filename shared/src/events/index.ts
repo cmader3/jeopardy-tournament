@@ -60,3 +60,7 @@ export interface AdjustScorePayload {
 }
 
 export type UndoLastRulingPayload = Record<string, never>;
+
+export interface UndoAck {
+  ok: true;
+}

@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { io as ClientIo, Socket as ClientSocket } from 'socket.io-client';
+import { UndoAck } from '@jeopardy/shared';
 import { createApp } from '../http/app.js';
 import { GameEngine } from '../engine/game.js';
 import { prisma } from '../repo/prisma.js';
@@ -120,6 +121,12 @@ function waitForState(
 function waitForError(client: ClientSocket): Promise<{ message: string }> {
   return new Promise((resolve) => {
     client.once('error', (data) => resolve(data as { message: string }));
+  });
+}
+
+function waitForUndoAck(client: ClientSocket): Promise<UndoAck> {
+  return new Promise((resolve) => {
+    client.emit('undo_last_ruling', (ack: UndoAck) => resolve(ack));
   });
 }
 
@@ -1406,11 +1413,12 @@ describe('host score tools and undo sockets', () => {
       errorReceived = e as { message: string };
     });
 
-    host.emit('undo_last_ruling');
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    const ack = await waitForUndoAck(host);
 
+    expect(ack).toEqual({ ok: true });
     expect(errorReceived).toBeNull();
     expect((beforeState.players as { id: string; score: number }[]).find((p) => p.id === tokenA.playerId)?.score).toBe(0);
+    expect(server.engine.getState(beforeState.roomCode as string)?.players.find((p) => p.id === tokenA.playerId)?.score).toBe(0);
 
     host.disconnect();
     boardClient.disconnect();
