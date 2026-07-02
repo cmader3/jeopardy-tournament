@@ -1,14 +1,24 @@
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { createApp } from './app.js';
 import { prisma } from '../repo/prisma.js';
-import { mintHostToken } from '../auth/token.js';
 import { boardRepository } from '../repo/board.js';
 import { GameSessionStatus } from '@prisma/client';
+import { closeTestServer, createTestServer, TestServer } from './test-server.js';
 
-function authHeader(token?: string) {
-  return `Bearer ${token ?? mintHostToken()}`;
+function authRequest() {
+  return testServer.agent;
 }
+
+let testServer: TestServer;
+
+beforeAll(async () => {
+  testServer = await createTestServer();
+});
+
+afterAll(async () => {
+  await closeTestServer(testServer.server);
+  await prisma.$disconnect();
+});
 
 function makeBoardPayload() {
   return {
@@ -48,23 +58,19 @@ function makeBoardPayload() {
 }
 
 describe('POST /api/games', () => {
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it('rejects a request with no Authorization header', async () => {
-    const app = createApp();
-    const response = await request(app).post('/api/games').send({ boardId: 'any-id' }).expect(401);
+    
+    const response = await request(testServer.server).post('/api/games').send({ boardId: 'any-id' }).expect(401);
     expect(response.body.error).toBe('Unauthorized');
   });
 
   it('rejects a request with a forged bearer token', async () => {
-    const app = createApp();
-    const response = await request(app)
+    
+    const response = await request(testServer.server)
       .post('/api/games')
       .set('Authorization', 'Bearer forged-token')
       .send({ boardId: 'any-id' })
@@ -73,32 +79,26 @@ describe('POST /api/games', () => {
   });
 
   it('rejects an invalid payload with 400', async () => {
-    const app = createApp();
-    const response = await request(app)
-      .post('/api/games')
-      .set('Authorization', authHeader())
+    
+    const response = await authRequest().post('/api/games')
       .send({ boardId: 123 })
       .expect(400);
     expect(response.body.error).toBe('Invalid request body');
   });
 
   it('rejects a non-existent boardId with 404', async () => {
-    const app = createApp();
-    const response = await request(app)
-      .post('/api/games')
-      .set('Authorization', authHeader())
+    
+    const response = await authRequest().post('/api/games')
       .send({ boardId: 'non-existent-board-id' })
       .expect(404);
     expect(response.body.error).toBe('Board not found');
   });
 
   it('creates a GameSession with a unique short room code for a valid host', async () => {
-    const app = createApp();
+    
     const created = await boardRepository.create(makeBoardPayload());
 
-    const response = await request(app)
-      .post('/api/games')
-      .set('Authorization', authHeader())
+    const response = await authRequest().post('/api/games')
       .send({ boardId: created.id })
       .expect(201);
 
@@ -116,17 +116,13 @@ describe('POST /api/games', () => {
   });
 
   it('creates distinct room codes for two games from the same board', async () => {
-    const app = createApp();
+    
     const created = await boardRepository.create(makeBoardPayload());
 
-    const first = await request(app)
-      .post('/api/games')
-      .set('Authorization', authHeader())
+    const first = await authRequest().post('/api/games')
       .send({ boardId: created.id })
       .expect(201);
-    const second = await request(app)
-      .post('/api/games')
-      .set('Authorization', authHeader())
+    const second = await authRequest().post('/api/games')
       .send({ boardId: created.id })
       .expect(201);
 
@@ -134,7 +130,7 @@ describe('POST /api/games', () => {
   });
 
   it('rejects an empty board with no playable clues', async () => {
-    const app = createApp();
+    
     const created = await boardRepository.create({
       name: 'Empty Board',
       includeDoubleJeopardy: false,
@@ -143,9 +139,7 @@ describe('POST /api/games', () => {
       rounds: [],
     });
 
-    const response = await request(app)
-      .post('/api/games')
-      .set('Authorization', authHeader())
+    const response = await authRequest().post('/api/games')
       .send({ boardId: created.id })
       .expect(400);
 

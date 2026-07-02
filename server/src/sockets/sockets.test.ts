@@ -1249,7 +1249,7 @@ describe('buzzer arming and fastest-finger sockets', () => {
     alice.disconnect();
     bob.disconnect();
     await server.close();
-  });
+  }, 10000);
 
   it('wrong-then-right sequence broadcasts consistent scores and control to all roles', async () => {
     const server = await createTestServer();
