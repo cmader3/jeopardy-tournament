@@ -103,7 +103,7 @@ describe('GameEngine', () => {
     expect(persisted?.snapshot).toContain('Alice');
   });
 
-  it('rehydrates active sessions on load', async () => {
+  it('rehydrates active sessions on load and marks players disconnected', async () => {
     const board = await boardRepository.create(makeBoardPayload());
     const engine = new GameEngine();
     const { roomCode } = await engine.createSession(board.id);
@@ -116,6 +116,7 @@ describe('GameEngine', () => {
     expect(state).toBeDefined();
     expect(state?.players).toHaveLength(1);
     expect(state?.players[0].name).toBe('Alice');
+    expect(state?.players[0].connected).toBe(false);
   });
 
   it('does not rehydrate abandoned or complete sessions', async () => {

@@ -391,7 +391,11 @@ async function handleContestantJoin(
 
     await joinSessionRoom(socket, roomCode, `contestant:${player.id}`);
     setSocketMeta(socket, { role: 'contestant', roomCode, playerId: player.id });
-    await engine.reconnectPlayer(roomCode, player.id);
+    const result = await engine.reconnectPlayer(roomCode, player.id);
+    // Always emit the current projection to the reconnected socket so it
+    // immediately sees the latest state, even if the player was already marked
+    // connected (e.g., a second tab or recovery after a server restart).
+    socket.emit('state', projectContestant(result.state, player.id, Date.now()));
     return;
   }
 
