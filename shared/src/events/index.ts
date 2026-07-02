@@ -13,6 +13,8 @@ export const ClientToServer = {
   REVEAL_ANSWER: 'reveal_answer',
   ADVANCE_ROUND: 'advance_round',
   OPEN_FINAL_WAGERS: 'open_final_wagers',
+  ADJUST_SCORE: 'adjust_score',
+  UNDO_LAST_RULING: 'undo_last_ruling',
 } as const;
 
 export type ClientToServerEvent = (typeof ClientToServer)[keyof typeof ClientToServer];
@@ -51,3 +53,10 @@ export interface SubmitFinalAnswerPayload {
 export interface RevealAnswerPayload {
   playerId?: string;
 }
+
+export interface AdjustScorePayload {
+  playerId: string;
+  score: number;
+}
+
+export type UndoLastRulingPayload = Record<string, never>;

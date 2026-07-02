@@ -30,6 +30,11 @@ const rulePayloadSchema = z.object({
   playerId: z.string().min(1),
 });
 
+const adjustScorePayloadSchema = z.object({
+  playerId: z.string().min(1),
+  score: z.number().int(),
+});
+
 interface SocketMeta {
   role: 'host' | 'board' | 'contestant';
   roomCode: string;
@@ -254,6 +259,58 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Rule incorrect failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('adjust_score', async (payload: { playerId: string; score: number }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can adjust scores' });
+        return;
+      }
+
+      const validation = adjustScorePayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid score adjustment' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          {
+            type: 'ADJUST_SCORE',
+            playerId: validation.data.playerId,
+            score: validation.data.score,
+          },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Adjust score failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('undo_last_ruling', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can undo the last ruling' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'UNDO_LAST_RULING' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Undo failed';
         socket.emit('error', { message });
       }
     });

@@ -17,7 +17,9 @@ export type Intent =
   | { type: 'RULE_CORRECT' }
   | { type: 'RULE_INCORRECT'; playerId: string }
   | { type: 'TIME_EXPIRE' }
-  | { type: 'REVEAL_ANSWER' };
+  | { type: 'REVEAL_ANSWER' }
+  | { type: 'ADJUST_SCORE'; playerId: string; score: number }
+  | { type: 'UNDO_LAST_RULING' };
 
 export type Effect =
   | { type: 'NOOP' }
@@ -84,6 +86,10 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleTimeExpire(state);
     case 'REVEAL_ANSWER':
       return handleRevealAnswer(state);
+    case 'ADJUST_SCORE':
+      return handleAdjustScore(state, intent, ctx);
+    case 'UNDO_LAST_RULING':
+      return handleUndoLastRuling(state);
     default:
       return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Unknown intent' }] };
   }
@@ -331,25 +337,25 @@ function handleBuzz(state: GameState, playerId: string, ctx: ReducerCtx): Reduce
 }
 
 function createAuditRecord(
-  type: 'CORRECT' | 'INCORRECT',
+  type: AuditRecord['type'],
   playerId: string,
-  clueId: string,
   value: number,
   scoreBefore: number,
   scoreAfter: number,
   controllingPlayerIdBefore: string | null,
   timestamp: number,
+  clueId?: string,
 ): AuditRecord {
   return {
     id: `${timestamp}-${playerId}`,
     type,
     playerId,
-    clueId,
     value,
     scoreBefore,
     scoreAfter,
     controllingPlayerIdBefore,
     timestamp,
+    clueId,
   };
 }
 
@@ -396,12 +402,12 @@ function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
   const auditEntry = createAuditRecord(
     'CORRECT',
     winner.id,
-    clue.id,
     value,
     scoreBefore,
     scoreAfter,
     state.controllingPlayerId,
     ctx.now,
+    clue.id,
   );
 
   return {
@@ -451,7 +457,6 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
   const auditEntry = createAuditRecord(
     'INCORRECT',
     player.id,
-    clue.id,
     value,
     scoreBefore,
     scoreAfter,
@@ -532,4 +537,78 @@ function handleRevealAnswer(state: GameState): ReducerResult {
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
+}
+
+function handleAdjustScore(
+  state: GameState,
+  intent: Extract<Intent, { type: 'ADJUST_SCORE' }>,
+  ctx: ReducerCtx,
+): ReducerResult {
+  const playerIndex = state.players.findIndex((p) => p.id === intent.playerId);
+  if (playerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  const player = state.players[playerIndex];
+  const scoreBefore = player.score;
+  const scoreAfter = intent.score;
+  const updatedPlayers = [...state.players];
+  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+
+  const auditEntry = createAuditRecord(
+    'MANUAL',
+    player.id,
+    scoreAfter,
+    scoreBefore,
+    scoreAfter,
+    state.controllingPlayerId,
+    ctx.now,
+  );
+
+  return {
+    state: {
+      ...state,
+      players: updatedPlayers,
+      auditLog: [...state.auditLog, auditEntry],
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleUndoLastRuling(state: GameState): ReducerResult {
+  if (state.auditLog.length === 0) {
+    return { state, effects: [] };
+  }
+
+  const lastRecord = state.auditLog[state.auditLog.length - 1];
+  const playerIndex = state.players.findIndex((p) => p.id === lastRecord.playerId);
+  if (playerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  const player = state.players[playerIndex];
+  const updatedPlayers = [...state.players];
+  updatedPlayers[playerIndex] = { ...player, score: lastRecord.scoreBefore };
+
+  let updatedState: GameState = {
+    ...state,
+    players: updatedPlayers,
+    auditLog: state.auditLog.slice(0, -1),
+  };
+
+  if (lastRecord.type === 'CORRECT') {
+    updatedState = {
+      ...updatedState,
+      controllingPlayerId: lastRecord.controllingPlayerIdBefore,
+    };
+  }
+
+  if (lastRecord.type === 'INCORRECT') {
+    updatedState = {
+      ...updatedState,
+      lockedOutPlayerIds: state.lockedOutPlayerIds.filter((id) => id !== lastRecord.playerId),
+    };
+  }
+
+  return { state: updatedState, effects: [{ type: 'BROADCAST_STATE' }] };
 }

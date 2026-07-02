@@ -1211,3 +1211,198 @@ describe('buzzer arming and fastest-finger sockets', () => {
     await server.close();
   });
 });
+
+describe('host score tools and undo sockets', () => {
+  function makeScoreToolsBoardPayload() {
+    return {
+      name: 'Score Tools Socket Board',
+      includeDoubleJeopardy: false,
+      defaultTimerSeconds: 10,
+      finalTimerSeconds: 30,
+      rounds: [
+        {
+          type: 'JEOPARDY',
+          order: 0,
+          categories: [
+            {
+              title: 'Science',
+              order: 0,
+              clues: [
+                { value: 100, row: 0, clueText: 'H2O', answer: 'Water', isDailyDouble: false },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'FINAL',
+          order: 1,
+          categories: [
+            {
+              title: 'Literature',
+              order: 0,
+              clues: [
+                { value: null, row: 0, clueText: 'Hobbit author', answer: 'Tolkien', isDailyDouble: false },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  async function setupGame(server: Awaited<ReturnType<typeof createTestServer>>) {
+    const board = await boardRepository.create(makeScoreToolsBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    const boardClient = connectClient(server.url);
+    await Promise.all([waitForConnect(host), waitForConnect(boardClient)]);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    boardClient.emit('join', { role: 'board', roomCode });
+    await Promise.all([waitForState(host), waitForState(boardClient)]);
+
+    const alice = connectClient(server.url);
+    const bob = connectClient(server.url);
+    await Promise.all([waitForConnect(alice), waitForConnect(bob)]);
+    const aliceToken = waitForToken(alice);
+    const bobToken = waitForToken(bob);
+    const aliceState = waitForState(alice);
+    const bobState = waitForState(bob);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    bob.emit('join', { role: 'contestant', roomCode, name: 'Bob' });
+    const [tokenA, tokenB] = await Promise.all([aliceToken, bobToken]);
+    await Promise.all([aliceState, bobState]);
+
+    host.emit('start_game');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const state = server.engine.getState(roomCode)!;
+    const firstClue = state.board.rounds[0].clues[0];
+
+    const hostStart = waitForState(host);
+    const boardStart = waitForState(boardClient);
+    const aliceStart = waitForState(alice);
+    const bobStart = waitForState(bob);
+    host.emit('select_clue', { clueId: firstClue.id });
+    await Promise.all([hostStart, boardStart, aliceStart, bobStart]);
+
+    return { host, boardClient, alice, bob, tokenA, tokenB, roomCode, firstClue };
+  }
+
+  it('adjust_score updates a contestant score on all roles', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('adjust_score', { playerId: tokenA.playerId, score: 500 });
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((hostState as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(500);
+    expect((boardState as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(500);
+    expect((aliceState as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(500);
+    expect((bobState as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(500);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('undo_last_ruling reverts the most recent correct ruling and restores control', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA, tokenB, roomCode } = await setupGame(server);
+
+    const state = server.engine.getState(roomCode)!;
+    const controllerId = state.controllingPlayerId;
+    const nonController = controllerId === tokenA.playerId ? bob : alice;
+    const nonControllerId = controllerId === tokenA.playerId ? tokenB.playerId : tokenA.playerId;
+
+    host.emit('arm_buzzers');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+    nonController.emit('buzz', { playerId: nonControllerId });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+    host.emit('rule_correct');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('undo_last_ruling');
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((hostState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(0);
+    expect((boardState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(0);
+    expect((aliceState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(0);
+    expect((bobState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(0);
+    expect((hostState as { controllingPlayerId: string | null }).controllingPlayerId).toBe(controllerId);
+    expect((boardState as { controllingPlayerId: string | null }).controllingPlayerId).toBe(controllerId);
+    expect((aliceState as { isControllingPlayer: boolean }).isControllingPlayer).toBe(controllerId === tokenA.playerId);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('undo_last_ruling is a safe no-op with no prior ruling', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const beforeState = await new Promise<Record<string, unknown>>((resolve) => {
+      host.once('state', (data) => resolve(data as Record<string, unknown>));
+      host.emit('arm_buzzers');
+    });
+
+    let errorReceived: { message: string } | null = null;
+    host.on('error', (e) => {
+      errorReceived = e as { message: string };
+    });
+
+    host.emit('undo_last_ruling');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(errorReceived).toBeNull();
+    expect((beforeState.players as { id: string; score: number }[]).find((p) => p.id === tokenA.playerId)?.score).toBe(0);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('non-host cannot adjust scores or undo', async () => {
+    const server = await createTestServer();
+    const { host, alice, tokenA } = await setupGame(server);
+
+    const aliceError = waitForError(alice);
+    alice.emit('adjust_score', { playerId: tokenA.playerId, score: 500 });
+    expect((await aliceError).message).toMatch(/only the host/i);
+
+    const aliceError2 = waitForError(alice);
+    alice.emit('undo_last_ruling');
+    expect((await aliceError2).message).toMatch(/only the host/i);
+
+    host.disconnect();
+    alice.disconnect();
+    await server.close();
+  });
+});

@@ -17,6 +17,8 @@ export interface SocketState<T> {
   buzz?: (playerId: string) => void;
   ruleCorrect?: () => void;
   ruleIncorrect?: (playerId: string) => void;
+  adjustScore?: (playerId: string, score: number) => void;
+  undoLastRuling?: () => void;
   clearError?: () => void;
 }
 
@@ -111,11 +113,19 @@ export function useSocket<T>(
     socketRef.current?.emit('rule_incorrect', { playerId });
   }, []);
 
+  const adjustScore = useCallback((playerId: string, score: number) => {
+    socketRef.current?.emit('adjust_score', { playerId, score });
+  }, []);
+
+  const undoLastRuling = useCallback(() => {
+    socketRef.current?.emit('undo_last_ruling');
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, clearError };
+  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, clearError };
 }
 
 export function getStoredContestantToken(): {

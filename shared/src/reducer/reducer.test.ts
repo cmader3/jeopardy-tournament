@@ -747,3 +747,123 @@ describe('answer reveal and outcome feedback', () => {
     expect(result.state.currentClueId).toBe('cl3');
   });
 });
+
+function setupCorrectRuling(): GameState {
+  let state = setupClueRevealed();
+  state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+  state = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 10 }).state;
+  return reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 }).state;
+}
+
+function setupIncorrectRuling(): GameState {
+  let state = setupClueRevealed();
+  state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+  state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+  return reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 }).state;
+}
+
+describe('ADJUST_SCORE', () => {
+  it('sets a contestant score to the requested value and records a manual audit entry', () => {
+    const state = setupCorrectRuling();
+    expect(state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+
+    const result = reduce(state, { type: 'ADJUST_SCORE', playerId: 'p1', score: 500 }, { now: NOW + 200 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(500);
+    expect(result.state.auditLog).toHaveLength(2);
+    const manual = result.state.auditLog[1];
+    expect(manual.type).toBe('MANUAL');
+    expect(manual.playerId).toBe('p1');
+    expect(manual.scoreBefore).toBe(0);
+    expect(manual.scoreAfter).toBe(500);
+    expect(manual.value).toBe(500);
+    expect(manual.controllingPlayerIdBefore).toBe('p2');
+  });
+
+  it('rejects an adjustment for a non-existent player', () => {
+    const state = setupCorrectRuling();
+
+    const result = reduce(state, { type: 'ADJUST_SCORE', playerId: 'ghost', score: 100 }, { now: NOW + 200 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('Player not found') });
+    expect(result.state.auditLog).toHaveLength(1);
+  });
+
+  it('accepts negative scores', () => {
+    const state = setupCorrectRuling();
+
+    const result = reduce(state, { type: 'ADJUST_SCORE', playerId: 'p2', score: -300 }, { now: NOW + 200 });
+
+    expect(result.state.players.find((p) => p.id === 'p2')?.score).toBe(-300);
+  });
+});
+
+describe('UNDO_LAST_RULING', () => {
+  it('reverts the score change from the most recent correct ruling and restores prior control', () => {
+    const state = setupCorrectRuling();
+    expect(state.controllingPlayerId).toBe('p2');
+    expect(state.players.find((p) => p.id === 'p2')?.score).toBe(100);
+
+    const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 200 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.players.find((p) => p.id === 'p2')?.score).toBe(0);
+    expect(result.state.controllingPlayerId).toBe('p1');
+    expect(result.state.auditLog).toHaveLength(0);
+  });
+
+  it('reverts the score change from the most recent incorrect ruling', () => {
+    const state = setupIncorrectRuling();
+    expect(state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
+    expect(state.lockedOutPlayerIds).toContain('p1');
+
+    const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 200 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+    expect(result.state.lockedOutPlayerIds).not.toContain('p1');
+    expect(result.state.auditLog).toHaveLength(0);
+  });
+
+  it('reverts the most recent manual score adjustment', () => {
+    let state = setupCorrectRuling();
+    state = reduce(state, { type: 'ADJUST_SCORE', playerId: 'p1', score: 250 }, { now: NOW + 200 }).state;
+    expect(state.players.find((p) => p.id === 'p1')?.score).toBe(250);
+
+    const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 300 });
+
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+    expect(result.state.auditLog).toHaveLength(1);
+    expect(result.state.auditLog[0].type).toBe('CORRECT');
+  });
+
+  it('is a safe no-op when the audit log is empty', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 100 });
+
+    expect(result.state).toBe(result.state);
+    expect(result.state.auditLog).toHaveLength(0);
+    expect(result.effects).toEqual([]);
+  });
+
+  it('undoes only the last ruling, leaving earlier rulings intact', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    state = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 120 }).state;
+    state = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 200 }).state;
+    expect(state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
+    expect(state.players.find((p) => p.id === 'p2')?.score).toBe(100);
+    expect(state.auditLog).toHaveLength(2);
+
+    const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 300 });
+
+    expect(result.state.players.find((p) => p.id === 'p2')?.score).toBe(0);
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
+    expect(result.state.auditLog).toHaveLength(1);
+    expect(result.state.auditLog[0].type).toBe('INCORRECT');
+  });
+});

@@ -91,6 +91,22 @@
   color: var(--incorrect-red);
 }
 
+.controllingRosterItem {
+  background: rgba(214, 159, 40, 0.15);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.25rem;
+}
+
+.scoreInput {
+  width: 5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  background: var(--panel-bg);
+  color: var(--text-light);
+  border: 1px solid var(--value-gold);
+  border-radius: 0.25rem;
+}
+
 .minimumPlayers {
   font-size: 0.9rem;
   color: var(--incorrect-red);

@@ -63,9 +63,9 @@ export interface Board {
 
 export interface AuditRecord {
   id: string;
-  type: 'CORRECT' | 'INCORRECT';
+  type: 'CORRECT' | 'INCORRECT' | 'MANUAL';
   playerId: string;
-  clueId: string;
+  clueId?: string;
   value: number;
   scoreBefore: number;
   scoreAfter: number;

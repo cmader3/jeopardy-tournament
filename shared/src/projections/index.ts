@@ -1,4 +1,4 @@
-import { GameState, Clue } from '../models/index.js';
+import { GameState, Clue, AuditRecord } from '../models/index.js';
 
 export interface ProjectedPlayer {
   id: string;
@@ -80,6 +80,7 @@ export interface HostView {
   answer: string | null;
   lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
   lockedOutPlayerIds: string[];
+  auditLog: AuditRecord[];
   serverNow: number;
 }
 
@@ -230,6 +231,7 @@ export function projectHost(state: GameState, now: number): HostView {
       ? { playerId: state.lastOutcome.playerId, type: state.lastOutcome.type, value: state.lastOutcome.value }
       : null,
     lockedOutPlayerIds: state.lockedOutPlayerIds,
+    auditLog: state.auditLog,
     serverNow: now,
   };
 }

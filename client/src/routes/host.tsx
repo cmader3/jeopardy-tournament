@@ -82,6 +82,8 @@ export interface HostInProgressProps {
   onArmBuzzers?: () => void;
   onRuleCorrect?: () => void;
   onRuleIncorrect?: (playerId: string) => void;
+  onAdjustScore?: (playerId: string, score: number) => void;
+  onUndoLastRuling?: () => void;
 }
 
 function HostGrid({
@@ -132,6 +134,62 @@ function HostGrid({
   );
 }
 
+interface RosterItemProps {
+  player: HostView['players'][number];
+  isController: boolean;
+  onAdjustScore?: (playerId: string, score: number) => void;
+}
+
+function RosterItem({ player, isController, onAdjustScore }: RosterItemProps) {
+  const [draft, setDraft] = useState(String(player.score));
+
+  const handleApply = () => {
+    const value = Number(draft);
+    if (!Number.isNaN(value)) {
+      onAdjustScore?.(player.id, value);
+    }
+  };
+
+  return (
+    <li
+      data-testid={`roster-item-${player.id}`}
+      className={isController ? styles.controllingRosterItem : undefined}
+    >
+      <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
+        {player.name}
+      </span>
+      <span
+        className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
+        data-testid={`roster-score-${player.id}`}
+      >
+        {player.score}
+      </span>
+      <input
+        type="number"
+        className={styles.scoreInput}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        data-testid={`score-input-${player.id}`}
+        aria-label={`Adjust score for ${player.name}`}
+      />
+      <button
+        type="button"
+        className={styles.actionButton}
+        onClick={handleApply}
+        data-testid={`apply-score-${player.id}`}
+      >
+        Set
+      </button>
+      <span
+        className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
+        data-testid={`player-status-${player.id}`}
+      >
+        {player.connected ? 'connected' : 'disconnected'}
+      </span>
+    </li>
+  );
+}
+
 function HostAnswerBanner({ state }: { state: HostView }) {
   if (!state.answer) return null;
   const outcome = state.lastOutcome;
@@ -168,12 +226,15 @@ export function HostInProgress({
   onArmBuzzers,
   onRuleCorrect,
   onRuleIncorrect,
+  onAdjustScore,
+  onUndoLastRuling,
 }: HostInProgressProps) {
   const players = state?.players ?? [];
   const currentClue = state?.currentClueId
     ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId)
     : null;
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
+  const hasRulingHistory = (state?.auditLog?.length ?? 0) > 0;
 
   const showControls = currentClue || state?.answer;
 
@@ -251,29 +312,30 @@ export function HostInProgress({
           )}
         </div>
       )}
+      <div className={styles.actionRow}>
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={onUndoLastRuling}
+          disabled={!hasRulingHistory}
+          aria-disabled={!hasRulingHistory}
+          data-testid="undo-last-ruling-button"
+        >
+          Undo Last Ruling
+        </button>
+      </div>
       <h2>Roster</h2>
       {players.length === 0 ? (
         <p>No contestants connected.</p>
       ) : (
         <ul className={styles.roster} data-testid="roster">
           {players.map((player) => (
-            <li key={player.id} data-testid={`roster-item-${player.id}`}>
-              <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
-                {player.name}
-              </span>
-              <span
-                className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
-                data-testid={`roster-score-${player.id}`}
-              >
-                {player.score}
-              </span>
-              <span
-                className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
-                data-testid={`player-status-${player.id}`}
-              >
-                {player.connected ? 'connected' : 'disconnected'}
-              </span>
-            </li>
+            <RosterItem
+              key={`${player.id}-${player.score}`}
+              player={player}
+              isController={player.id === state?.controllingPlayerId}
+              onAdjustScore={onAdjustScore}
+            />
           ))}
         </ul>
       )}
@@ -348,6 +410,15 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleAdjustScore = useCallback(
+    (playerId: string, score: number) => {
+      hostSocket.adjustScore?.(playerId, score);
+    },
+    [hostSocket],
+  );
+  const handleUndoLastRuling = useCallback(() => {
+    hostSocket.undoLastRuling?.();
+  }, [hostSocket]);
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -371,6 +442,8 @@ export function HostContent() {
         onArmBuzzers={handleArmBuzzers}
         onRuleCorrect={handleRuleCorrect}
         onRuleIncorrect={handleRuleIncorrect}
+        onAdjustScore={handleAdjustScore}
+        onUndoLastRuling={handleUndoLastRuling}
       />
     );
   }

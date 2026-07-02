@@ -36,6 +36,8 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     buzz: vi.fn(),
     ruleCorrect: vi.fn(),
     ruleIncorrect: vi.fn(),
+    adjustScore: vi.fn(),
+    undoLastRuling: vi.fn(),
     clearError: vi.fn(),
     ...overrides,
   });
@@ -83,6 +85,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     answer: null,
     lastOutcome: null,
     lockedOutPlayerIds: [],
+    auditLog: [],
     serverNow: 0,
     ...overrides,
   };
@@ -446,5 +449,92 @@ describe('HostInProgress grid and selection', () => {
 
     await userEvent.click(screen.getByTestId('rule-incorrect-button'));
     expect(onRuleIncorrect).toHaveBeenCalledWith('p2');
+  });
+});
+
+describe('HostInProgress score tools', () => {
+  it('shows a score input and apply button for each contestant', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: -100, connected: true },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('score-input-p1')).toBeInTheDocument();
+    expect(screen.getByTestId('score-input-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('apply-score-p1')).toBeInTheDocument();
+    expect(screen.getByTestId('apply-score-p2')).toBeInTheDocument();
+  });
+
+  it('calls onAdjustScore when a new score is applied', async () => {
+    const onAdjustScore = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onAdjustScore={onAdjustScore} />);
+
+    const input = screen.getByTestId('score-input-p1');
+    await userEvent.clear(input);
+    await userEvent.type(input, '500');
+    await userEvent.click(screen.getByTestId('apply-score-p1'));
+
+    expect(onAdjustScore).toHaveBeenCalledWith('p1', 500);
+  });
+
+  it('disables the undo button when no rulings have been recorded', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', auditLog: [] });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('undo-last-ruling-button')).toBeDisabled();
+  });
+
+  it('enables the undo button when a ruling is recorded', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      auditLog: [
+        {
+          id: 'audit-1',
+          type: 'CORRECT',
+          playerId: 'p1',
+          clueId: 'cl1',
+          value: 100,
+          scoreBefore: 0,
+          scoreAfter: 100,
+          controllingPlayerIdBefore: null,
+          timestamp: 1,
+        },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('undo-last-ruling-button')).toBeEnabled();
+  });
+
+  it('calls onUndoLastRuling when the undo button is clicked', async () => {
+    const onUndoLastRuling = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      auditLog: [
+        {
+          id: 'audit-1',
+          type: 'CORRECT',
+          playerId: 'p1',
+          clueId: 'cl1',
+          value: 100,
+          scoreBefore: 0,
+          scoreAfter: 100,
+          controllingPlayerIdBefore: null,
+          timestamp: 1,
+        },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onUndoLastRuling={onUndoLastRuling} />);
+
+    await userEvent.click(screen.getByTestId('undo-last-ruling-button'));
+    expect(onUndoLastRuling).toHaveBeenCalledTimes(1);
   });
 });
