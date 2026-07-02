@@ -927,10 +927,13 @@ describe('clue selection sockets', () => {
     const bobUpdate = waitForState(bob);
 
     controller.emit('select_clue', { clueId: firstClue.id });
-    const [boardState] = await Promise.all([boardUpdate, hostUpdate, aliceUpdate, bobUpdate]);
+    const [hostState, boardState] = await Promise.all([hostUpdate, boardUpdate, aliceUpdate, bobUpdate]);
 
     expect((boardState as { phase: string }).phase).toBe('CLUE_REVEALED');
     expect((boardState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
+    expect((hostState as { phase: string }).phase).toBe('CLUE_REVEALED');
+    expect((hostState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
+    expect((hostState as { answer: string }).answer).toBe(firstClue.answer);
 
     host.disconnect();
     boardClient.disconnect();
