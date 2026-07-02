@@ -492,6 +492,27 @@ describe('HostInProgress score tools', () => {
     expect(screen.getByTestId('undo-last-ruling-button')).toBeDisabled();
   });
 
+  it('disables the undo button when only manual adjustments are recorded', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      auditLog: [
+        {
+          id: 'audit-1',
+          type: 'MANUAL',
+          playerId: 'p1',
+          value: 500,
+          scoreBefore: 0,
+          scoreAfter: 500,
+          controllingPlayerIdBefore: null,
+          timestamp: 1,
+        },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('undo-last-ruling-button')).toBeDisabled();
+  });
+
   it('enables the undo button when a ruling is recorded', () => {
     const state = makeHostState({
       phase: 'BOARD_SELECT',

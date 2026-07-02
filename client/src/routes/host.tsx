@@ -234,7 +234,11 @@ export function HostInProgress({
     ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId)
     : null;
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
-  const hasRulingHistory = (state?.auditLog?.length ?? 0) > 0;
+  // Enable "undo last ruling" only when there is an actual ruling (correct or
+  // incorrect) to undo. Manual score adjustments are not undoable via this control.
+  const hasUndoableRuling = state?.auditLog?.some(
+    (record) => record.type === 'CORRECT' || record.type === 'INCORRECT',
+  );
 
   const showControls = currentClue || state?.answer;
 
@@ -317,8 +321,8 @@ export function HostInProgress({
           type="button"
           className={styles.actionButton}
           onClick={onUndoLastRuling}
-          disabled={!hasRulingHistory}
-          aria-disabled={!hasRulingHistory}
+          disabled={!hasUndoableRuling}
+          aria-disabled={!hasUndoableRuling}
           data-testid="undo-last-ruling-button"
         >
           Undo Last Ruling

@@ -1494,6 +1494,82 @@ describe('host score tools and undo sockets', () => {
     await server.close();
   });
 
+  it('undo_last_ruling is a safe no-op after a manual score adjustment', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const state = await new Promise<Record<string, unknown>>((resolve) => {
+      host.once('state', (data) => resolve(data as Record<string, unknown>));
+      host.emit('adjust_score', { playerId: tokenA.playerId, score: 500 });
+    });
+
+    let errorReceived: { message: string } | null = null;
+    host.on('error', (e) => {
+      errorReceived = e as { message: string };
+    });
+
+    const ack = await waitForUndoAck(host);
+
+    expect(ack).toEqual({ ok: true });
+    expect(errorReceived).toBeNull();
+    expect((state.players as { id: string; score: number }[]).find((p) => p.id === tokenA.playerId)?.score).toBe(500);
+    expect(server.engine.getState(state.roomCode as string)?.players.find((p) => p.id === tokenA.playerId)?.score).toBe(500);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('undo_last_ruling reverts only the ruling when a manual adjustment was made after it', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA, tokenB, roomCode } = await setupGame(server);
+
+    const state = server.engine.getState(roomCode)!;
+    const controllerId = state.controllingPlayerId;
+    const nonController = controllerId === tokenA.playerId ? bob : alice;
+    const nonControllerId = controllerId === tokenA.playerId ? tokenB.playerId : tokenA.playerId;
+
+    host.emit('arm_buzzers');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+    nonController.emit('buzz', { playerId: nonControllerId });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+    host.emit('rule_correct');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    host.emit('adjust_score', { playerId: nonControllerId, score: 300 });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('undo_last_ruling');
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    // The ruling delta is reverted, but the later manual adjustment remains.
+    expect((hostState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(200);
+    expect((boardState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(200);
+    expect((aliceState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(200);
+    expect((bobState as { players: { id: string; score: number }[] }).players.find((p) => p.id === nonControllerId)?.score).toBe(200);
+    expect((hostState as { controllingPlayerId: string | null }).controllingPlayerId).toBe(controllerId);
+    expect((hostState as { auditLog: { type: string }[] }).auditLog.some((r) => r.type === 'MANUAL')).toBe(true);
+    expect((hostState as { auditLog: { type: string }[] }).auditLog.some((r) => r.type === 'CORRECT' || r.type === 'INCORRECT')).toBe(false);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
   it('non-host cannot adjust scores or undo', async () => {
     const server = await createTestServer();
     const { host, alice, tokenA } = await setupGame(server);

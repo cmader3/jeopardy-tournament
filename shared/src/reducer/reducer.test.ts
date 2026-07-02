@@ -856,16 +856,20 @@ describe('UNDO_LAST_RULING', () => {
     expect(result.state.auditLog).toHaveLength(0);
   });
 
-  it('reverts the most recent manual score adjustment', () => {
+  it('does not undo a manual score adjustment', () => {
     let state = setupCorrectRuling();
     state = reduce(state, { type: 'ADJUST_SCORE', playerId: 'p1', score: 250 }, { now: NOW + 200 }).state;
     expect(state.players.find((p) => p.id === 'p1')?.score).toBe(250);
+    expect(state.players.find((p) => p.id === 'p2')?.score).toBe(100);
 
     const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 300 });
 
-    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+    // The most recent ruling (CORRECT for p2) is reverted, not the manual adjustment.
+    expect(result.state.players.find((p) => p.id === 'p2')?.score).toBe(0);
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(250);
+    expect(result.state.controllingPlayerId).toBe('p1');
     expect(result.state.auditLog).toHaveLength(1);
-    expect(result.state.auditLog[0].type).toBe('CORRECT');
+    expect(result.state.auditLog[0].type).toBe('MANUAL');
   });
 
   it('is a safe no-op when the audit log is empty', () => {
@@ -876,6 +880,32 @@ describe('UNDO_LAST_RULING', () => {
     expect(result.state).toBe(result.state);
     expect(result.state.auditLog).toHaveLength(0);
     expect(result.effects).toEqual([]);
+  });
+
+  it('is a safe no-op when the audit log contains only manual adjustments', () => {
+    const state = setupClueRevealed();
+    const adjusted = reduce(state, { type: 'ADJUST_SCORE', playerId: 'p1', score: 250 }, { now: NOW + 100 }).state;
+    expect(adjusted.auditLog).toHaveLength(1);
+
+    const result = reduce(adjusted, { type: 'UNDO_LAST_RULING' }, { now: NOW + 200 });
+
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(250);
+    expect(result.state.auditLog).toHaveLength(1);
+    expect(result.effects).toEqual([]);
+  });
+
+  it('undoes the most recent ruling even when a later manual adjustment exists', () => {
+    let state = setupCorrectRuling();
+    state = reduce(state, { type: 'ADJUST_SCORE', playerId: 'p2', score: 300 }, { now: NOW + 200 }).state;
+    expect(state.players.find((p) => p.id === 'p2')?.score).toBe(300);
+
+    const result = reduce(state, { type: 'UNDO_LAST_RULING' }, { now: NOW + 300 });
+
+    // The ruling delta is reverted while the later manual adjustment remains.
+    expect(result.state.players.find((p) => p.id === 'p2')?.score).toBe(200);
+    expect(result.state.controllingPlayerId).toBe('p1');
+    expect(result.state.auditLog).toHaveLength(1);
+    expect(result.state.auditLog[0].type).toBe('MANUAL');
   });
 
   it('undoes only the last ruling, leaving earlier rulings intact', () => {

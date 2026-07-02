@@ -576,37 +576,53 @@ function handleAdjustScore(
 }
 
 function handleUndoLastRuling(state: GameState): ReducerResult {
-  if (state.auditLog.length === 0) {
+  // Locate the most recent ruling (CORRECT/INCORRECT), skipping any manual
+  // score adjustments that were recorded after it. Manual adjustments are
+  // intentionally not undoable via this control.
+  let rulingIndex = -1;
+  for (let i = state.auditLog.length - 1; i >= 0; i--) {
+    const record = state.auditLog[i];
+    if (record.type === 'CORRECT' || record.type === 'INCORRECT') {
+      rulingIndex = i;
+      break;
+    }
+  }
+
+  if (rulingIndex === -1) {
     return { state, effects: [] };
   }
 
-  const lastRecord = state.auditLog[state.auditLog.length - 1];
-  const playerIndex = state.players.findIndex((p) => p.id === lastRecord.playerId);
+  const record = state.auditLog[rulingIndex];
+  const playerIndex = state.players.findIndex((p) => p.id === record.playerId);
   if (playerIndex === -1) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+    // The affected player no longer exists; treat as a safe no-op.
+    return { state, effects: [] };
   }
 
   const player = state.players[playerIndex];
+  // Revert only the ruling's delta, preserving any later manual adjustments
+  // that may have been applied to the same contestant.
+  const rulingDelta = record.scoreAfter - record.scoreBefore;
   const updatedPlayers = [...state.players];
-  updatedPlayers[playerIndex] = { ...player, score: lastRecord.scoreBefore };
+  updatedPlayers[playerIndex] = { ...player, score: player.score - rulingDelta };
 
   let updatedState: GameState = {
     ...state,
     players: updatedPlayers,
-    auditLog: state.auditLog.slice(0, -1),
+    auditLog: state.auditLog.filter((_, i) => i !== rulingIndex),
   };
 
-  if (lastRecord.type === 'CORRECT') {
+  if (record.type === 'CORRECT') {
     updatedState = {
       ...updatedState,
-      controllingPlayerId: lastRecord.controllingPlayerIdBefore,
+      controllingPlayerId: record.controllingPlayerIdBefore,
     };
   }
 
-  if (lastRecord.type === 'INCORRECT') {
+  if (record.type === 'INCORRECT') {
     updatedState = {
       ...updatedState,
-      lockedOutPlayerIds: state.lockedOutPlayerIds.filter((id) => id !== lastRecord.playerId),
+      lockedOutPlayerIds: state.lockedOutPlayerIds.filter((id) => id !== record.playerId),
     };
   }
 
