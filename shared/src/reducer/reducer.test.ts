@@ -162,6 +162,8 @@ describe('createInitialState', () => {
     expect(state.dailyDoubleWager).toBeNull();
     expect(state.finalWagers).toEqual({});
     expect(state.finalAnswers).toEqual({});
+    expect(state.revealedAnswer).toBeNull();
+    expect(state.lastOutcome).toBeNull();
   });
 });
 
@@ -611,5 +613,86 @@ describe('TIME_EXPIRE', () => {
     expect(result.state.buzzWinnerId).toBeNull();
     expect(result.state.deadline).toBeNull();
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+});
+
+describe('answer reveal and outcome feedback', () => {
+  it('RULE_CORRECT reveals the answer and records the outcome', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 10 }).state;
+
+    const result = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.revealedAnswer).toBe('Water');
+    expect(result.state.lastOutcome).toEqual({ playerId: 'p2', type: 'CORRECT', value: 100 });
+    expect(result.state.controllingPlayerId).toBe('p2');
+  });
+
+  it('RULE_INCORRECT on re-arm records the outcome without revealing the answer', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+
+    const result = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BUZZERS_ARMED');
+    expect(result.state.revealedAnswer).toBeNull();
+    expect(result.state.lastOutcome).toEqual({ playerId: 'p1', type: 'INCORRECT', value: 100 });
+  });
+
+  it('RULE_INCORRECT with full lockout reveals the answer and records the outcome', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    state = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 120 }).state;
+
+    const result = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p2' }, { now: NOW + 200 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.revealedAnswer).toBe('Water');
+    expect(result.state.lastOutcome).toEqual({ playerId: 'p2', type: 'INCORRECT', value: 100 });
+    expect(result.state.controllingPlayerId).toBe('p1');
+  });
+
+  it('TIME_EXPIRE reveals the answer with no score change', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'TIME_EXPIRE' }, { now: NOW + state.board.defaultTimerSeconds * 1000 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.revealedAnswer).toBe('Water');
+    expect(result.state.lastOutcome).toBeNull();
+    expect(result.state.players.every((p) => p.score === 0)).toBe(true);
+  });
+
+  it('REVEAL_ANSWER reveals the answer and resolves the clue', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'REVEAL_ANSWER' }, { now: NOW });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.revealedAnswer).toBe('Water');
+    expect(result.state.lastOutcome).toBeNull();
+    expect(result.state.usedClueIds).toContain('cl1');
+  });
+
+  it('SELECT_CLUE clears the previous revealed answer and outcome', () => {
+    let state = setupClueRevealed();
+    state = {
+      ...state,
+      phase: 'BOARD_SELECT' as const,
+      revealedAnswer: 'Water',
+      lastOutcome: { playerId: 'p1', type: 'CORRECT', value: 100 },
+    };
+
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: state.controllingPlayerId }, { now: NOW });
+
+    expect(result.state.revealedAnswer).toBeNull();
+    expect(result.state.lastOutcome).toBeNull();
+    expect(result.state.currentClueId).toBe('cl3');
   });
 });

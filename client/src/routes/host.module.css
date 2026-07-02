@@ -1,0 +1,245 @@
+.hostLobby,
+.hostInProgress {
+  padding: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  color: var(--text-light);
+}
+
+.hostLobby h1,
+.hostInProgress h1 {
+  font-family: var(--font-display);
+  color: var(--value-gold);
+  margin: 0 0 0.5rem;
+}
+
+.roomCode {
+  font-family: var(--font-display);
+  color: var(--value-gold);
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.phase {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--text-light);
+  opacity: 0.9;
+  margin: 0 0 1rem;
+}
+
+.startControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.actionButton {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  background: var(--jeopardy-blue);
+  color: var(--text-light);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: var(--font-body);
+  text-transform: uppercase;
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.playerList,
+.roster {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.playerList li,
+.roster li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.playerName {
+  font-weight: 500;
+}
+
+.playerScore {
+  margin-left: auto;
+  font-family: var(--font-score);
+  color: var(--value-gold);
+}
+
+.negativeScore {
+  color: var(--incorrect-red);
+}
+
+.statusConnected {
+  color: var(--correct-green);
+}
+
+.statusDisconnected {
+  color: var(--incorrect-red);
+}
+
+.minimumPlayers {
+  font-size: 0.9rem;
+  color: var(--incorrect-red);
+  margin: 0;
+}
+
+.stickyControls {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--panel-bg);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.currentClue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.currentClue h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--value-gold);
+}
+
+.clueText {
+  font-family: var(--font-clue);
+  font-size: 1.25rem;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.answerText {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--value-gold);
+  margin: 0;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.buzzedPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.buzzedPanel p {
+  margin: 0;
+}
+
+.hostGrid {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.hostCategoryHeader {
+  background: var(--jeopardy-blue);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: var(--font-board-header);
+  font-size: clamp(0.75rem, 1.5vw, 1.25rem);
+  text-transform: uppercase;
+  color: var(--text-light);
+}
+
+.hostCell {
+  background: var(--jeopardy-blue);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  aspect-ratio: 16 / 9;
+  color: var(--value-gold);
+  font-family: var(--font-value);
+  font-size: clamp(1rem, 2vw, 2rem);
+  cursor: pointer;
+}
+
+.hostCell:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+  cursor: not-allowed;
+}
+
+.answerBanner {
+  padding: 0.75rem 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.answerBanner.correct {
+  border-color: var(--correct-green);
+}
+
+.answerBanner.incorrect {
+  border-color: var(--incorrect-red);
+}
+
+.answerBanner p {
+  margin: 0;
+}
+
+.answerBanner .label {
+  font-family: var(--font-display);
+  color: var(--value-gold);
+  text-transform: uppercase;
+}
+
+.answerBanner .text {
+  font-family: var(--font-clue);
+  font-size: 1.25rem;
+  text-transform: uppercase;
+}
+
+.boardList {
+  list-style: none;
+  padding: 0;
+}
+
+.boardList li {
+  margin: 0.5rem 0;
+}
+
+.boardList button {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  background: var(--jeopardy-blue);
+  color: var(--text-light);
+  border: 2px solid var(--value-gold);
+  cursor: pointer;
+}

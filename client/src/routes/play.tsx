@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   useSocket,
   getStoredContestantToken,
@@ -141,6 +141,17 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
   const gameState = socket.data;
   const me = gameState?.players.find((p) => p.id === gameState?.playerId);
 
+  const error = socket.error;
+  const clearError = socket.clearError;
+  const isJoinError = Boolean(error && !gameState);
+  const isTransientError = Boolean(error && gameState);
+
+  useEffect(() => {
+    if (!isTransientError || !clearError) return;
+    const id = setTimeout(() => clearError(), 2000);
+    return () => clearTimeout(id);
+  }, [isTransientError, clearError]);
+
   const showClue =
     gameState?.currentClueId &&
     gameState?.currentClueText &&
@@ -157,15 +168,20 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
       <p className="room-code" data-testid="room-code">
         Room Code: {roomCode}
       </p>
-      {socket.error && (
-        <div className="error" role="alert">
-          <p>{socket.error}</p>
+      {isJoinError && (
+        <div className="error" role="alert" data-testid="join-error">
+          <p>{error}</p>
           <button type="button" onClick={onTryAgain}>
             Try Again
           </button>
         </div>
       )}
-      {!socket.error && gameState && (
+      {isTransientError && (
+        <div className="error-toast" role="status" data-testid="transient-error" aria-live="polite">
+          {error}
+        </div>
+      )}
+      {gameState && (
         <div className="contestant-state">
           <p>Welcome, {me?.name ?? 'Contestant'}</p>
           <p>Score: {me?.score ?? 0}</p>

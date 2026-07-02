@@ -201,7 +201,7 @@ describe('game sockets', () => {
 
     expect(state.roomCode).toBe(roomCode);
     expect(state.phase).toBe('LOBBY');
-    expect(state).not.toHaveProperty('answer');
+    expect(state.answer).toBeNull();
 
     client.disconnect();
     await server.close();
@@ -220,7 +220,7 @@ describe('game sockets', () => {
     expect(state.roomCode).toBe(roomCode);
     expect(state.playerId).toBe(token.playerId);
     expect(state.isControllingPlayer).toBe(false);
-    expect(state).not.toHaveProperty('answer');
+    expect(state.answer).toBeNull();
     expect(token.reconnectToken).toBeDefined();
 
     client.disconnect();
@@ -446,7 +446,7 @@ describe('game sockets', () => {
     const [stateA, stateB] = await Promise.all([stateAPromise, stateBPromise]);
     expect(stateA).toEqual(stateB);
     expect((stateA as { players: unknown[] }).players).toHaveLength(0);
-    expect(stateA).not.toHaveProperty('answer');
+    expect((stateA as { answer: string | null }).answer).toBeNull();
 
     const updateAPromise = waitForState(boardA);
     const updateBPromise = waitForState(boardB);
@@ -459,7 +459,7 @@ describe('game sockets', () => {
     expect(updateA).toEqual(updateB);
     expect((updateA as { players: { name: string }[] }).players).toHaveLength(1);
     expect((updateA as { players: { name: string }[] }).players[0].name).toBe('Alice');
-    expect(updateA).not.toHaveProperty('answer');
+    expect((updateA as { answer: string | null }).answer).toBeNull();
 
     boardA.disconnect();
     boardB.disconnect();
@@ -871,7 +871,7 @@ describe('clue selection sockets', () => {
     expect((aliceState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
     expect((bobState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
     expect((hostState as { answer: string }).answer).toBe(firstClue.answer);
-    expect((boardState as { answer?: string }).answer).toBeUndefined();
+    expect((boardState as { answer: string | null }).answer).toBeNull();
 
     host.disconnect();
     boardClient.disconnect();

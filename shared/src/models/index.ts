@@ -93,4 +93,10 @@ export interface GameState {
   dailyDoubleWager: number | null;
   finalWagers: Record<string, number>;
   finalAnswers: Record<string, string>;
+  revealedAnswer: string | null;
+  lastOutcome: {
+    playerId: string;
+    type: 'CORRECT' | 'INCORRECT';
+    value: number;
+  } | null;
 }

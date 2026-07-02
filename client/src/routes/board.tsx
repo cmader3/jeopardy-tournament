@@ -159,6 +159,37 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
   return null;
 }
 
+interface AnswerBannerProps {
+  state: BoardView;
+}
+
+function AnswerBanner({ state }: AnswerBannerProps) {
+  if (!state.answer) return null;
+  const outcome = state.lastOutcome;
+  const player = outcome ? state.players.find((p) => p.id === outcome.playerId) : undefined;
+  const outcomeLabel =
+    outcome?.type === 'CORRECT'
+      ? `Correct! ${player?.name ?? ''} +$${outcome.value}`
+      : outcome?.type === 'INCORRECT'
+        ? `Incorrect! ${player?.name ?? ''} -$${outcome.value}`
+        : null;
+
+  return (
+    <div
+      className={`${styles.answerBanner} ${outcome?.type === 'CORRECT' ? styles.answerCorrect : outcome?.type === 'INCORRECT' ? styles.answerIncorrect : ''}`}
+      data-testid="answer-banner"
+      role="status"
+      aria-live="polite"
+    >
+      <p className={styles.answerLabel}>Answer:</p>
+      <p className={styles.answerText} data-testid="answer-text">
+        {state.answer}
+      </p>
+      {outcomeLabel && <p className={styles.outcomeLabel} data-testid="outcome-label">{outcomeLabel}</p>}
+    </div>
+  );
+}
+
 function renderStage(state: BoardView) {
   const clueOverlay =
     state.currentClueId && state.currentClueText ? (
@@ -180,6 +211,14 @@ function renderStage(state: BoardView) {
     return (
       <div className={styles.lobbyStage}>
         <p className={styles.waiting}>Waiting for the host to start the game.</p>
+      </div>
+    );
+  }
+
+  if (state.answer) {
+    return (
+      <div className={styles.clueStage}>
+        <AnswerBanner state={state} />
       </div>
     );
   }

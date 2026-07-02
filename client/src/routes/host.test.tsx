@@ -33,8 +33,10 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     selectClue: vi.fn(),
     revealAnswer: vi.fn(),
     armBuzzers: vi.fn(),
+    buzz: vi.fn(),
     ruleCorrect: vi.fn(),
     ruleIncorrect: vi.fn(),
+    clearError: vi.fn(),
     ...overrides,
   });
 }
@@ -79,6 +81,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     buzzWinnerId: null,
     deadline: null,
     answer: null,
+    lastOutcome: null,
     lockedOutPlayerIds: [],
     serverNow: 0,
     ...overrides,

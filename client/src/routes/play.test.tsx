@@ -57,6 +57,8 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
+    answer: null,
+    lastOutcome: null,
     serverNow: 0,
     playerId: 'p1',
     isControllingPlayer: false,
@@ -81,6 +83,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     buzz: vi.fn(),
     ruleCorrect: vi.fn(),
     ruleIncorrect: vi.fn(),
+    clearError: vi.fn(),
   });
 }
 

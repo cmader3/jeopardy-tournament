@@ -53,6 +53,8 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     dailyDoubleWager: null,
     finalWagers: {},
     finalAnswers: {},
+    revealedAnswer: null,
+    lastOutcome: null,
   };
 }
 
@@ -236,6 +238,8 @@ function handleSelectClue(
       deadline: null,
       lockedOutPlayerIds: [],
       lockoutUntil: {},
+      revealedAnswer: null,
+      lastOutcome: null,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -406,6 +410,8 @@ function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
       players: updatedPlayers,
       controllingPlayerId: winner.id,
       auditLog: [...state.auditLog, auditEntry],
+      revealedAnswer: clue.answer,
+      lastOutcome: { playerId: winner.id, type: 'CORRECT', value },
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -463,6 +469,8 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
         ...resolveClueReturnToBoard(state, clue.id),
         players: updatedPlayers,
         auditLog: [...state.auditLog, auditEntry],
+        revealedAnswer: clue.answer,
+        lastOutcome: { playerId: player.id, type: 'INCORRECT', value },
       },
       effects: [{ type: 'BROADCAST_STATE' }],
     };
@@ -479,6 +487,7 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
       deadline: ctx.now + durationMs,
       lockedOutPlayerIds: updatedLockedOutPlayerIds,
       auditLog: [...state.auditLog, auditEntry],
+      lastOutcome: { playerId: player.id, type: 'INCORRECT', value },
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -493,8 +502,13 @@ function handleTimeExpire(state: GameState): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
   }
 
+  const clue = getCurrentClue(state);
   return {
-    state: resolveClueReturnToBoard(state, state.currentClueId),
+    state: {
+      ...resolveClueReturnToBoard(state, state.currentClueId),
+      revealedAnswer: clue?.answer ?? null,
+      lastOutcome: null,
+    },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }
@@ -508,6 +522,7 @@ function handleRevealAnswer(state: GameState): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
   }
 
+  const clue = getCurrentClue(state);
   return {
     state: {
       ...state,
@@ -519,6 +534,8 @@ function handleRevealAnswer(state: GameState): ReducerResult {
       deadline: null,
       lockedOutPlayerIds: [],
       lockoutUntil: {},
+      revealedAnswer: clue?.answer ?? null,
+      lastOutcome: null,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

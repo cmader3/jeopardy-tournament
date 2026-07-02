@@ -59,6 +59,8 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
+    answer: null,
+    lastOutcome: null,
     serverNow: 0,
     ...overrides,
   };
@@ -356,5 +358,84 @@ describe('BoardRoute', () => {
 
     expect(await screen.findByTestId('buzzed-indicator')).toHaveTextContent('Buzzed in:');
     expect(screen.getByTestId('buzzed-player-name')).toHaveTextContent('Bob');
+  });
+
+  it('shows the revealed answer after a correct ruling with feedback', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        lastOutcome: { playerId: 'p2', type: 'CORRECT', value: 100 },
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('answer-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('answer-text')).toHaveTextContent('Water');
+    expect(screen.getByTestId('outcome-label')).toHaveTextContent('Correct!');
+    expect(screen.getByTestId('outcome-label')).toHaveTextContent('Bob');
+    expect(screen.getByTestId('outcome-label')).toHaveTextContent('+$100');
+  });
+
+  it('shows the revealed answer after an incorrect ruling with feedback', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        lastOutcome: { playerId: 'p1', type: 'INCORRECT', value: 100 },
+        players: [
+          { id: 'p1', name: 'Alice', score: -100, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('answer-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('answer-text')).toHaveTextContent('Water');
+    expect(screen.getByTestId('outcome-label')).toHaveTextContent('Incorrect!');
+    expect(screen.getByTestId('outcome-label')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('outcome-label')).toHaveTextContent('-$100');
+  });
+
+  it('shows the revealed answer after a timeout with no score change', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        lastOutcome: null,
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('answer-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('answer-text')).toHaveTextContent('Water');
+    expect(screen.queryByTestId('outcome-label')).not.toBeInTheDocument();
   });
 });

@@ -60,6 +60,8 @@ export interface BoardView {
   controllingPlayerId: string | null;
   buzzWinnerId: string | null;
   deadline: number | null;
+  answer: string | null;
+  lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
   serverNow: number;
 }
 
@@ -76,6 +78,7 @@ export interface HostView {
   buzzWinnerId: string | null;
   deadline: number | null;
   answer: string | null;
+  lastOutcome: { playerId: string; type: 'CORRECT' | 'INCORRECT'; value: number } | null;
   lockedOutPlayerIds: string[];
   serverNow: number;
 }
@@ -197,6 +200,10 @@ export function projectBoard(state: GameState, now: number): BoardView {
     controllingPlayerId: state.controllingPlayerId,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
+    answer: state.revealedAnswer,
+    lastOutcome: state.lastOutcome
+      ? { playerId: state.lastOutcome.playerId, type: state.lastOutcome.type, value: state.lastOutcome.value }
+      : null,
     serverNow: now,
   };
 }
@@ -218,7 +225,10 @@ export function projectHost(state: GameState, now: number): HostView {
     controllingPlayerId: state.controllingPlayerId,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
-    answer: currentClue?.answer ?? null,
+    answer: state.revealedAnswer ?? currentClue?.answer ?? null,
+    lastOutcome: state.lastOutcome
+      ? { playerId: state.lastOutcome.playerId, type: state.lastOutcome.type, value: state.lastOutcome.value }
+      : null,
     lockedOutPlayerIds: state.lockedOutPlayerIds,
     serverNow: now,
   };

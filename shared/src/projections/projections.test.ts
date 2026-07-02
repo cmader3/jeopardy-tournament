@@ -123,7 +123,8 @@ describe('projections', () => {
     expect(view.deadline).toBeNull();
     expect(view.usedClueIds).toEqual([]);
     expect(view.controllingPlayerId).toBeNull();
-    expect(view).not.toHaveProperty('answer');
+    expect(view.answer).toBeNull();
+    expect(view.lastOutcome).toBeNull();
     expect(view).not.toHaveProperty('finalWagers');
     expect(view).not.toHaveProperty('finalAnswers');
   });
@@ -240,9 +241,33 @@ describe('projections', () => {
 
     expect(view.playerId).toBe(alice.id);
     expect(view.isControllingPlayer).toBe(false);
-    expect(view).not.toHaveProperty('answer');
+    expect(view.answer).toBeNull();
     expect(view).not.toHaveProperty('finalWagers');
     expect(view).not.toHaveProperty('finalAnswers');
     expect(view.round?.categories[0].clues[0]).not.toHaveProperty('answer');
+  });
+
+  it('projectBoard reveals the answer only after a ruling or timeout', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const revealed = { ...state, phase: 'BOARD_SELECT' as const, revealedAnswer: 'Water' };
+    const view = projectBoard(revealed, NOW);
+    expect(view.answer).toBe('Water');
+  });
+
+  it('projectBoard does not reveal the answer while a clue is active', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const active = { ...state, phase: 'CLUE_REVEALED' as const, currentClueId: 'cl1' };
+    expect(projectBoard(active, NOW).answer).toBeNull();
+  });
+
+  it('projectContestant reveals the answer only after it is revealed to the board', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = { ...state, players: [alice], revealedAnswer: 'Water' };
+    const view = projectContestant(state, alice.id, NOW);
+    expect(view.answer).toBe('Water');
   });
 });

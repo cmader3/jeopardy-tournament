@@ -5,6 +5,7 @@ import { boardApi, BoardSummary } from '../api/boards.js';
 import { createGame } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
 import type { HostView } from '@jeopardy/shared';
+import styles from './host.module.css';
 
 export interface HostLobbyProps {
   roomCode: string;
@@ -20,9 +21,9 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
   const canStart = connectedCount > 0;
 
   return (
-    <main className="host-lobby route-stub">
+    <main className={`${styles.hostLobby} route-stub`}>
       <h1>Host Lobby</h1>
-      <p className="room-code" data-testid="room-code">
+      <p className={styles.roomCode} data-testid="room-code">
         Room Code: {roomCode}
       </p>
       {startError && (
@@ -34,12 +35,12 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
       {playerCount === 0 ? (
         <p>Waiting for players...</p>
       ) : (
-        <ul className="player-list">
+        <ul className={styles.playerList}>
           {state?.players.map((player) => (
-            <li key={player.id} className={player.connected ? 'connected' : 'disconnected'}>
-              <span className="player-name">{player.name}</span>{' '}
+            <li key={player.id}>
+              <span className={styles.playerName}>{player.name}</span>{' '}
               <span
-                className={`player-status ${player.connected ? 'status-connected' : 'status-disconnected'}`}
+                className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
                 data-testid={`player-status-${player.id}`}
               >
                 {player.connected ? 'connected' : 'disconnected'}
@@ -48,9 +49,10 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
           ))}
         </ul>
       )}
-      <div className="start-controls">
+      <div className={styles.startControls}>
         <button
           type="button"
+          className={styles.actionButton}
           onClick={onStartGame}
           disabled={!canStart}
           aria-disabled={!canStart}
@@ -59,12 +61,12 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
           Start Game
         </button>
         {onCreateNewGame && (
-          <button type="button" onClick={onCreateNewGame}>
+          <button type="button" className={styles.actionButton} onClick={onCreateNewGame}>
             New Game
           </button>
         )}
         {connectedCount === 0 && (
-          <p className="minimum-players">At least one connected contestant is required to start.</p>
+          <p className={styles.minimumPlayers}>At least one connected contestant is required to start.</p>
         )}
       </div>
     </main>
@@ -95,12 +97,12 @@ function HostGrid({
 
   return (
     <div
-      className="host-grid"
+      className={styles.hostGrid}
       data-testid="host-grid"
-      style={{ display: 'grid', gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)`, gap: '0.5rem' }}
+      style={{ gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)` }}
     >
       {state.round.categories.map((category) => (
-        <div key={category.id} className="host-category-header" data-testid="host-category-header">
+        <div key={category.id} className={styles.hostCategoryHeader} data-testid="host-category-header">
           {category.title}
           {category.clues.some((c) => c.isDailyDouble) && <span data-testid="dd-marker"> (DD)</span>}
         </div>
@@ -108,13 +110,13 @@ function HostGrid({
       {rows.map((row) =>
         state.round!.categories.map((category) => {
           const clue = category.clues.find((c) => c.row === row);
-          if (!clue) return <div key={`${category.id}-${row}`} className="host-cell" />;
+          if (!clue) return <div key={`${category.id}-${row}`} className={styles.hostCell} />;
           const used = state.usedClueIds.includes(clue.id);
           return (
             <button
               key={clue.id}
               type="button"
-              className="host-cell"
+              className={styles.hostCell}
               data-testid={used ? 'host-used-cell' : 'host-clue-cell'}
               data-clue-id={clue.id}
               disabled={used}
@@ -125,6 +127,34 @@ function HostGrid({
           );
         }),
       )}
+    </div>
+  );
+}
+
+function HostAnswerBanner({ state }: { state: HostView }) {
+  if (!state.answer) return null;
+  const outcome = state.lastOutcome;
+  const player = outcome ? state.players.find((p) => p.id === outcome.playerId) : undefined;
+  const outcomeLabel =
+    outcome?.type === 'CORRECT'
+      ? `Correct! ${player?.name ?? ''} +$${outcome.value}`
+      : outcome?.type === 'INCORRECT'
+        ? `Incorrect! ${player?.name ?? ''} -$${outcome.value}`
+        : null;
+  const bannerClass =
+    outcome?.type === 'CORRECT'
+      ? `${styles.answerBanner} ${styles.correct}`
+      : outcome?.type === 'INCORRECT'
+        ? `${styles.answerBanner} ${styles.incorrect}`
+        : styles.answerBanner;
+
+  return (
+    <div className={bannerClass} data-testid="host-answer-banner" role="status" aria-live="polite">
+      <p className={styles.label}>Answer:</p>
+      <p className={styles.text} data-testid="host-answer-text">
+        {state.answer}
+      </p>
+      {outcomeLabel && <p data-testid="host-outcome-label">{outcomeLabel}</p>}
     </div>
   );
 }
@@ -144,34 +174,98 @@ export function HostInProgress({
     : null;
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
 
+  const showControls = currentClue || state?.answer;
+
   return (
-    <main className="host-in-progress route-stub">
+    <main className={`${styles.hostInProgress} route-stub`}>
       <h1>Game in Progress</h1>
-      <p className="room-code" data-testid="room-code">
+      <p className={styles.roomCode} data-testid="room-code">
         Room Code: {roomCode}
       </p>
-      <p className="phase" data-testid="phase-indicator">
+      <p className={styles.phase} data-testid="phase-indicator">
         Phase: {state?.phase ?? '—'}
       </p>
+      {showControls && (
+        <div className={styles.stickyControls}>
+          {state?.answer && !currentClue && <HostAnswerBanner state={state} />}
+          {currentClue && (
+            <div className={styles.currentClue} data-testid="current-clue">
+              <h3>Current Clue</h3>
+              <p className={styles.clueText} data-testid="clue-text">
+                {currentClue.clueText}
+              </p>
+              <p className={styles.answerText} data-testid="answer-text">
+                Answer: {currentClue.answer}
+              </p>
+              <div className={styles.actionRow}>
+                {state?.phase === 'CLUE_REVEALED' && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={onArmBuzzers}
+                    data-testid="arm-buzzers-button"
+                  >
+                    Arm Buzzers
+                  </button>
+                )}
+                {state?.phase === 'CLUE_REVEALED' && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={onRevealAnswer}
+                    data-testid="reveal-answer-button"
+                  >
+                    Reveal Answer / Return to Board
+                  </button>
+                )}
+                {state?.phase === 'BUZZED' && buzzedPlayer && (
+                  <div className={styles.buzzedPanel} data-testid="buzzed-player">
+                    <p>
+                      Buzzed in: <strong>{buzzedPlayer.name}</strong>
+                    </p>
+                    <div className={styles.actionRow}>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={onRuleCorrect}
+                        data-testid="rule-correct-button"
+                      >
+                        Correct
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={() => onRuleIncorrect?.(buzzedPlayer.id)}
+                        data-testid="rule-incorrect-button"
+                      >
+                        Incorrect
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <h2>Roster</h2>
       {players.length === 0 ? (
         <p>No contestants connected.</p>
       ) : (
-        <ul className="player-list" data-testid="roster">
+        <ul className={styles.roster} data-testid="roster">
           {players.map((player) => (
-            <li
-              key={player.id}
-              className={player.connected ? 'connected' : 'disconnected'}
-              data-testid={`roster-item-${player.id}`}
-            >
-              <span className="player-name" data-testid={`roster-name-${player.id}`}>
+            <li key={player.id} data-testid={`roster-item-${player.id}`}>
+              <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
                 {player.name}
               </span>
-              <span className="player-score" data-testid={`roster-score-${player.id}`}>
+              <span
+                className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
+                data-testid={`roster-score-${player.id}`}
+              >
                 {player.score}
               </span>
               <span
-                className={`player-status ${player.connected ? 'status-connected' : 'status-disconnected'}`}
+                className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
                 data-testid={`player-status-${player.id}`}
               >
                 {player.connected ? 'connected' : 'disconnected'}
@@ -182,40 +276,6 @@ export function HostInProgress({
       )}
       <h2>Board</h2>
       {state && <HostGrid state={state} onSelectClue={onSelectClue} />}
-      {currentClue && (
-        <div className="current-clue" data-testid="current-clue">
-          <h3>Current Clue</h3>
-          <p data-testid="clue-text">{currentClue.clueText}</p>
-          <p data-testid="answer-text">Answer: {currentClue.answer}</p>
-          {state?.phase === 'CLUE_REVEALED' && (
-            <button type="button" onClick={onArmBuzzers} data-testid="arm-buzzers-button">
-              Arm Buzzers
-            </button>
-          )}
-          {state?.phase === 'CLUE_REVEALED' && (
-            <button type="button" onClick={onRevealAnswer} data-testid="reveal-answer-button">
-              Reveal Answer / Return to Board
-            </button>
-          )}
-          {state?.phase === 'BUZZED' && buzzedPlayer && (
-            <div data-testid="buzzed-player">
-              <p>
-                Buzzed in: <strong>{buzzedPlayer.name}</strong>
-              </p>
-              <button type="button" onClick={onRuleCorrect} data-testid="rule-correct-button">
-                Correct
-              </button>
-              <button
-                type="button"
-                onClick={() => onRuleIncorrect?.(buzzedPlayer.id)}
-                data-testid="rule-incorrect-button"
-              >
-                Incorrect
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </main>
   );
 }
@@ -327,11 +387,13 @@ export function HostContent() {
       {boards.length === 0 ? (
         <p>No boards available. Create one in Admin.</p>
       ) : (
-        <ul className="board-list">
+        <ul className={styles.boardList} data-testid="board-list">
           {boards.map((board) => (
             <li key={board.id}>
               <button
                 type="button"
+                className={styles.actionButton}
+                data-testid="board-list-item"
                 onClick={() => handleCreate(board.id)}
                 disabled={!board.isComplete}
                 title={board.isComplete ? undefined : 'This board is incomplete and cannot be used to start a game'}
