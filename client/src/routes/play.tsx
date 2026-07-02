@@ -86,6 +86,27 @@ function Buzzer({
   );
 }
 
+function AnswerBanner({ state }: { state: ContestantView }) {
+  if (!state.answer) return null;
+  const outcome = state.lastOutcome;
+  const player = outcome ? state.players.find((p) => p.id === outcome.playerId) : undefined;
+  const outcomeLabel =
+    outcome?.type === 'CORRECT'
+      ? `Correct! ${player?.name ?? ''} +$${outcome.value}`
+      : outcome?.type === 'INCORRECT'
+        ? `Incorrect! ${player?.name ?? ''} -$${outcome.value}`
+        : null;
+
+  return (
+    <div data-testid="contestant-answer-banner" role="status" aria-live="polite">
+      <p>
+        Answer: <strong data-testid="contestant-answer-text">{state.answer}</strong>
+      </p>
+      {outcomeLabel && <p data-testid="contestant-outcome-label">{outcomeLabel}</p>}
+    </div>
+  );
+}
+
 function ContestantGrid({
   state,
   onSelectClue,
@@ -202,6 +223,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           )}
           {gameState.phase === 'BOARD_SELECT' && gameState.round && (
             <>
+              {gameState.answer && <AnswerBanner state={gameState} />}
               <p>Phase: {gameState.phase}</p>
               {gameState.isControllingPlayer ? (
                 <p>Select a clue from the board.</p>

@@ -1247,6 +1247,73 @@ describe('buzzer arming and fastest-finger sockets', () => {
     bob.disconnect();
     await server.close();
   });
+
+  it('wrong-then-right sequence broadcasts consistent scores and control to all roles', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA, tokenB } = await setupGame(server);
+
+    host.emit('arm_buzzers');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    // Alice buzzes first and is ruled incorrect.
+    alice.emit('buzz', { playerId: tokenA.playerId });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    let hostUpdate = waitForState(host, (s) => s.phase === 'BUZZERS_ARMED');
+    let boardUpdate = waitForState(boardClient, (s) => s.phase === 'BUZZERS_ARMED');
+    let aliceUpdate = waitForState(alice, (s) => s.phase === 'BUZZERS_ARMED');
+    let bobUpdate = waitForState(bob, (s) => s.phase === 'BUZZERS_ARMED');
+    host.emit('rule_incorrect', { playerId: tokenA.playerId });
+    const [rearmHost, rearmBoard, rearmAlice, rearmBob] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((rearmHost as { phase: string }).phase).toBe('BUZZERS_ARMED');
+    expect((rearmBoard as { phase: string }).phase).toBe('BUZZERS_ARMED');
+    expect((rearmAlice as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(-100);
+    expect((rearmBoard as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(-100);
+    expect((rearmBob as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(-100);
+    expect((rearmAlice as { isLockedOut: boolean }).isLockedOut).toBe(true);
+
+    // Bob buzzes on the re-arm and is ruled correct.
+    bob.emit('buzz', { playerId: tokenB.playerId });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    hostUpdate = waitForState(host);
+    boardUpdate = waitForState(boardClient);
+    aliceUpdate = waitForState(alice);
+    bobUpdate = waitForState(bob);
+    host.emit('rule_correct');
+    const [finalHost, finalBoard, finalAlice, finalBob] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((finalHost as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((finalBoard as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((finalAlice as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((finalBob as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((finalHost as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(-100);
+    expect((finalBoard as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenB.playerId)?.score).toBe(100);
+    expect((finalAlice as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(-100);
+    expect((finalBob as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenB.playerId)?.score).toBe(100);
+    expect((finalHost as { controllingPlayerId: string | null }).controllingPlayerId).toBe(tokenB.playerId);
+    expect((finalBoard as { controllingPlayerId: string | null }).controllingPlayerId).toBe(tokenB.playerId);
+    expect((finalBob as { isControllingPlayer: boolean }).isControllingPlayer).toBe(true);
+    expect((finalBoard as { answer: string | null }).answer).toBe('Water');
+    expect((finalAlice as { answer: string | null }).answer).toBe('Water');
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });
 
 describe('host score tools and undo sockets', () => {

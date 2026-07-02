@@ -649,6 +649,36 @@ describe('RULE_INCORRECT', () => {
     expect(resolved.state.currentClueId).toBeNull();
     expect(resolved.state.controllingPlayerId).toBe('p1');
   });
+
+  it('wrong-then-right sequence deducts the first contestant and lets a different contestant win the re-arm', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    state = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 }).state;
+
+    expect(state.phase).toBe('BUZZERS_ARMED');
+    expect(state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
+    expect(state.lockedOutPlayerIds).toContain('p1');
+    expect(state.buzzWinnerId).toBeNull();
+    expect(state.deadline).toBe(NOW + 100 + state.board.defaultTimerSeconds * 1000);
+
+    // The locked-out player cannot buzz again on the re-arm.
+    const lockedOutBuzz = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 150 });
+    expect(lockedOutBuzz.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('locked out') });
+    expect(lockedOutBuzz.state.buzzWinnerId).toBeNull();
+
+    // A different contestant can buzz and win the re-arm.
+    const rearmWinner = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 150 });
+    expect(rearmWinner.state.phase).toBe('BUZZED');
+    expect(rearmWinner.state.buzzWinnerId).toBe('p2');
+
+    const resolved = reduce(rearmWinner.state, { type: 'RULE_CORRECT' }, { now: NOW + 200 });
+    expect(resolved.state.phase).toBe('BOARD_SELECT');
+    expect(resolved.state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
+    expect(resolved.state.players.find((p) => p.id === 'p2')?.score).toBe(100);
+    expect(resolved.state.controllingPlayerId).toBe('p2');
+    expect(resolved.state.revealedAnswer).toBe('Water');
+  });
 });
 
 describe('TIME_EXPIRE', () => {

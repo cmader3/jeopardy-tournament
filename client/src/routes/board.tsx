@@ -226,21 +226,20 @@ function renderStage(state: BoardView) {
     );
   }
 
-  if (state.answer) {
-    return (
-      <div className={styles.clueStage}>
-        <AnswerBanner state={state} />
-      </div>
-    );
-  }
+  const answerBanner = state.answer ? <AnswerBanner state={state} /> : null;
 
   if (state.round) {
     return (
       <div className={styles.roundStage}>
+        {answerBanner}
         {isRoundStart(state) && <RoundBanner roundType={state.round.type} />}
         <BoardGrid round={state.round} usedClueIds={state.usedClueIds} />
       </div>
     );
+  }
+
+  if (answerBanner) {
+    return <div className={styles.clueStage}>{answerBanner}</div>;
   }
 
   return <p className={styles.waiting}>No active round</p>;

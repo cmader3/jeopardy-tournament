@@ -295,4 +295,53 @@ describe('projections', () => {
     expect(view.serverNow).toBe(NOW);
     expect(view.answer).toBeNull();
   });
+
+  it('all role projections agree on scores, phase, control, and revealed answer after a correct ruling', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice', score: 0 });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', score: 0 });
+    state = { ...state, players: [alice, bob], controllingPlayerId: alice.id };
+
+    state = {
+      ...state,
+      phase: 'BOARD_SELECT' as const,
+      currentClueId: null,
+      revealedAnswer: 'Water',
+      lastOutcome: { playerId: bob.id, type: 'CORRECT', value: 100 },
+      usedClueIds: ['cl1'],
+      players: [
+        { ...alice, score: 0 },
+        { ...bob, score: 100 },
+      ],
+      controllingPlayerId: bob.id,
+    };
+
+    const boardView = projectBoard(state, NOW);
+    const hostView = projectHost(state, NOW);
+    const contestantView = projectContestant(state, alice.id, NOW);
+
+    expect(boardView.phase).toBe('BOARD_SELECT');
+    expect(hostView.phase).toBe('BOARD_SELECT');
+    expect(contestantView.phase).toBe('BOARD_SELECT');
+
+    expect(boardView.controllingPlayerId).toBe(bob.id);
+    expect(hostView.controllingPlayerId).toBe(bob.id);
+    expect(contestantView.controllingPlayerId).toBe(bob.id);
+
+    expect(boardView.answer).toBe('Water');
+    expect(hostView.answer).toBe('Water');
+    expect(contestantView.answer).toBe('Water');
+
+    expect(boardView.players).toEqual([
+      { id: alice.id, name: 'Alice', score: 0, connected: true },
+      { id: bob.id, name: 'Bob', score: 100, connected: true },
+    ]);
+    expect(hostView.players).toEqual(boardView.players);
+    expect(contestantView.players).toEqual(boardView.players);
+
+    expect(boardView.lastOutcome).toEqual({ playerId: bob.id, type: 'CORRECT', value: 100 });
+    expect(hostView.lastOutcome).toEqual(boardView.lastOutcome);
+    expect(contestantView.lastOutcome).toEqual(boardView.lastOutcome);
+  });
 });

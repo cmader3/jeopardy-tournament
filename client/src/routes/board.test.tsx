@@ -491,4 +491,32 @@ describe('BoardRoute', () => {
     expect(screen.getByTestId('answer-text')).toHaveTextContent('Water');
     expect(screen.queryByTestId('outcome-label')).not.toBeInTheDocument();
   });
+
+  it('shows the answer banner together with the grid after a ruling so the board returns to the board-select stage', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        lastOutcome: { playerId: 'p2', type: 'CORRECT', value: 100 },
+        controllingPlayerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('answer-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('answer-text')).toHaveTextContent('Water');
+    expect(screen.getByTestId('board-grid')).toBeInTheDocument();
+    expect(screen.getAllByTestId('used-cell')).toHaveLength(1);
+    expect(screen.getAllByTestId('clue-cell')).toHaveLength(2);
+  });
 });

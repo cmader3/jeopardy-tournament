@@ -469,4 +469,44 @@ describe('PlayRoute', () => {
 
     expect(await screen.findByTestId('countdown')).toHaveTextContent('5');
   });
+
+  it('shows the revealed answer and outcome on the contestant device after a ruling', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        lastOutcome: { playerId: 'p2', type: 'CORRECT', value: 100 },
+        controllingPlayerId: 'p2',
+        playerId: 'p1',
+        isControllingPlayer: false,
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-answer-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-answer-text')).toHaveTextContent('Water');
+    expect(screen.getByTestId('contestant-outcome-label')).toHaveTextContent('Correct!');
+    expect(screen.getByTestId('contestant-outcome-label')).toHaveTextContent('Bob');
+    expect(screen.getByTestId('contestant-outcome-label')).toHaveTextContent('+$100');
+  });
 });
