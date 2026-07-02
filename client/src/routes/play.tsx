@@ -4,6 +4,7 @@ import {
   getStoredContestantToken,
   clearStoredContestantToken,
 } from '../socket/useSocket.js';
+import { Countdown } from '../components/Countdown.js';
 import type { ContestantView } from '@jeopardy/shared';
 
 interface JoinForm {
@@ -215,7 +216,12 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               <p data-testid="contestant-clue-text">{gameState.currentClueText}</p>
             </div>
           )}
-          {showBuzzer && <Buzzer state={gameState} onBuzz={socket.buzz} />}
+          {showBuzzer && (
+            <>
+              <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
+              <Buzzer state={gameState} onBuzz={socket.buzz} />
+            </>
+          )}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (
             <div data-testid="daily-double-splash">DAILY DOUBLE</div>
           )}

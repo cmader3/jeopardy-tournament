@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useSocket } from '../socket/useSocket.js';
+import { Countdown } from '../components/Countdown.js';
+import { RoundBanner } from '../components/RoundBanner.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
 import styles from './board.module.css';
 
@@ -139,8 +141,11 @@ interface GameStatusBannerProps {
 function GameStatusBanner({ state }: GameStatusBannerProps) {
   if (state.phase === 'BUZZERS_ARMED') {
     return (
-      <div className={styles.armedIndicator} data-testid="armed-indicator">
-        BUZZERS ARMED
+      <div className={styles.statusGroup}>
+        <div className={styles.armedIndicator} data-testid="armed-indicator">
+          BUZZERS ARMED
+        </div>
+        <Countdown deadline={state.deadline} serverNow={state.serverNow} />
       </div>
     );
   }
@@ -157,6 +162,12 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
   }
 
   return null;
+}
+
+function isRoundStart(state: BoardView): boolean {
+  if (!state.round || state.phase !== 'BOARD_SELECT') return false;
+  const roundClueIds = new Set(state.round.categories.flatMap((c) => c.clues.map((clue) => clue.id)));
+  return !state.usedClueIds.some((id) => roundClueIds.has(id));
 }
 
 interface AnswerBannerProps {
@@ -224,7 +235,12 @@ function renderStage(state: BoardView) {
   }
 
   if (state.round) {
-    return <BoardGrid round={state.round} usedClueIds={state.usedClueIds} />;
+    return (
+      <div className={styles.roundStage}>
+        {isRoundStart(state) && <RoundBanner roundType={state.round.type} />}
+        <BoardGrid round={state.round} usedClueIds={state.usedClueIds} />
+      </div>
+    );
   }
 
   return <p className={styles.waiting}>No active round</p>;

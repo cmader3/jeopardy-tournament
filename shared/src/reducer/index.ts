@@ -514,8 +514,9 @@ function handleTimeExpire(state: GameState): ReducerResult {
 }
 
 function handleRevealAnswer(state: GameState): ReducerResult {
-  if (state.phase !== 'CLUE_REVEALED') {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No clue is available to reveal' }] };
+  const canReveal = state.phase === 'CLUE_REVEALED' || (state.phase === 'BUZZERS_ARMED' && state.buzzWinnerId === null);
+  if (!canReveal) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No clue is available to reveal right now' }] };
   }
 
   if (!state.currentClueId) {
@@ -525,15 +526,7 @@ function handleRevealAnswer(state: GameState): ReducerResult {
   const clue = getCurrentClue(state);
   return {
     state: {
-      ...state,
-      phase: 'BOARD_SELECT',
-      usedClueIds: [...state.usedClueIds, state.currentClueId],
-      currentClueId: null,
-      buzzWinnerId: null,
-      armedAt: null,
-      deadline: null,
-      lockedOutPlayerIds: [],
-      lockoutUntil: {},
+      ...resolveClueReturnToBoard(state, state.currentClueId),
       revealedAnswer: clue?.answer ?? null,
       lastOutcome: null,
     },

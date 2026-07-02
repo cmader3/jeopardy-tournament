@@ -244,6 +244,59 @@ describe('BoardRoute', () => {
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(3);
   });
 
+  it('shows the round banner at the start of a round', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('round-banner')).toHaveTextContent('Jeopardy!');
+  });
+
+  it('shows the correct round banner for Double Jeopardy', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        roundIndex: 1,
+        round: makeRound({ type: 'DOUBLE_JEOPARDY' }),
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('round-banner')).toHaveTextContent('Double Jeopardy!');
+  });
+
+  it('shows a countdown while the buzzers are armed', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('countdown')).toHaveTextContent('5');
+  });
+
   it('renders used cells as empty', async () => {
     mockUseSocket(
       makeBoardState({

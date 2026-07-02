@@ -957,6 +957,50 @@ describe('clue selection sockets', () => {
     bob.disconnect();
     await server.close();
   });
+
+  it('host reveals the answer before expiry with no buzz and resolves the clue', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+    const state = server.engine.getState(roomCode)!;
+    const firstClue = state.board.rounds[0].clues[0];
+
+    host.emit('select_clue', { clueId: firstClue.id });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    host.emit('arm_buzzers');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('reveal_answer');
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((hostState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((boardState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((aliceState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((bobState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((boardState as { usedClueIds: string[] }).usedClueIds).toContain(firstClue.id);
+    expect((boardState as { currentClueId: string | null }).currentClueId).toBeNull();
+    expect((boardState as { answer: string | null }).answer).toBe(firstClue.answer);
+    expect((aliceState as { answer: string | null }).answer).toBe(firstClue.answer);
+    expect((bobState as { answer: string | null }).answer).toBe(firstClue.answer);
+    expect((aliceState as { players: { score: number }[] }).players[0].score).toBe(0);
+    expect((bobState as { players: { score: number }[] }).players[0].score).toBe(0);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });
 
 describe('buzzer arming and fastest-finger sockets', () => {

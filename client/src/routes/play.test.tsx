@@ -437,4 +437,36 @@ describe('PlayRoute', () => {
     await userEvent.click(buzzer);
     expect(buzz).not.toHaveBeenCalled();
   });
+
+  it('shows a countdown while the buzzers are armed', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('countdown')).toHaveTextContent('5');
+  });
 });

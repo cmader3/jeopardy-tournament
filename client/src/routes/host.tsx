@@ -4,6 +4,7 @@ import { useHostAuth } from '../auth/useHostAuth.js';
 import { boardApi, BoardSummary } from '../api/boards.js';
 import { createGame } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
+import { Countdown } from '../components/Countdown.js';
 import type { HostView } from '@jeopardy/shared';
 import styles from './host.module.css';
 
@@ -197,6 +198,7 @@ export function HostInProgress({
               <p className={styles.answerText} data-testid="answer-text">
                 Answer: {currentClue.answer}
               </p>
+              <Countdown deadline={state?.deadline ?? null} serverNow={state?.serverNow ?? 0} />
               <div className={styles.actionRow}>
                 {state?.phase === 'CLUE_REVEALED' && (
                   <button
@@ -208,7 +210,8 @@ export function HostInProgress({
                     Arm Buzzers
                   </button>
                 )}
-                {state?.phase === 'CLUE_REVEALED' && (
+                {(state?.phase === 'CLUE_REVEALED' ||
+                  (state?.phase === 'BUZZERS_ARMED' && state?.buzzWinnerId == null)) && (
                   <button
                     type="button"
                     className={styles.actionButton}

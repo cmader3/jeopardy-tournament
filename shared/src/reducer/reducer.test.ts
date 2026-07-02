@@ -425,6 +425,30 @@ describe('REVEAL_ANSWER', () => {
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('No clue') });
   });
+
+  it('resolves the clue and reveals the answer when no one has buzzed', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'REVEAL_ANSWER' }, { now: NOW + 1000 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.usedClueIds).toContain('cl1');
+    expect(result.state.revealedAnswer).toBe('Water');
+    expect(result.state.players.every((p) => p.score === 0)).toBe(true);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('is rejected when a contestant has already buzzed in', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+
+    const result = reduce(state, { type: 'REVEAL_ANSWER' }, { now: NOW + 100 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+    expect(result.state.phase).toBe('BUZZED');
+  });
 });
 
 function setupClueRevealed(): GameState {
@@ -448,6 +472,22 @@ describe('ARM_BUZZERS', () => {
     expect(result.state.armedAt).toBe(NOW);
     expect(result.state.deadline).toBe(NOW + state.board.defaultTimerSeconds * 1000);
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('uses the board-configured per-clue timer duration', () => {
+    const board = makeBoard();
+    board.defaultTimerSeconds = 25;
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW });
+
+    expect(result.state.deadline).toBe(NOW + 25_000);
   });
 
   it('is rejected outside CLUE_REVEALED', () => {
@@ -581,6 +621,17 @@ describe('RULE_INCORRECT', () => {
     expect(result.state.deadline).toBe(NOW + 100 + state.board.defaultTimerSeconds * 1000);
     expect(result.state.auditLog).toHaveLength(1);
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('restarts the countdown to the full duration after an incorrect ruling', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 5000 }).state;
+
+    const result = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 7000 });
+
+    expect(result.state.phase).toBe('BUZZERS_ARMED');
+    expect(result.state.deadline).toBe(NOW + 7000 + state.board.defaultTimerSeconds * 1000);
   });
 
   it('resolves the clue when everyone is locked out after a wrong answer', () => {

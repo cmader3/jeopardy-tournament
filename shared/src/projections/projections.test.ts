@@ -270,4 +270,29 @@ describe('projections', () => {
     const view = projectContestant(state, alice.id, NOW);
     expect(view.answer).toBe('Water');
   });
+
+  it('projectBoard exposes the deadline and serverNow for a server-authoritative countdown', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const armed = { ...state, phase: 'BUZZERS_ARMED' as const, deadline: NOW + 25_000 };
+
+    const view = projectBoard(armed, NOW);
+
+    expect(view.deadline).toBe(NOW + 25_000);
+    expect(view.serverNow).toBe(NOW);
+    expect(view.answer).toBeNull();
+  });
+
+  it('projectContestant exposes the deadline and serverNow for a server-authoritative countdown', () => {
+    const board = makeBoard();
+    const state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const armed = { ...state, players: [alice], phase: 'BUZZERS_ARMED' as const, deadline: NOW + 25_000 };
+
+    const view = projectContestant(armed, alice.id, NOW);
+
+    expect(view.deadline).toBe(NOW + 25_000);
+    expect(view.serverNow).toBe(NOW);
+    expect(view.answer).toBeNull();
+  });
 });
