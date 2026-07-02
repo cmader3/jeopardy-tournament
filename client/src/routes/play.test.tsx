@@ -416,6 +416,135 @@ describe('PlayRoute', () => {
     expect(submitDDWager).toHaveBeenCalledWith(200);
   });
 
+  it('shows an inline minimum-bound error when the controlling contestant submits a below-minimum Daily Double wager', async () => {
+    const submitDDWager = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        playerId: 'p1',
+        isControllingPlayer: true,
+        canWager: true,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      submitDDWager,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-wager-input')).toBeInTheDocument();
+
+    const wagerInput = screen.getByTestId('dd-wager-input');
+    await userEvent.clear(wagerInput);
+    await userEvent.type(wagerInput, '4');
+    await userEvent.click(screen.getByTestId('dd-wager-submit'));
+
+    expect(submitDDWager).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('dd-wager-error')).toHaveTextContent(/at least \$5/i);
+    expect(screen.getByTestId('dd-wager-error')).toHaveTextContent(/allowed range/i);
+  });
+
+  it('shows an inline over-maximum error when the controlling contestant submits an above-max Daily Double wager', async () => {
+    const submitDDWager = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        playerId: 'p1',
+        isControllingPlayer: true,
+        canWager: true,
+        players: [{ id: 'p1', name: 'Alice', score: 100, connected: true }],
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      submitDDWager,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-wager-input')).toBeInTheDocument();
+
+    const wagerInput = screen.getByTestId('dd-wager-input');
+    await userEvent.clear(wagerInput);
+    await userEvent.type(wagerInput, '201');
+    await userEvent.click(screen.getByTestId('dd-wager-submit'));
+
+    expect(submitDDWager).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('dd-wager-error')).toHaveTextContent(/cannot exceed \$200/i);
+    expect(screen.getByTestId('dd-wager-error')).toHaveTextContent(/allowed range/i);
+  });
+
+  it('clears the inline wager error and allows resubmit when the contestant corrects the wager', async () => {
+    const submitDDWager = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'DAILY_DOUBLE_WAGER',
+        round: makeRound(),
+        currentClueId: 'cl2',
+        playerId: 'p1',
+        isControllingPlayer: true,
+        canWager: true,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      submitDDWager,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('daily-double-wager-input')).toBeInTheDocument();
+
+    const wagerInput = screen.getByTestId('dd-wager-input');
+    await userEvent.clear(wagerInput);
+    await userEvent.type(wagerInput, '4');
+    await userEvent.click(screen.getByTestId('dd-wager-submit'));
+
+    expect(await screen.findByTestId('dd-wager-error')).toBeInTheDocument();
+
+    await userEvent.clear(wagerInput);
+    await userEvent.type(wagerInput, '50');
+    await userEvent.click(screen.getByTestId('dd-wager-submit'));
+
+    expect(screen.queryByTestId('dd-wager-error')).not.toBeInTheDocument();
+    expect(submitDDWager).toHaveBeenCalledWith(50);
+  });
+
   it('shows a passive Daily Double state to non-controlling contestants', async () => {
     useSocket.mockReturnValue({
       connected: true,

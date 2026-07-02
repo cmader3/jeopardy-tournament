@@ -173,12 +173,17 @@ function ContestantGrid({
 
 function DailyDoubleWager({
   state,
+  error,
   onSubmit,
+  clearError,
 }: {
   state: ContestantView;
+  error?: string | null;
   onSubmit?: (amount: number) => void;
+  clearError?: () => void;
 }) {
   const [amount, setAmount] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const me = state.players.find((p) => p.id === state.playerId);
   const highestValue =
     state.round?.categories
@@ -207,26 +212,65 @@ function DailyDoubleWager({
     );
   }
 
+  const isWagerError = (msg?: string | null) => Boolean(msg && /wager/i.test(msg));
+  const displayError = validationError || (isWagerError(error) ? error : null);
+
+  const handleAmountChange = (value: string) => {
+    setAmount(value);
+    if (validationError) {
+      setValidationError(null);
+    }
+    if (error && isWagerError(error)) {
+      clearError?.();
+    }
+  };
+
+  const handleSubmit = () => {
+    const parsed = Number(amount);
+    if (amount === '' || Number.isNaN(parsed)) {
+      setValidationError(`Please enter a valid wager amount between $${minWager} and $${maxWager}.`);
+      return;
+    }
+    if (parsed < minWager) {
+      setValidationError(`Wager must be at least $${minWager} (allowed range: $${minWager} - $${maxWager}).`);
+      return;
+    }
+    if (parsed > maxWager) {
+      setValidationError(`Wager cannot exceed $${maxWager} (allowed range: $${minWager} - $${maxWager}).`);
+      return;
+    }
+    onSubmit?.(parsed);
+  };
+
   return (
     <div data-testid="daily-double-wager-input">
       <p data-testid="daily-double-splash">DAILY DOUBLE</p>
       <p>Enter your wager ({'$'}{minWager} - {'$'}{maxWager})</p>
       <input
         type="number"
+        step="1"
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) => handleAmountChange(e.target.value)}
         min={minWager}
         max={maxWager}
         data-testid="dd-wager-input"
+        aria-invalid={displayError ? 'true' : undefined}
+        aria-describedby={displayError ? 'dd-wager-error' : undefined}
       />
+      {displayError && (
+        <p
+          id="dd-wager-error"
+          data-testid="dd-wager-error"
+          className="error"
+          role="alert"
+          aria-live="polite"
+        >
+          {displayError}
+        </p>
+      )}
       <button
         type="button"
-        onClick={() => {
-          const value = Number(amount);
-          if (!Number.isNaN(value)) {
-            onSubmit?.(value);
-          }
-        }}
+        onClick={handleSubmit}
         data-testid="dd-wager-submit"
       >
         Submit Wager
@@ -349,7 +393,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             </>
           )}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (
-            <DailyDoubleWager state={gameState} onSubmit={socket.submitDDWager} />
+            <DailyDoubleWager state={gameState} onSubmit={socket.submitDDWager} error={error} clearError={clearError} />
           )}
           {gameState.phase === 'DAILY_DOUBLE_CLUE' && gameState.isControllingPlayer && gameState.dailyDoubleWager != null && (
             <p data-testid="dd-wager-locked-amount">Your wager: {'$'}{gameState.dailyDoubleWager}</p>
