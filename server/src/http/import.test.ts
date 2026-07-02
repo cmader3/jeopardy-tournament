@@ -40,6 +40,9 @@ describe('POST /api/boards/import', () => {
       'Science,100,Water symbol?,H2O\n' +
       'History,200,Berlin Wall year?,1989\n';
 
+    const beforeLibrary = await authRequest(app).get('/api/boards').expect(200);
+    const beforeCount = beforeLibrary.body.length;
+
     const response = await authRequest(app)
       .post('/api/boards/import')
       .attach('file', csvBuffer(csv), { filename: 'sample.csv', contentType: 'text/csv' })
@@ -53,8 +56,8 @@ describe('POST /api/boards/import', () => {
     expect(jeopardy).toBeDefined();
     expect(jeopardy.categories).toHaveLength(2);
 
-    const library = await authRequest(app).get('/api/boards').expect(200);
-    expect(library.body).toHaveLength(0);
+    const afterLibrary = await authRequest(app).get('/api/boards').expect(200);
+    expect(afterLibrary.body).toHaveLength(beforeCount);
   });
 
   it('returns a parsed board preview from an XLSX upload', async () => {
