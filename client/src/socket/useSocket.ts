@@ -13,6 +13,10 @@ export interface SocketState<T> {
   leaveGame?: () => void;
   selectClue?: (clueId: string) => void;
   revealAnswer?: () => void;
+  armBuzzers?: () => void;
+  buzz?: (playerId: string) => void;
+  ruleCorrect?: () => void;
+  ruleIncorrect?: (playerId: string) => void;
 }
 
 export function useSocket<T>(
@@ -90,7 +94,23 @@ export function useSocket<T>(
     socketRef.current?.emit('reveal_answer');
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer };
+  const armBuzzers = useCallback(() => {
+    socketRef.current?.emit('arm_buzzers');
+  }, []);
+
+  const buzz = useCallback((playerId: string) => {
+    socketRef.current?.emit('buzz', { playerId });
+  }, []);
+
+  const ruleCorrect = useCallback(() => {
+    socketRef.current?.emit('rule_correct');
+  }, []);
+
+  const ruleIncorrect = useCallback((playerId: string) => {
+    socketRef.current?.emit('rule_incorrect', { playerId });
+  }, []);
+
+  return { connected, error, data, startGame, leaveGame, selectClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect };
 }
 
 export function getStoredContestantToken(): {

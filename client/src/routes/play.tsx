@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import {
   useSocket,
   getStoredContestantToken,
@@ -17,6 +17,72 @@ interface ContestantLobbyProps {
   name: string;
   onLeave: () => void;
   onTryAgain: () => void;
+}
+
+function useClientTime(serverNow: number): number {
+  return useSyncExternalStore(
+    (callback) => {
+      const id = setInterval(callback, 50);
+      return () => clearInterval(id);
+    },
+    () => Date.now(),
+    () => serverNow,
+  );
+}
+
+function Buzzer({
+  state,
+  onBuzz,
+}: {
+  state: ContestantView;
+  onBuzz?: (playerId: string) => void;
+}) {
+  const clientTime = useClientTime(state.serverNow ?? 0);
+  const isLocked = state.isLockedOut || (state.lockoutUntil != null && state.lockoutUntil > clientTime);
+  const isWinner = state.buzzWinnerId === state.playerId;
+  const isLoser = state.buzzWinnerId != null && state.buzzWinnerId !== state.playerId;
+
+  let label = 'Buzz In';
+  if (state.phase === 'CLUE_REVEALED') {
+    label = isLocked ? 'Too Early' : 'Wait for Host';
+  } else if (state.phase === 'BUZZERS_ARMED') {
+    label = isLocked ? 'Locked Out' : 'Buzz In';
+  } else if (state.phase === 'BUZZED') {
+    label = isWinner ? 'You\'re In!' : 'Locked Out';
+  }
+
+  const canBuzz =
+    state.phase === 'BUZZERS_ARMED' &&
+    !isLocked &&
+    !isWinner &&
+    !isLoser;
+
+  const handlePress = useCallback(() => {
+    if (canBuzz) {
+      onBuzz?.(state.playerId);
+    }
+  }, [canBuzz, onBuzz, state.playerId]);
+
+  return (
+    <button
+      type="button"
+      data-testid="contestant-buzzer"
+      aria-label={label}
+      disabled={!canBuzz}
+      onClick={handlePress}
+      style={{
+        width: '100%',
+        minHeight: '50vh',
+        fontSize: '2rem',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        touchAction: 'manipulation',
+        userSelect: 'none',
+      }}
+    >
+      {label}
+    </button>
+  );
 }
 
 function ContestantGrid({
@@ -80,6 +146,11 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
     gameState?.currentClueText &&
     (gameState?.phase === 'CLUE_REVEALED' || gameState?.phase === 'BUZZERS_ARMED' || gameState?.phase === 'BUZZED');
 
+  const showBuzzer =
+    gameState?.phase === 'CLUE_REVEALED' ||
+    gameState?.phase === 'BUZZERS_ARMED' ||
+    gameState?.phase === 'BUZZED';
+
   return (
     <main className="route-stub">
       <h1>Play</h1>
@@ -128,6 +199,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               <p data-testid="contestant-clue-text">{gameState.currentClueText}</p>
             </div>
           )}
+          {showBuzzer && <Buzzer state={gameState} onBuzz={socket.buzz} />}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (
             <div data-testid="daily-double-splash">DAILY DOUBLE</div>
           )}

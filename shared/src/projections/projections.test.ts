@@ -3,6 +3,8 @@ import { createInitialState } from '../reducer/index.js';
 import { projectBoard, projectHost, projectContestant } from './index.js';
 import type { Board, Player } from '../models/index.js';
 
+const NOW = 1_000_000;
+
 function makeBoard(): Board {
   return {
     id: 'b1',
@@ -110,7 +112,7 @@ describe('projections', () => {
   it('projectBoard exposes public state without answers or secrets', () => {
     const board = makeBoard();
     const state = createInitialState('s1', 'ABCD', board);
-    const view = projectBoard(state);
+    const view = projectBoard(state, NOW);
 
     expect(view.roomCode).toBe('ABCD');
     expect(view.phase).toBe('LOBBY');
@@ -129,7 +131,7 @@ describe('projections', () => {
   it('projectBoard includes the current round categories and public clues', () => {
     const board = makeBoard();
     const state = createInitialState('s1', 'ABCD', board);
-    const view = projectBoard(state);
+    const view = projectBoard(state, NOW);
 
     expect(view.round).not.toBeNull();
     expect(view.round?.categories).toHaveLength(2);
@@ -153,7 +155,7 @@ describe('projections', () => {
   it('projectBoard never exposes clue answers or daily double flags on the public clues', () => {
     const board = makeBoard();
     const state = createInitialState('s1', 'ABCD', board);
-    const view = projectBoard(state);
+    const view = projectBoard(state, NOW);
 
     const allClues = view.round?.categories.flatMap((c) => c.clues) ?? [];
     for (const clue of allClues) {
@@ -168,13 +170,13 @@ describe('projections', () => {
     const state = createInitialState('s1', 'ABCD', board);
 
     const select = { ...state, phase: 'CLUE_REVEALED' as const, currentClueId: 'cl1' };
-    expect(projectBoard(select).currentClueText).toBe('H2O is this compound');
+    expect(projectBoard(select, NOW).currentClueText).toBe('H2O is this compound');
 
     const ddWager = { ...state, phase: 'DAILY_DOUBLE_WAGER' as const, currentClueId: 'cl2' };
-    expect(projectBoard(ddWager).currentClueText).toBeNull();
+    expect(projectBoard(ddWager, NOW).currentClueText).toBeNull();
 
     const noClue = { ...state, phase: 'BOARD_SELECT' as const };
-    expect(projectBoard(noClue).currentClueText).toBeNull();
+    expect(projectBoard(noClue, NOW).currentClueText).toBeNull();
   });
 
   it('projectBoard includes player connection status', () => {
@@ -187,7 +189,7 @@ describe('projections', () => {
       players: [alice, bob],
     };
 
-    const view = projectBoard(state);
+    const view = projectBoard(state, NOW);
 
     expect(view.players).toEqual([
       { id: 'p1', name: 'Alice', score: 0, connected: true },
@@ -201,13 +203,13 @@ describe('projections', () => {
     const alice = makePlayer({ id: 'p1', name: 'Alice' });
     const withPlayer = { ...state, players: [alice], controllingPlayerId: alice.id };
 
-    expect(projectBoard(withPlayer).controllingPlayerId).toBe(alice.id);
+    expect(projectBoard(withPlayer, NOW).controllingPlayerId).toBe(alice.id);
   });
 
   it('projectHost includes the current clue answer and full round details', () => {
     const board = makeBoard();
     const state = createInitialState('s1', 'ABCD', board);
-    const view = projectHost(state);
+    const view = projectHost(state, NOW);
 
     expect(view.answer).toBeNull();
     expect(view.round?.categories[0].clues[0]).toEqual(
@@ -220,7 +222,7 @@ describe('projections', () => {
     );
 
     const withClue = { ...state, currentClueId: 'cl1' };
-    const hostView = projectHost(withClue);
+    const hostView = projectHost(withClue, NOW);
 
     expect(hostView.answer).toBe('Water');
     expect(hostView.round?.categories[0].clues[1].isDailyDouble).toBe(true);
@@ -234,7 +236,7 @@ describe('projections', () => {
     const alice = makePlayer({ id: 'p1', name: 'Alice' });
     state = { ...state, players: [alice], currentClueId: 'cl1' };
 
-    const view = projectContestant(state, alice.id);
+    const view = projectContestant(state, alice.id, NOW);
 
     expect(view.playerId).toBe(alice.id);
     expect(view.isControllingPlayer).toBe(false);

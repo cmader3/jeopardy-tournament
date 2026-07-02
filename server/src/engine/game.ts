@@ -30,6 +30,7 @@ export interface CreateSessionResult {
 
 export class GameEngine {
   private sessions = new Map<string, GameState>();
+  private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private sessionRepo: GameSessionRepository;
   broadcast: (roomCode: string, state: GameState) => void;
 
@@ -76,6 +77,7 @@ export class GameEngine {
         const parsed = JSON.parse(session.snapshot) as GameState;
         const state = { ...parsed, sessionId: session.id };
         this.sessions.set(session.roomCode, state);
+        this.scheduleTimer(session.roomCode, state);
       } catch {
         // Ignore corrupted snapshots; the session will be abandoned.
       }
@@ -98,8 +100,34 @@ export class GameEngine {
       this.sessions.set(normalized, result.state);
       await this.persistSnapshot(result.state);
       this.broadcast(normalized, result.state);
+      this.scheduleTimer(normalized, result.state);
     }
     return result;
+  }
+
+  private scheduleTimer(roomCode: string, state: GameState): void {
+    const existing = this.timers.get(roomCode);
+    if (existing) {
+      clearTimeout(existing);
+      this.timers.delete(roomCode);
+    }
+
+    if (state.deadline == null) return;
+
+    const delay = Math.max(0, state.deadline - Date.now());
+    const timer = setTimeout(() => {
+      this.applyIntent(roomCode, { type: 'TIME_EXPIRE' }, { now: Date.now() }).catch(() => {
+        // Session may have ended; ignore.
+      });
+    }, delay);
+    this.timers.set(roomCode, timer);
+  }
+
+  clearTimers(): void {
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
   }
 
   async addPlayer(roomCode: string, player: GameState['players'][number]): Promise<ReducerResult> {

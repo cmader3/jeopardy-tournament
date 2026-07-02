@@ -57,8 +57,11 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
+    serverNow: 0,
     playerId: 'p1',
     isControllingPlayer: false,
+    isLockedOut: false,
+    lockoutUntil: null,
     canWager: false,
     canAnswer: false,
     ...overrides,
@@ -73,6 +76,11 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     startGame: vi.fn(),
     leaveGame: vi.fn(),
     selectClue: vi.fn(),
+    revealAnswer: vi.fn(),
+    armBuzzers: vi.fn(),
+    buzz: vi.fn(),
+    ruleCorrect: vi.fn(),
+    ruleIncorrect: vi.fn(),
   });
 }
 
@@ -354,5 +362,76 @@ describe('PlayRoute', () => {
     await userEvent.click(button);
 
     expect(await screen.findByTestId('daily-double-splash')).toBeInTheDocument();
+  });
+
+  it('shows the buzzer and sends a buzz when armed', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: false,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toHaveTextContent('Buzz In');
+    await userEvent.click(buzzer);
+    expect(buzz).toHaveBeenCalledWith('p1');
+  });
+
+  it('disables the buzzer when the contestant is locked out', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: true,
+        lockoutUntil: Date.now() + 250,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toBeDisabled();
+    await userEvent.click(buzzer);
+    expect(buzz).not.toHaveBeenCalled();
   });
 });

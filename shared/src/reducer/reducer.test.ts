@@ -424,3 +424,192 @@ describe('REVEAL_ANSWER', () => {
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('No clue') });
   });
 });
+
+function setupClueRevealed(): GameState {
+  const board = makeBoard();
+  let state = createInitialState('session-1', 'ABCD', board);
+  const alice = makePlayer({ id: 'p1', name: 'Alice' });
+  const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+  state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+  state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+  state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+  return reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+}
+
+describe('ARM_BUZZERS', () => {
+  it('arms buzzers from CLUE_REVEALED and sets a deadline', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW });
+
+    expect(result.state.phase).toBe('BUZZERS_ARMED');
+    expect(result.state.armedAt).toBe(NOW);
+    expect(result.state.deadline).toBe(NOW + state.board.defaultTimerSeconds * 1000);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('is rejected outside CLUE_REVEALED', () => {
+    const state = setupClueRevealed();
+    const armed = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(armed, { type: 'ARM_BUZZERS' }, { now: NOW + 1 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('arm') });
+    expect(result.state.phase).toBe('BUZZERS_ARMED');
+  });
+});
+
+describe('BUZZ', () => {
+  it('rejects a buzz before arming and applies a 250ms lockout', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW });
+
+    expect(result.state.phase).toBe('CLUE_REVEALED');
+    expect(result.state.lockoutUntil['p1']).toBe(NOW + 250);
+    expect(result.state.buzzWinnerId).toBeNull();
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('accepts the first buzz after arming and locks out later buzzers', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const first = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 });
+    expect(first.state.phase).toBe('BUZZED');
+    expect(first.state.buzzWinnerId).toBe('p1');
+    expect(first.state.deadline).toBeNull();
+    expect(first.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+
+    const second = reduce(first.state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 20 });
+    expect(second.state.phase).toBe('BUZZED');
+    expect(second.state.buzzWinnerId).toBe('p1');
+    expect(second.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already buzzed') });
+  });
+
+  it('rejects a buzz from a player locked out by an early press', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW + 50 }).state;
+
+    const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BUZZERS_ARMED');
+    expect(result.state.buzzWinnerId).toBeNull();
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('locked out') });
+  });
+
+  it('allows a player to buzz after their early-buzz lockout expires', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW + 300 }).state;
+
+    const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 550 });
+
+    expect(result.state.phase).toBe('BUZZED');
+    expect(result.state.buzzWinnerId).toBe('p1');
+  });
+
+  it('rejects a buzz from a disconnected player', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'DISCONNECT', playerId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('connected') });
+    expect(result.state.buzzWinnerId).toBeNull();
+  });
+
+  it('rejects a buzz from a non-existent player', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'BUZZ', playerId: 'ghost' }, { now: NOW + 10 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('Player not found') });
+    expect(result.state.buzzWinnerId).toBeNull();
+  });
+});
+
+describe('RULE_CORRECT', () => {
+  it('adds the clue value, passes control, and returns to BOARD_SELECT', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 10 }).state;
+
+    const result = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.players.find((p) => p.id === 'p2')?.score).toBe(100);
+    expect(result.state.controllingPlayerId).toBe('p2');
+    expect(result.state.usedClueIds).toContain('cl1');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.buzzWinnerId).toBeNull();
+    expect(result.state.armedAt).toBeNull();
+    expect(result.state.deadline).toBeNull();
+    expect(result.state.lockedOutPlayerIds).toEqual([]);
+    expect(result.state.auditLog).toHaveLength(1);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('is rejected when no one has buzzed in', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 10 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('buzzed') });
+  });
+});
+
+describe('RULE_INCORRECT', () => {
+  it('deducts the value, locks the player, and re-arms the remaining contestants', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+
+    const result = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('BUZZERS_ARMED');
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
+    expect(result.state.lockedOutPlayerIds).toContain('p1');
+    expect(result.state.buzzWinnerId).toBeNull();
+    expect(result.state.armedAt).toBe(NOW + 100);
+    expect(result.state.deadline).toBe(NOW + 100 + state.board.defaultTimerSeconds * 1000);
+    expect(result.state.auditLog).toHaveLength(1);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('resolves the clue when everyone is locked out after a wrong answer', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    state = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 }).state;
+
+    const result = reduce(state, { type: 'BUZZ', playerId: 'p2' }, { now: NOW + 120 });
+    expect(result.state.phase).toBe('BUZZED');
+
+    const resolved = reduce(result.state, { type: 'RULE_INCORRECT', playerId: 'p2' }, { now: NOW + 200 });
+    expect(resolved.state.phase).toBe('BOARD_SELECT');
+    expect(resolved.state.usedClueIds).toContain('cl1');
+    expect(resolved.state.currentClueId).toBeNull();
+    expect(resolved.state.controllingPlayerId).toBe('p1');
+  });
+});
+
+describe('TIME_EXPIRE', () => {
+  it('returns to BOARD_SELECT and marks the clue used when no one buzzes', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'TIME_EXPIRE' }, { now: NOW + state.board.defaultTimerSeconds * 1000 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.usedClueIds).toContain('cl1');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.buzzWinnerId).toBeNull();
+    expect(result.state.deadline).toBeNull();
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+});

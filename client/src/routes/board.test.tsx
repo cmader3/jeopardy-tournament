@@ -59,6 +59,7 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     controllingPlayerId: null,
     buzzWinnerId: null,
     deadline: null,
+    serverNow: 0,
     ...overrides,
   };
 }
@@ -313,5 +314,47 @@ describe('BoardRoute', () => {
 
     const scoreCards = await screen.findAllByTestId('score-card');
     expect(scoreCards[0].className).toMatch(/controlling/);
+  });
+
+  it('shows the armed indicator only while buzzers are armed', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('armed-indicator')).toHaveTextContent('BUZZERS ARMED');
+  });
+
+  it('shows the buzzed contestant by identity', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        buzzWinnerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('buzzed-indicator')).toHaveTextContent('Buzzed in:');
+    expect(screen.getByTestId('buzzed-player-name')).toHaveTextContent('Bob');
   });
 });

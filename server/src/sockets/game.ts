@@ -22,6 +22,14 @@ const selectCluePayloadSchema = z.object({
   clueId: z.string().min(1),
 });
 
+const buzzPayloadSchema = z.object({
+  playerId: z.string().min(1),
+});
+
+const rulePayloadSchema = z.object({
+  playerId: z.string().min(1),
+});
+
 interface SocketMeta {
   role: 'host' | 'board' | 'contestant';
   roomCode: string;
@@ -154,6 +162,102 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('arm_buzzers', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can arm the buzzers' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'ARM_BUZZERS' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Arm buzzers failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('buzz', async (payload: { playerId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'contestant' || !meta.playerId) {
+        socket.emit('error', { message: 'Only a contestant can buzz in' });
+        return;
+      }
+
+      const validation = buzzPayloadSchema.safeParse(payload);
+      if (!validation.success || validation.data.playerId !== meta.playerId) {
+        socket.emit('error', { message: 'Invalid buzz payload' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'BUZZ', playerId: meta.playerId },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Buzz failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('rule_correct', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can rule an answer correct' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'RULE_CORRECT' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Rule correct failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('rule_incorrect', async (payload: { playerId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can rule an answer incorrect' });
+        return;
+      }
+
+      const validation = rulePayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid ruling payload' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'RULE_INCORRECT', playerId: validation.data.playerId },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Rule incorrect failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('leave', async () => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'contestant' || !meta.playerId) {
@@ -198,7 +302,7 @@ async function handleHostJoin(
   const roomCode = normalizeRoomCode(payload.roomCode);
   await joinSessionRoom(socket, roomCode, 'host');
   setSocketMeta(socket, { role: 'host', roomCode });
-  socket.emit('state', projectHost(state));
+  socket.emit('state', projectHost(state, Date.now()));
 }
 
 async function handleBoardJoin(
@@ -209,7 +313,7 @@ async function handleBoardJoin(
   const roomCode = normalizeRoomCode(payload.roomCode);
   await joinSessionRoom(socket, roomCode, 'board');
   setSocketMeta(socket, { role: 'board', roomCode });
-  socket.emit('state', projectBoard(state));
+  socket.emit('state', projectBoard(state, Date.now()));
 }
 
 async function handleContestantJoin(
@@ -261,7 +365,7 @@ async function handleContestantJoin(
   await joinSessionRoom(socket, roomCode, `contestant:${playerId}`);
   setSocketMeta(socket, { role: 'contestant', roomCode, playerId });
   socket.emit('token', { reconnectToken, playerId });
-  socket.emit('state', projectContestant(result.state, playerId));
+  socket.emit('state', projectContestant(result.state, playerId, Date.now()));
 }
 
 async function joinSessionRoom(socket: Socket, roomCode: string, role: string) {
@@ -270,11 +374,12 @@ async function joinSessionRoom(socket: Socket, roomCode: string, role: string) {
 }
 
 function broadcastToRoles(io: Server, roomCode: string, state: GameState) {
+  const now = Date.now();
   const baseRoom = `session:${roomCode}`;
-  io.to(`${baseRoom}:host`).emit('state', projectHost(state));
-  io.to(`${baseRoom}:board`).emit('state', projectBoard(state));
+  io.to(`${baseRoom}:host`).emit('state', projectHost(state, now));
+  io.to(`${baseRoom}:board`).emit('state', projectBoard(state, now));
   for (const player of state.players) {
-    io.to(`${baseRoom}:contestant:${player.id}`).emit('state', projectContestant(state, player.id));
+    io.to(`${baseRoom}:contestant:${player.id}`).emit('state', projectContestant(state, player.id, now));
   }
 }
 

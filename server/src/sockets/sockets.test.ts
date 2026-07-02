@@ -72,6 +72,7 @@ async function createTestServer(): Promise<TestServer> {
     url: `http://localhost:${port}`,
     close: () =>
       new Promise<void>((resolve) => {
+        engine.clearTimers();
         io.close(() => {
           http.close(() => resolve());
         });
@@ -949,6 +950,215 @@ describe('clue selection sockets', () => {
     expect((boardState as { phase: string }).phase).toBe('BOARD_SELECT');
     expect((boardState as { usedClueIds: string[] }).usedClueIds).toContain(firstClue.id);
     expect((boardState as { currentClueId: string | null }).currentClueId).toBeNull();
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+});
+
+describe('buzzer arming and fastest-finger sockets', () => {
+  async function setupGame(server: Awaited<ReturnType<typeof createTestServer>>) {
+    const board = await boardRepository.create({
+      name: 'Buzzer Socket Board',
+      includeDoubleJeopardy: false,
+      defaultTimerSeconds: 10,
+      finalTimerSeconds: 30,
+      rounds: [
+        {
+          type: 'JEOPARDY',
+          order: 0,
+          categories: [
+            {
+              title: 'Science',
+              order: 0,
+              clues: [
+                { value: 100, row: 0, clueText: 'H2O', answer: 'Water', isDailyDouble: false },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'FINAL',
+          order: 1,
+          categories: [
+            {
+              title: 'Literature',
+              order: 0,
+              clues: [{ value: null, row: 0, clueText: 'Hobbit author', answer: 'Tolkien', isDailyDouble: false }],
+            },
+          ],
+        },
+      ],
+    });
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const host = connectClient(server.url);
+    const boardClient = connectClient(server.url);
+    await Promise.all([waitForConnect(host), waitForConnect(boardClient)]);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    boardClient.emit('join', { role: 'board', roomCode });
+    await Promise.all([waitForState(host), waitForState(boardClient)]);
+
+    const alice = connectClient(server.url);
+    const bob = connectClient(server.url);
+    await Promise.all([waitForConnect(alice), waitForConnect(bob)]);
+    const aliceToken = waitForToken(alice);
+    const bobToken = waitForToken(bob);
+    const aliceState = waitForState(alice);
+    const bobState = waitForState(bob);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    bob.emit('join', { role: 'contestant', roomCode, name: 'Bob' });
+    const [tokenA, tokenB] = await Promise.all([aliceToken, bobToken]);
+    await Promise.all([aliceState, bobState]);
+
+    const hostStart = waitForState(host);
+    const boardStart = waitForState(boardClient);
+    const aliceStart = waitForState(alice);
+    const bobStart = waitForState(bob);
+    host.emit('start_game');
+    await Promise.all([hostStart, boardStart, aliceStart, bobStart]);
+
+    const gameState = server.engine.getState(roomCode)!;
+    const firstClue = gameState.board.rounds[0].clues[0];
+    const hostSelect = waitForState(host);
+    const boardSelect = waitForState(boardClient);
+    const aliceSelect = waitForState(alice);
+    const bobSelect = waitForState(bob);
+    host.emit('select_clue', { clueId: firstClue.id });
+    await Promise.all([hostSelect, boardSelect, aliceSelect, bobSelect]);
+
+    return { roomCode, host, boardClient, alice, bob, tokenA, tokenB, firstClue };
+  }
+
+  it('host arms buzzers and all views transition to BUZZERS_ARMED', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob } = await setupGame(server);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('arm_buzzers');
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((hostState as { phase: string }).phase).toBe('BUZZERS_ARMED');
+    expect((boardState as { phase: string }).phase).toBe('BUZZERS_ARMED');
+    expect((aliceState as { phase: string }).phase).toBe('BUZZERS_ARMED');
+    expect((bobState as { phase: string }).phase).toBe('BUZZERS_ARMED');
+    expect((boardState as { deadline: number }).deadline).toBeGreaterThan(0);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('early buzz applies a lockout and no winner is recorded', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const aliceUpdate = waitForState(alice);
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const bobUpdate = waitForState(bob);
+
+    alice.emit('buzz', { playerId: tokenA.playerId });
+    const [aliceState, hostState, boardState, bobState] = await Promise.all([
+      aliceUpdate,
+      hostUpdate,
+      boardUpdate,
+      bobUpdate,
+    ]);
+
+    expect((aliceState as { isLockedOut: boolean }).isLockedOut).toBe(true);
+    expect((aliceState as { lockoutUntil: number }).lockoutUntil).toBeGreaterThan(0);
+    expect((hostState as { buzzWinnerId: string | null }).buzzWinnerId).toBeNull();
+    expect((boardState as { buzzWinnerId: string | null }).buzzWinnerId).toBeNull();
+    expect((bobState as { buzzWinnerId: string | null }).buzzWinnerId).toBeNull();
+    expect((aliceState as { phase: string }).phase).toBe('CLUE_REVEALED');
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('first buzz after arming wins and locks out later buzzers', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA, tokenB } = await setupGame(server);
+
+    host.emit('arm_buzzers');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const aliceUpdate = waitForState(alice);
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const bobUpdate = waitForState(bob);
+
+    alice.emit('buzz', { playerId: tokenA.playerId });
+    const [aliceState, hostState, boardState, bobState] = await Promise.all([
+      aliceUpdate,
+      hostUpdate,
+      boardUpdate,
+      bobUpdate,
+    ]);
+
+    expect((aliceState as { phase: string }).phase).toBe('BUZZED');
+    expect((hostState as { buzzWinnerId: string | null }).buzzWinnerId).toBe(tokenA.playerId);
+    expect((boardState as { buzzWinnerId: string | null }).buzzWinnerId).toBe(tokenA.playerId);
+    expect((bobState as { buzzWinnerId: string | null }).buzzWinnerId).toBe(tokenA.playerId);
+
+    const bobError = waitForError(bob);
+    bob.emit('buzz', { playerId: tokenB.playerId });
+    const error = await bobError;
+    expect(error.message).toMatch(/already buzzed/i);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('host rules correct and score/control propagate', async () => {
+    const server = await createTestServer();
+    const { host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    host.emit('arm_buzzers');
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+    alice.emit('buzz', { playerId: tokenA.playerId });
+    await Promise.all([waitForState(host), waitForState(boardClient), waitForState(alice), waitForState(bob)]);
+
+    const hostUpdate = waitForState(host);
+    const boardUpdate = waitForState(boardClient);
+    const aliceUpdate = waitForState(alice);
+    const bobUpdate = waitForState(bob);
+
+    host.emit('rule_correct');
+    const [hostState, boardState, aliceState, bobState] = await Promise.all([
+      hostUpdate,
+      boardUpdate,
+      aliceUpdate,
+      bobUpdate,
+    ]);
+
+    expect((hostState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((boardState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((bobState as { phase: string }).phase).toBe('BOARD_SELECT');
+    expect((aliceState as { players: { id: string; score: number }[] }).players.find((p) => p.id === tokenA.playerId)?.score).toBe(100);
+    expect((boardState as { controllingPlayerId: string | null }).controllingPlayerId).toBe(tokenA.playerId);
+    expect((aliceState as { isControllingPlayer: boolean }).isControllingPlayer).toBe(true);
 
     host.disconnect();
     boardClient.disconnect();

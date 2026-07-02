@@ -1,4 +1,4 @@
-import { GameState, Player } from '../models/index.js';
+import { AuditRecord, GameState, Player } from '../models/index.js';
 
 export interface ReducerCtx {
   now: number;
@@ -12,6 +12,11 @@ export type Intent =
   | { type: 'RECONNECT'; playerId: string }
   | { type: 'START_GAME' }
   | { type: 'SELECT_CLUE'; clueId: string; selectorId?: string; hostOverride?: boolean }
+  | { type: 'ARM_BUZZERS' }
+  | { type: 'BUZZ'; playerId: string }
+  | { type: 'RULE_CORRECT' }
+  | { type: 'RULE_INCORRECT'; playerId: string }
+  | { type: 'TIME_EXPIRE' }
   | { type: 'REVEAL_ANSWER' };
 
 export type Effect =
@@ -25,6 +30,7 @@ export interface ReducerResult {
 }
 
 const MAX_PLAYERS = 5;
+const EARLY_BUZZ_LOCKOUT_MS = 250;
 
 export function createInitialState(sessionId: string, roomCode: string, board: GameState['board']): GameState {
   return {
@@ -39,14 +45,18 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     usedClueIds: [],
     currentClueId: null,
     buzzWinnerId: null,
+    armedAt: null,
     deadline: null,
+    lockedOutPlayerIds: [],
+    lockoutUntil: {},
+    auditLog: [],
     dailyDoubleWager: null,
     finalWagers: {},
     finalAnswers: {},
   };
 }
 
-export function reduce(state: GameState, intent: Intent, _ctx: ReducerCtx): ReducerResult {
+export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): ReducerResult {
   switch (intent.type) {
     case 'JOIN':
       return handleJoin(state, intent.player);
@@ -60,6 +70,16 @@ export function reduce(state: GameState, intent: Intent, _ctx: ReducerCtx): Redu
       return handleStartGame(state);
     case 'SELECT_CLUE':
       return handleSelectClue(state, intent);
+    case 'ARM_BUZZERS':
+      return handleArmBuzzers(state, ctx);
+    case 'BUZZ':
+      return handleBuzz(state, intent.playerId, ctx);
+    case 'RULE_CORRECT':
+      return handleRuleCorrect(state, ctx);
+    case 'RULE_INCORRECT':
+      return handleRuleIncorrect(state, intent.playerId, ctx);
+    case 'TIME_EXPIRE':
+      return handleTimeExpire(state);
     case 'REVEAL_ANSWER':
       return handleRevealAnswer(state);
     default:
@@ -212,8 +232,269 @@ function handleSelectClue(
       phase: nextPhase,
       currentClueId: clue.id,
       buzzWinnerId: null,
+      armedAt: null,
+      deadline: null,
+      lockedOutPlayerIds: [],
+      lockoutUntil: {},
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleArmBuzzers(state: GameState, ctx: ReducerCtx): ReducerResult {
+  if (state.phase !== 'CLUE_REVEALED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzers can only be armed while a clue is revealed' }] };
+  }
+
+  if (!state.currentClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No clue is available to arm buzzers for' }] };
+  }
+
+  const durationMs = state.board.defaultTimerSeconds * 1000;
+
+  return {
+    state: {
+      ...state,
+      phase: 'BUZZERS_ARMED',
+      armedAt: ctx.now,
+      deadline: ctx.now + durationMs,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function getCurrentClue(state: GameState): GameState['board']['rounds'][number]['clues'][number] | undefined {
+  const round = state.board.rounds[state.roundIndex];
+  if (!round || !state.currentClueId) return undefined;
+  return round.clues.find((c) => c.id === state.currentClueId);
+}
+
+function isLockedOut(state: GameState, playerId: string, now: number): boolean {
+  if (state.lockedOutPlayerIds.includes(playerId)) return true;
+  const until = state.lockoutUntil[playerId];
+  return until !== undefined && until > now;
+}
+
+function hasBuzzWinner(state: GameState): boolean {
+  return state.buzzWinnerId !== null;
+}
+
+function handleBuzz(state: GameState, playerId: string, ctx: ReducerCtx): ReducerResult {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  if (state.phase === 'CLUE_REVEALED') {
+    return {
+      state: {
+        ...state,
+        lockoutUntil: { ...state.lockoutUntil, [playerId]: ctx.now + EARLY_BUZZ_LOCKOUT_MS },
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  if (state.phase === 'BUZZED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Another contestant has already buzzed in' }] };
+  }
+
+  if (state.phase !== 'BUZZERS_ARMED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzers are not armed' }] };
+  }
+
+  if (!player.connected) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Contestant is not connected' }] };
+  }
+
+  if (isLockedOut(state, playerId, ctx.now)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Contestant is locked out' }] };
+  }
+
+  if (hasBuzzWinner(state)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Another contestant has already buzzed in' }] };
+  }
+
+  return {
+    state: {
+      ...state,
+      phase: 'BUZZED',
+      buzzWinnerId: playerId,
       deadline: null,
     },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function createAuditRecord(
+  type: 'CORRECT' | 'INCORRECT',
+  playerId: string,
+  clueId: string,
+  value: number,
+  scoreBefore: number,
+  scoreAfter: number,
+  controllingPlayerIdBefore: string | null,
+  timestamp: number,
+): AuditRecord {
+  return {
+    id: `${timestamp}-${playerId}`,
+    type,
+    playerId,
+    clueId,
+    value,
+    scoreBefore,
+    scoreAfter,
+    controllingPlayerIdBefore,
+    timestamp,
+  };
+}
+
+function resolveClueReturnToBoard(state: GameState, clueId: string): GameState {
+  return {
+    ...state,
+    phase: 'BOARD_SELECT',
+    usedClueIds: [...state.usedClueIds, clueId],
+    currentClueId: null,
+    buzzWinnerId: null,
+    armedAt: null,
+    deadline: null,
+    lockedOutPlayerIds: [],
+    lockoutUntil: {},
+  };
+}
+
+function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
+  if (state.phase !== 'BUZZED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is buzzed in' }] };
+  }
+
+  if (!state.buzzWinnerId || !state.currentClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is buzzed in' }] };
+  }
+
+  const clue = getCurrentClue(state);
+  if (!clue) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Current clue not found' }] };
+  }
+
+  const value = clue.value ?? 0;
+  const winnerIndex = state.players.findIndex((p) => p.id === state.buzzWinnerId);
+  if (winnerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzed contestant not found' }] };
+  }
+
+  const winner = state.players[winnerIndex];
+  const scoreBefore = winner.score;
+  const scoreAfter = scoreBefore + value;
+  const updatedPlayers = [...state.players];
+  updatedPlayers[winnerIndex] = { ...winner, score: scoreAfter };
+
+  const auditEntry = createAuditRecord(
+    'CORRECT',
+    winner.id,
+    clue.id,
+    value,
+    scoreBefore,
+    scoreAfter,
+    state.controllingPlayerId,
+    ctx.now,
+  );
+
+  return {
+    state: {
+      ...resolveClueReturnToBoard(state, clue.id),
+      players: updatedPlayers,
+      controllingPlayerId: winner.id,
+      auditLog: [...state.auditLog, auditEntry],
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx): ReducerResult {
+  if (state.phase !== 'BUZZED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is buzzed in' }] };
+  }
+
+  if (state.buzzWinnerId !== playerId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only the buzzed-in contestant can be ruled' }] };
+  }
+
+  if (!state.currentClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
+  }
+
+  const clue = getCurrentClue(state);
+  if (!clue) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Current clue not found' }] };
+  }
+
+  const value = clue.value ?? 0;
+  const playerIndex = state.players.findIndex((p) => p.id === playerId);
+  if (playerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzed contestant not found' }] };
+  }
+
+  const player = state.players[playerIndex];
+  const scoreBefore = player.score;
+  const scoreAfter = scoreBefore - value;
+  const updatedPlayers = [...state.players];
+  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+
+  const updatedLockedOutPlayerIds = [...state.lockedOutPlayerIds, playerId];
+  const auditEntry = createAuditRecord(
+    'INCORRECT',
+    player.id,
+    clue.id,
+    value,
+    scoreBefore,
+    scoreAfter,
+    state.controllingPlayerId,
+    ctx.now,
+  );
+
+  const remainingEligible = updatedPlayers.filter(
+    (p) => p.id !== playerId && p.connected && !updatedLockedOutPlayerIds.includes(p.id),
+  );
+
+  if (remainingEligible.length === 0) {
+    return {
+      state: {
+        ...resolveClueReturnToBoard(state, clue.id),
+        players: updatedPlayers,
+        auditLog: [...state.auditLog, auditEntry],
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  const durationMs = state.board.defaultTimerSeconds * 1000;
+  return {
+    state: {
+      ...state,
+      phase: 'BUZZERS_ARMED',
+      players: updatedPlayers,
+      buzzWinnerId: null,
+      armedAt: ctx.now,
+      deadline: ctx.now + durationMs,
+      lockedOutPlayerIds: updatedLockedOutPlayerIds,
+      auditLog: [...state.auditLog, auditEntry],
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleTimeExpire(state: GameState): ReducerResult {
+  if (state.phase !== 'BUZZERS_ARMED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Timer can only expire while buzzers are armed' }] };
+  }
+
+  if (!state.currentClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
+  }
+
+  return {
+    state: resolveClueReturnToBoard(state, state.currentClueId),
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }
@@ -234,7 +515,10 @@ function handleRevealAnswer(state: GameState): ReducerResult {
       usedClueIds: [...state.usedClueIds, state.currentClueId],
       currentClueId: null,
       buzzWinnerId: null,
+      armedAt: null,
       deadline: null,
+      lockedOutPlayerIds: [],
+      lockoutUntil: {},
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

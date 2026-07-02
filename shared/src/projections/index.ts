@@ -60,6 +60,7 @@ export interface BoardView {
   controllingPlayerId: string | null;
   buzzWinnerId: string | null;
   deadline: number | null;
+  serverNow: number;
 }
 
 export interface HostView {
@@ -75,11 +76,15 @@ export interface HostView {
   buzzWinnerId: string | null;
   deadline: number | null;
   answer: string | null;
+  lockedOutPlayerIds: string[];
+  serverNow: number;
 }
 
 export interface ContestantView extends BoardView {
   playerId: string;
   isControllingPlayer: boolean;
+  isLockedOut: boolean;
+  lockoutUntil: number | null;
   canWager: boolean;
   canAnswer: boolean;
 }
@@ -169,7 +174,13 @@ function projectHostRound(round: GameState['board']['rounds'][number]): Projecte
   };
 }
 
-export function projectBoard(state: GameState): BoardView {
+function isLockedOut(state: GameState, playerId: string, now: number): boolean {
+  if (state.lockedOutPlayerIds.includes(playerId)) return true;
+  const until = state.lockoutUntil[playerId];
+  return until !== undefined && until > now;
+}
+
+export function projectBoard(state: GameState, now: number): BoardView {
   const round = getCurrentRound(state);
   const currentClue = getCurrentClue(state);
   const showClueText = currentClue ? CLUE_TEXT_PHASES.has(state.phase) : false;
@@ -186,10 +197,11 @@ export function projectBoard(state: GameState): BoardView {
     controllingPlayerId: state.controllingPlayerId,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
+    serverNow: now,
   };
 }
 
-export function projectHost(state: GameState): HostView {
+export function projectHost(state: GameState, now: number): HostView {
   const round = getCurrentRound(state);
   const currentClue = getCurrentClue(state);
   const showClueText = currentClue ? CLUE_TEXT_PHASES.has(state.phase) : false;
@@ -207,16 +219,21 @@ export function projectHost(state: GameState): HostView {
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
     answer: currentClue?.answer ?? null,
+    lockedOutPlayerIds: state.lockedOutPlayerIds,
+    serverNow: now,
   };
 }
 
-export function projectContestant(state: GameState, playerId: string): ContestantView {
-  const board = projectBoard(state);
+export function projectContestant(state: GameState, playerId: string, now: number): ContestantView {
+  const board = projectBoard(state, now);
   const isControllingPlayer = state.controllingPlayerId === playerId;
+  const lockoutUntil = state.lockoutUntil[playerId] ?? null;
   return {
     ...board,
     playerId,
     isControllingPlayer,
+    isLockedOut: isLockedOut(state, playerId, now),
+    lockoutUntil,
     canWager:
       state.phase === 'DAILY_DOUBLE_WAGER'
         ? isControllingPlayer

@@ -61,6 +61,18 @@ export interface Board {
   rounds: Round[];
 }
 
+export interface AuditRecord {
+  id: string;
+  type: 'CORRECT' | 'INCORRECT';
+  playerId: string;
+  clueId: string;
+  value: number;
+  scoreBefore: number;
+  scoreAfter: number;
+  controllingPlayerIdBefore: string | null;
+  timestamp: number;
+}
+
 export interface GameState {
   sessionId: string;
   roomCode: string;
@@ -73,7 +85,11 @@ export interface GameState {
   usedClueIds: string[];
   currentClueId: string | null;
   buzzWinnerId: string | null;
+  armedAt: number | null;
   deadline: number | null;
+  lockedOutPlayerIds: string[];
+  lockoutUntil: Record<string, number>;
+  auditLog: AuditRecord[];
   dailyDoubleWager: number | null;
   finalWagers: Record<string, number>;
   finalAnswers: Record<string, string>;

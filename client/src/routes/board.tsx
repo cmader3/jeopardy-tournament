@@ -132,13 +132,48 @@ function ClueOverlay({ clueText, isDailyDouble }: ClueOverlayProps) {
   );
 }
 
-function renderStage(state: BoardView) {
-  if (state.currentClueId && state.currentClueText) {
-    return <ClueOverlay clueText={state.currentClueText} />;
+interface GameStatusBannerProps {
+  state: BoardView;
+}
+
+function GameStatusBanner({ state }: GameStatusBannerProps) {
+  if (state.phase === 'BUZZERS_ARMED') {
+    return (
+      <div className={styles.armedIndicator} data-testid="armed-indicator">
+        BUZZERS ARMED
+      </div>
+    );
   }
 
-  if (state.phase === 'DAILY_DOUBLE_WAGER') {
-    return <ClueOverlay clueText="" isDailyDouble />;
+  if (state.phase === 'BUZZED' && state.buzzWinnerId) {
+    const winner = state.players.find((p) => p.id === state.buzzWinnerId);
+    if (winner) {
+      return (
+        <div className={styles.buzzedIndicator} data-testid="buzzed-indicator">
+          Buzzed in: <strong data-testid="buzzed-player-name">{winner.name}</strong>
+        </div>
+      );
+    }
+  }
+
+  return null;
+}
+
+function renderStage(state: BoardView) {
+  const clueOverlay =
+    state.currentClueId && state.currentClueText ? (
+      <ClueOverlay clueText={state.currentClueText} />
+    ) : state.phase === 'DAILY_DOUBLE_WAGER' ? (
+      <ClueOverlay clueText="" isDailyDouble />
+    ) : null;
+
+  if (clueOverlay) {
+    return (
+      <div className={styles.clueStage}>
+        <GameStatusBanner state={state} />
+        {clueOverlay}
+      </div>
+    );
   }
 
   if (state.phase === 'LOBBY') {

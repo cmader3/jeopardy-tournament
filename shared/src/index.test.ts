@@ -47,7 +47,11 @@ describe('shared package index', () => {
       usedClueIds: [],
       currentClueId: null,
       buzzWinnerId: null,
+      armedAt: null,
       deadline: null,
+      lockedOutPlayerIds: [],
+      lockoutUntil: {},
+      auditLog: [],
       dailyDoubleWager: null,
       finalWagers: {},
       finalAnswers: {},
@@ -55,9 +59,9 @@ describe('shared package index', () => {
 
     const result = reduce(state, { type: 'JOIN', player: { ...player, id: 'p2', name: 'Bob', reconnectToken: 'token-bob' } }, { now: 0 });
     expect(result.state.players).toHaveLength(2);
-    expect(projectBoard(state).roomCode).toBe('TEST');
-    expect(projectHost(state).answer).toBeNull();
-    expect(projectContestant(state, player.id).playerId).toBe(player.id);
+    expect(projectBoard(state, 0).roomCode).toBe('TEST');
+    expect(projectHost(state, 0).answer).toBeNull();
+    expect(projectContestant(state, player.id, 0).playerId).toBe(player.id);
     expect(createInitialState('s2', 'ROOM', board).phase).toBe('LOBBY');
     expect(ClientToServer.JOIN).toBe('join');
     expect(ServerToClient.STATE).toBe('state');

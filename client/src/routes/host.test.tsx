@@ -23,6 +23,22 @@ import { boardApi } from '../api/boards.js';
 import { createGame } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
 
+function mockUseSocket(overrides: Record<string, unknown> = {}) {
+  useSocket.mockReturnValue({
+    connected: true,
+    error: null,
+    data: null,
+    startGame: vi.fn(),
+    leaveGame: vi.fn(),
+    selectClue: vi.fn(),
+    revealAnswer: vi.fn(),
+    armBuzzers: vi.fn(),
+    ruleCorrect: vi.fn(),
+    ruleIncorrect: vi.fn(),
+    ...overrides,
+  });
+}
+
 function makeRound(overrides: Partial<HostView['round']> = {}): NonNullable<HostView['round']> {
   return {
     id: 'r1',
@@ -63,6 +79,8 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     buzzWinnerId: null,
     deadline: null,
     answer: null,
+    lockedOutPlayerIds: [],
+    serverNow: 0,
     ...overrides,
   };
 }
@@ -206,7 +224,7 @@ describe('HostContent', () => {
       { id: 'b2', name: 'Board Two', isComplete: false },
     ]);
     createGame.mockResolvedValue({ roomCode: 'WXYZ' });
-    useSocket.mockReturnValue({ connected: true, error: null, data: null, startGame });
+    mockUseSocket({ startGame });
 
     render(<HostContent />);
 
@@ -234,7 +252,7 @@ describe('HostContent', () => {
     boardApi.getBoards.mockResolvedValue([
       { id: 'b1', name: 'Board One', isComplete: true },
     ]);
-    useSocket.mockReturnValue({ connected: true, error: null, data: null, startGame });
+    mockUseSocket({ startGame });
 
     render(<HostContent />);
 
@@ -345,5 +363,85 @@ describe('HostInProgress grid and selection', () => {
 
     await userEvent.click(screen.getByTestId('reveal-answer-button'));
     expect(onRevealAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the arm buzzers button during CLUE_REVEALED', () => {
+    const onArmBuzzers = vi.fn();
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onArmBuzzers={onArmBuzzers} />);
+
+    expect(screen.getByTestId('arm-buzzers-button')).toBeInTheDocument();
+  });
+
+  it('calls onArmBuzzers when the arm button is clicked', async () => {
+    const onArmBuzzers = vi.fn();
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onArmBuzzers={onArmBuzzers} />);
+
+    await userEvent.click(screen.getByTestId('arm-buzzers-button'));
+    expect(onArmBuzzers).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the buzzed contestant and ruling buttons during BUZZED', () => {
+    const state = makeHostState({
+      phase: 'BUZZED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+      buzzWinnerId: 'p2',
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('buzzed-player')).toHaveTextContent('Buzzed in: Bob');
+    expect(screen.getByTestId('rule-correct-button')).toBeInTheDocument();
+    expect(screen.getByTestId('rule-incorrect-button')).toBeInTheDocument();
+  });
+
+  it('calls onRuleCorrect and onRuleIncorrect when ruling buttons are clicked', async () => {
+    const onRuleCorrect = vi.fn();
+    const onRuleIncorrect = vi.fn();
+    const state = makeHostState({
+      phase: 'BUZZED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+      buzzWinnerId: 'p2',
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+    });
+    render(
+      <HostInProgress
+        roomCode="WXYZ"
+        state={state}
+        onRuleCorrect={onRuleCorrect}
+        onRuleIncorrect={onRuleIncorrect}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('rule-correct-button'));
+    expect(onRuleCorrect).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByTestId('rule-incorrect-button'));
+    expect(onRuleIncorrect).toHaveBeenCalledWith('p2');
   });
 });

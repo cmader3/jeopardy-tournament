@@ -76,6 +76,9 @@ export interface HostInProgressProps {
   state: HostView | null;
   onSelectClue?: (clueId: string) => void;
   onRevealAnswer?: () => void;
+  onArmBuzzers?: () => void;
+  onRuleCorrect?: () => void;
+  onRuleIncorrect?: (playerId: string) => void;
 }
 
 function HostGrid({
@@ -126,9 +129,20 @@ function HostGrid({
   );
 }
 
-export function HostInProgress({ roomCode, state, onSelectClue, onRevealAnswer }: HostInProgressProps) {
+export function HostInProgress({
+  roomCode,
+  state,
+  onSelectClue,
+  onRevealAnswer,
+  onArmBuzzers,
+  onRuleCorrect,
+  onRuleIncorrect,
+}: HostInProgressProps) {
   const players = state?.players ?? [];
-  const currentClue = state?.currentClueId ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId) : null;
+  const currentClue = state?.currentClueId
+    ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId)
+    : null;
+  const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
 
   return (
     <main className="host-in-progress route-stub">
@@ -174,9 +188,31 @@ export function HostInProgress({ roomCode, state, onSelectClue, onRevealAnswer }
           <p data-testid="clue-text">{currentClue.clueText}</p>
           <p data-testid="answer-text">Answer: {currentClue.answer}</p>
           {state?.phase === 'CLUE_REVEALED' && (
+            <button type="button" onClick={onArmBuzzers} data-testid="arm-buzzers-button">
+              Arm Buzzers
+            </button>
+          )}
+          {state?.phase === 'CLUE_REVEALED' && (
             <button type="button" onClick={onRevealAnswer} data-testid="reveal-answer-button">
               Reveal Answer / Return to Board
             </button>
+          )}
+          {state?.phase === 'BUZZED' && buzzedPlayer && (
+            <div data-testid="buzzed-player">
+              <p>
+                Buzzed in: <strong>{buzzedPlayer.name}</strong>
+              </p>
+              <button type="button" onClick={onRuleCorrect} data-testid="rule-correct-button">
+                Correct
+              </button>
+              <button
+                type="button"
+                onClick={() => onRuleIncorrect?.(buzzedPlayer.id)}
+                data-testid="rule-incorrect-button"
+              >
+                Incorrect
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -237,6 +273,18 @@ export function HostContent() {
   const handleRevealAnswer = useCallback(() => {
     hostSocket.revealAnswer?.();
   }, [hostSocket]);
+  const handleArmBuzzers = useCallback(() => {
+    hostSocket.armBuzzers?.();
+  }, [hostSocket]);
+  const handleRuleCorrect = useCallback(() => {
+    hostSocket.ruleCorrect?.();
+  }, [hostSocket]);
+  const handleRuleIncorrect = useCallback(
+    (playerId: string) => {
+      hostSocket.ruleIncorrect?.(playerId);
+    },
+    [hostSocket],
+  );
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -257,6 +305,9 @@ export function HostContent() {
         state={gameState}
         onSelectClue={handleSelectClue}
         onRevealAnswer={handleRevealAnswer}
+        onArmBuzzers={handleArmBuzzers}
+        onRuleCorrect={handleRuleCorrect}
+        onRuleIncorrect={handleRuleIncorrect}
       />
     );
   }

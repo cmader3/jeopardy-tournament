@@ -72,6 +72,7 @@ async function createTestServer(): Promise<TestServer> {
     url: `http://localhost:${port}`,
     close: () =>
       new Promise<void>((resolve) => {
+        engine.clearTimers();
         io.close(() => {
           http.close(() => resolve());
         });
