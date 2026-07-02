@@ -213,4 +213,22 @@ describe('round transition projections', () => {
     ]);
     expect(boardView.transitionTarget).toBe('FINAL');
   });
+
+  it('projecting the next round shows its own categories, doubled values, and unspent cells', () => {
+    const board = makeBoard();
+    const state: GameState = {
+      ...createInitialState('s1', 'ABCD', board),
+      phase: 'BOARD_SELECT',
+      roundIndex: 1,
+      usedClueIds: ['cl1'],
+      players: [makePlayer({ id: 'p1', name: 'Alice', score: 100 }), makePlayer({ id: 'p2', name: 'Bob', score: 200 })],
+    };
+
+    const boardView = projectBoard(state, NOW);
+    expect(boardView.round?.type).toBe('DOUBLE_JEOPARDY');
+    expect(boardView.round?.categories).toHaveLength(1);
+    expect(boardView.round?.categories[0].title).toBe('Arts');
+    expect(boardView.round?.categories[0].clues[0].value).toBe(200);
+    expect(boardView.roundComplete).toBe(false);
+  });
 });

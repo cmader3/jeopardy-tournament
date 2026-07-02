@@ -86,6 +86,7 @@ export interface HostInProgressProps {
   onAdjustScore?: (playerId: string, score: number) => void;
   onUndoLastRuling?: () => void;
   onAdvanceRound?: () => void;
+  onOverrideControl?: (playerId: string) => void;
 }
 
 function HostGrid({
@@ -140,9 +141,11 @@ interface RosterItemProps {
   player: HostView['players'][number];
   isController: boolean;
   onAdjustScore?: (playerId: string, score: number) => void;
+  onOverrideControl?: (playerId: string) => void;
+  canAssignControl?: boolean;
 }
 
-function RosterItem({ player, isController, onAdjustScore }: RosterItemProps) {
+function RosterItem({ player, isController, onAdjustScore, onOverrideControl, canAssignControl }: RosterItemProps) {
   const [draft, setDraft] = useState(String(player.score));
 
   const handleApply = () => {
@@ -160,6 +163,11 @@ function RosterItem({ player, isController, onAdjustScore }: RosterItemProps) {
       <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
         {player.name}
       </span>
+      {isController && (
+        <span className={styles.controllerBadge} data-testid={`controller-badge-${player.id}`}>
+          Controller
+        </span>
+      )}
       <span
         className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
         data-testid={`roster-score-${player.id}`}
@@ -182,6 +190,16 @@ function RosterItem({ player, isController, onAdjustScore }: RosterItemProps) {
       >
         Set
       </button>
+      {canAssignControl && !isController && onOverrideControl && (
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={() => onOverrideControl(player.id)}
+          data-testid={`assign-control-${player.id}`}
+        >
+          Assign Control
+        </button>
+      )}
       <span
         className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
         data-testid={`player-status-${player.id}`}
@@ -272,6 +290,7 @@ export function HostInProgress({
   onAdjustScore,
   onUndoLastRuling,
   onAdvanceRound,
+  onOverrideControl,
 }: HostInProgressProps) {
   const players = state?.players ?? [];
   const currentClue = state?.currentClueId
@@ -453,6 +472,8 @@ export function HostInProgress({
               player={player}
               isController={player.id === state?.controllingPlayerId}
               onAdjustScore={onAdjustScore}
+              onOverrideControl={onOverrideControl}
+              canAssignControl={state?.phase === 'BOARD_SELECT'}
             />
           ))}
         </ul>
@@ -543,6 +564,12 @@ export function HostContent() {
   const handleAdvanceRound = useCallback(() => {
     hostSocket.advanceRound?.();
   }, [hostSocket]);
+  const handleOverrideControl = useCallback(
+    (playerId: string) => {
+      hostSocket.overrideControl?.(playerId);
+    },
+    [hostSocket],
+  );
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -570,6 +597,7 @@ export function HostContent() {
         onAdjustScore={handleAdjustScore}
         onUndoLastRuling={handleUndoLastRuling}
         onAdvanceRound={handleAdvanceRound}
+        onOverrideControl={handleOverrideControl}
       />
     );
   }

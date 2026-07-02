@@ -14,6 +14,7 @@ export const ClientToServer = {
   REVEAL_ANSWER: 'reveal_answer',
   ADVANCE_ROUND: 'advance_round',
   OPEN_FINAL_WAGERS: 'open_final_wagers',
+  OVERRIDE_CONTROL: 'override_control',
   ADJUST_SCORE: 'adjust_score',
   UNDO_LAST_RULING: 'undo_last_ruling',
 } as const;
@@ -58,6 +59,10 @@ export interface RevealAnswerPayload {
 export interface AdjustScorePayload {
   playerId: string;
   score: number;
+}
+
+export interface OverrideControlPayload {
+  playerId: string;
 }
 
 export type UndoLastRulingPayload = Record<string, never>;

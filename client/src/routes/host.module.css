@@ -97,6 +97,15 @@
   border-radius: 0.25rem;
 }
 
+.controllerBadge {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--value-gold);
+  border: 1px solid var(--value-gold);
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.35rem;
+}
+
 .scoreInput {
   width: 5rem;
   padding: 0.25rem 0.5rem;

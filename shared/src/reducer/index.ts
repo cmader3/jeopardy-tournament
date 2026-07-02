@@ -21,6 +21,7 @@ export type Intent =
   | { type: 'REVEAL_ANSWER' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
   | { type: 'ADVANCE_ROUND' }
+  | { type: 'OVERRIDE_CONTROL'; playerId: string }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
   | { type: 'UNDO_LAST_RULING' };
 
@@ -96,6 +97,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRevealAnswer(state);
     case 'ADVANCE_ROUND':
       return handleAdvanceRound(state);
+    case 'OVERRIDE_CONTROL':
+      return handleOverrideControl(state, intent.playerId);
     case 'ADJUST_SCORE':
       return handleAdjustScore(state, intent, ctx);
     case 'UNDO_LAST_RULING':
@@ -693,6 +696,17 @@ function handleRevealAnswer(state: GameState): ReducerResult {
   };
 }
 
+function determineTrailingController(players: Player[]): string | null {
+  if (players.length === 0) return null;
+  let trailing = players[0];
+  for (const player of players) {
+    if (player.score < trailing.score || (player.score === trailing.score && player.seatOrder < trailing.seatOrder)) {
+      trailing = player;
+    }
+  }
+  return trailing.id;
+}
+
 function handleAdvanceRound(state: GameState): ReducerResult {
   if (state.phase !== 'BOARD_SELECT' && state.phase !== 'ROUND_TRANSITION') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot advance round right now' }] };
@@ -720,6 +734,16 @@ function handleAdvanceRound(state: GameState): ReducerResult {
   }
 
   const nextRoundIndex = findNextPlayableRoundIndex(state);
+  const resetClueState = {
+    currentClueId: null,
+    buzzWinnerId: null,
+    armedAt: null,
+    deadline: null,
+    lockedOutPlayerIds: [],
+    lockoutUntil: {},
+    revealedAnswer: null,
+    lastOutcome: null,
+  };
 
   if (state.transitionTarget === 'DOUBLE_JEOPARDY') {
     return {
@@ -728,14 +752,8 @@ function handleAdvanceRound(state: GameState): ReducerResult {
         phase: 'BOARD_SELECT',
         roundIndex: nextRoundIndex ?? state.roundIndex + 1,
         transitionTarget: null,
-        currentClueId: null,
-        buzzWinnerId: null,
-        armedAt: null,
-        deadline: null,
-        lockedOutPlayerIds: [],
-        lockoutUntil: {},
-        revealedAnswer: null,
-        lastOutcome: null,
+        controllingPlayerId: determineTrailingController(state.players),
+        ...resetClueState,
       },
       effects: [{ type: 'BROADCAST_STATE' }],
     };
@@ -748,15 +766,24 @@ function handleAdvanceRound(state: GameState): ReducerResult {
       phase: 'FINAL_INTRO',
       roundIndex: nextRoundIndex ?? state.roundIndex + 1,
       transitionTarget: null,
-      currentClueId: null,
-      buzzWinnerId: null,
-      armedAt: null,
-      deadline: null,
-      lockedOutPlayerIds: [],
-      lockoutUntil: {},
-      revealedAnswer: null,
-      lastOutcome: null,
+      ...resetClueState,
     },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleOverrideControl(state: GameState, playerId: string): ReducerResult {
+  if (state.phase !== 'BOARD_SELECT') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot assign control right now' }] };
+  }
+
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  return {
+    state: { ...state, controllingPlayerId: playerId },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

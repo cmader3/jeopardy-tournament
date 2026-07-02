@@ -409,4 +409,57 @@ describe('round advance sockets', { timeout: 15000 }, () => {
     bob.disconnect();
     await server.close();
   });
+
+  it('new round control goes to the trailing contestant and can be overridden by the host', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server, makeBoardWithDoubleJeopardy());
+    const state = server.engine.getState(roomCode)!;
+    const clueId = state.board.rounds[0].clues[0].id;
+    const doubleJeopardyClueId = state.board.rounds[1].clues[0].id;
+
+    await resolveClue(host, boardClient, alice, bob, clueId);
+
+    // Give Alice a lower score than Bob so Alice is the trailing contestant.
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    const bobId = state.players.find((p) => p.name === 'Bob')!.id;
+    host.emit('adjust_score', { playerId: aliceId, score: 100 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === aliceId)?.score === 100);
+    host.emit('adjust_score', { playerId: bobId, score: 200 });
+    await waitForState(host, (s) => s.players.find((p: { id: string; score: number }) => p.id === bobId)?.score === 200);
+
+    host.emit('advance_round');
+    await Promise.all([
+      waitForState(host, (s) => s.phase === 'ROUND_TRANSITION'),
+      waitForState(boardClient, (s) => s.phase === 'ROUND_TRANSITION'),
+    ]);
+
+    const hostUpdate = waitForState(host, (s) => s.phase === 'BOARD_SELECT' && s.roundIndex === 1);
+    const boardUpdate = waitForState(boardClient, (s) => s.phase === 'BOARD_SELECT' && s.roundIndex === 1);
+    host.emit('advance_round');
+    const [hostState] = await Promise.all([hostUpdate, boardUpdate]);
+
+    const typedHost = hostState as { controllingPlayerId: string | null; roundIndex: number; phase: string };
+    expect(typedHost.phase).toBe('BOARD_SELECT');
+    expect(typedHost.roundIndex).toBe(1);
+    expect(typedHost.controllingPlayerId).toBe(aliceId);
+
+    const overrideUpdate = waitForState(host, (s) => (s as { controllingPlayerId: string | null }).controllingPlayerId === bobId);
+    host.emit('override_control', { playerId: bobId });
+    await overrideUpdate;
+
+    const aliceError = waitForError(alice);
+    alice.emit('select_clue', { clueId: doubleJeopardyClueId });
+    const error = await aliceError;
+    expect(error.message).toMatch(/Only the controlling player or host can select a clue/i);
+
+    const bobReveal = waitForState(bob, (s) => s.phase === 'CLUE_REVEALED');
+    bob.emit('select_clue', { clueId: doubleJeopardyClueId });
+    await bobReveal;
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });

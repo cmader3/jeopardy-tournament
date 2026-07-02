@@ -345,6 +345,35 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('override_control', async (payload: { playerId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can assign control' });
+        return;
+      }
+
+      const validation = z.object({ playerId: z.string().min(1) }).safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid control assignment' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'OVERRIDE_CONTROL', playerId: validation.data.playerId },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Override control failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('adjust_score', async (payload: { playerId: string; score: number }) => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

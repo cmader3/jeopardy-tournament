@@ -41,6 +41,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     undoLastRuling: vi.fn(),
     submitDDWager: vi.fn(),
     advanceRound: vi.fn(),
+    overrideControl: vi.fn(),
     clearError: vi.fn(),
     ...overrides,
   });
@@ -657,6 +658,44 @@ describe('HostInProgress score tools', () => {
 
     await userEvent.click(screen.getByTestId('advance-round-button'));
     expect(onAdvanceRound).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the controller badge and allows the host to assign control during BOARD_SELECT', async () => {
+    const onOverrideControl = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+      controllingPlayerId: 'p1',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onOverrideControl={onOverrideControl} />);
+
+    expect(screen.getByTestId('controller-badge-p1')).toHaveTextContent('Controller');
+    expect(screen.queryByTestId('controller-badge-p2')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('assign-control-p2'));
+    expect(onOverrideControl).toHaveBeenCalledWith('p2');
+  });
+
+  it('does not show assign-control buttons outside BOARD_SELECT', () => {
+    const onOverrideControl = vi.fn();
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: true },
+      ],
+      controllingPlayerId: 'p1',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onOverrideControl={onOverrideControl} />);
+
+    expect(screen.queryByTestId('assign-control-p2')).not.toBeInTheDocument();
   });
 
   it('renders the round transition screen with scores and a continue button', () => {

@@ -22,6 +22,7 @@ export interface SocketState<T> {
   undoLastRuling?: () => void;
   submitDDWager?: (amount: number) => void;
   advanceRound?: () => void;
+  overrideControl?: (playerId: string) => void;
   clearError?: () => void;
 }
 
@@ -136,11 +137,15 @@ export function useSocket<T>(
     socketRef.current?.emit('advance_round');
   }, []);
 
+  const overrideControl = useCallback((playerId: string) => {
+    socketRef.current?.emit('override_control', { playerId });
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, advanceRound, clearError };
+  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, advanceRound, overrideControl, clearError };
 }
 
 export function getStoredContestantToken(): {
