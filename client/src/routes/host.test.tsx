@@ -44,6 +44,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     advanceRound: vi.fn(),
     openFinalWagers: vi.fn(),
     submitFinalWager: vi.fn(),
+    submitFinalAnswer: vi.fn(),
     forceFinalWagers: vi.fn(),
     overrideControl: vi.fn(),
     clearError: vi.fn(),
@@ -126,6 +127,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     finalNoEligiblePlayers: false,
     finalEligiblePlayerIds: [],
     finalWagerSubmissionStatus: {},
+    finalAnswerSubmissionStatus: {},
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -910,5 +912,53 @@ describe('HostInProgress score tools', () => {
 
     await userEvent.click(screen.getByTestId('force-final-wagers-button'));
     expect(onForceFinalWagers).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the Final clue and answer submission status during FINAL_CLUE', () => {
+    const state = makeHostState({
+      phase: 'FINAL_CLUE',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      currentClueId: 'cl-final',
+      currentClueText: 'He wrote The Hobbit',
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 100, connected: true },
+      ],
+      finalEligiblePlayerIds: ['p1', 'p2'],
+      finalWagerSubmissionStatus: { p1: true, p2: true },
+      finalAnswerSubmissionStatus: { p1: true, p2: false },
+      deadline: 30_000,
+      serverNow: 0,
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-final-clue')).toBeInTheDocument();
+    expect(screen.getByTestId('host-final-clue-text')).toHaveTextContent('He wrote The Hobbit');
+    expect(screen.getByTestId('countdown')).toHaveTextContent('30');
+    expect(screen.getByTestId('host-final-answer-submitted')).toHaveTextContent('Answer submitted');
+    expect(screen.getByTestId('host-final-answer-pending')).toHaveTextContent('Pending');
+    expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+  });
+
+  it('does not expose Final answers to the host before reveal', () => {
+    const state = makeHostState({
+      phase: 'FINAL_CLUE',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      currentClueId: 'cl-final',
+      currentClueText: 'He wrote The Hobbit',
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      finalEligiblePlayerIds: ['p1'],
+      finalWagerSubmissionStatus: { p1: true },
+      finalAnswerSubmissionStatus: { p1: true },
+      deadline: 30_000,
+      serverNow: 0,
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-final-clue-text')).toHaveTextContent('He wrote The Hobbit');
+    expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+    expect(screen.queryByText('J.R.R. Tolkien')).not.toBeInTheDocument();
   });
 });

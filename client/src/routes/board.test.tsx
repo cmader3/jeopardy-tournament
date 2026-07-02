@@ -66,6 +66,7 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     finalNoEligiblePlayers: false,
     finalEligiblePlayerIds: [],
     finalWagerSubmissionStatus: {},
+    finalAnswerSubmissionStatus: {},
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -776,5 +777,50 @@ describe('BoardRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
     expect(await screen.findByTestId('clue-text')).toHaveTextContent('He wrote The Hobbit');
+  });
+
+  it('shows a countdown during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+        deadline: 30_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('countdown')).toHaveTextContent('30');
+  });
+
+  it('does not expose Final answers on the board during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+        finalAnswerSubmissionStatus: { p1: true },
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('clue-text');
+    expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tolkien')).not.toBeInTheDocument();
   });
 });

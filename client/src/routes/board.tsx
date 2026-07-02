@@ -151,6 +151,14 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
     );
   }
 
+  if (state.phase === 'FINAL_CLUE') {
+    return (
+      <div className={styles.statusGroup}>
+        <Countdown deadline={state.deadline} serverNow={state.serverNow} />
+      </div>
+    );
+  }
+
   if (state.phase === 'BUZZED' && state.buzzWinnerId) {
     const winner = state.players.find((p) => p.id === state.buzzWinnerId);
     if (winner) {

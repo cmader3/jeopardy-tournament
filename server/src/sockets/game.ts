@@ -43,6 +43,10 @@ const submitFinalWagerPayloadSchema = z.object({
   amount: z.number().int(),
 });
 
+const submitFinalAnswerPayloadSchema = z.object({
+  answer: z.string(),
+});
+
 interface SocketMeta {
   role: 'host' | 'board' | 'contestant';
   roomCode: string;
@@ -297,6 +301,35 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Submit Final wager failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('submit_final_answer', async (payload: { answer: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'contestant' || !meta.playerId) {
+        socket.emit('error', { message: 'Only a contestant can submit a Final answer' });
+        return;
+      }
+
+      const validation = submitFinalAnswerPayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid answer payload' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'SUBMIT_FINAL_ANSWER', playerId: meta.playerId, answer: validation.data.answer },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Submit Final answer failed';
         socket.emit('error', { message });
       }
     });

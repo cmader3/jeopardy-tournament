@@ -279,3 +279,153 @@ describe('FORCE_FINAL_WAGERS', () => {
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
   });
 });
+
+function setupFinalClue(scores: Record<string, number>): GameState {
+  const wager = setupFinalWager(scores);
+  const forced = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW });
+  return forced.state;
+}
+
+describe('FINAL_CLUE transition', () => {
+  it('sets the deadline from the board finalTimerSeconds when entering FINAL_CLUE', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    expect(state.phase).toBe('FINAL_CLUE');
+    expect(state.deadline).toBe(NOW + 30_000);
+    expect(state.currentClueId).toBe('cl-final');
+  });
+
+  it('reflects a non-default finalTimerSeconds in the deadline', () => {
+    const board = makeBoard();
+    const customBoard = { ...board, finalTimerSeconds: 45 };
+    const intro = {
+      ...createInitialState('session-1', 'ABCD', customBoard),
+      phase: 'FINAL_INTRO' as const,
+      roundIndex: 1,
+      players: [makePlayer({ id: 'p1', name: 'Alice', score: 200 })],
+    };
+    const wager = reduce(intro, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW }).state;
+    const clue = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+
+    expect(clue.deadline).toBe(NOW + 45_000);
+  });
+});
+
+describe('SUBMIT_FINAL_ANSWER', () => {
+  it('records an eligible contestant written answer', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 5_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+  });
+
+  it('locks the answer so it cannot be changed', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const first = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const second = reduce(first.state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Rowling' }, { now: NOW + 2_000 });
+
+    expect(second.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+    expect(second.state.finalAnswers['p1']).toBe('Tolkien');
+  });
+
+  it('rejects an answer from an ineligible contestant', () => {
+    const state = setupFinalClue({ p1: 200, p2: 0 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p2', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('eligible') });
+    expect(result.state.finalAnswers['p2']).toBeUndefined();
+  });
+
+  it('is rejected outside of FINAL_CLUE', () => {
+    const wager = setupFinalWager({ p1: 200 });
+
+    const result = reduce(wager, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+
+  it('rejects an answer submitted after the deadline', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 31_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('closed') });
+    expect(result.state.finalAnswers['p1']).toBeUndefined();
+  });
+
+  it('accepts a blank answer as a valid submission', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: '' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalAnswers['p1']).toBe('');
+  });
+});
+
+describe('TIME_EXPIRE in FINAL_CLUE', () => {
+  it('transitions to FINAL_REVEAL when the timer expires', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('FINAL_REVEAL');
+    expect(result.state.deadline).toBeNull();
+  });
+
+  it('records a blank answer for eligible contestants who did not submit', () => {
+    const state = setupFinalClue({ p1: 200, p2: 100 });
+    const partial = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(partial.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+    expect(result.state.finalAnswers['p2']).toBe('');
+  });
+
+  it('does not overwrite already-submitted answers', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const partial = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(partial.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+  });
+
+  it('keeps ineligible contestants out of finalAnswers', () => {
+    const state = setupFinalClue({ p1: 200, p2: 0 });
+
+    const result = reduce(state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('');
+    expect(result.state.finalAnswers['p2']).toBeUndefined();
+  });
+});
+
+describe('Final answer phase disconnect preservation', () => {
+  it('preserves a submitted answer when the contestant disconnects', () => {
+    const state = setupFinalClue({ p1: 200, p2: 100 });
+    const partial = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const disconnected = reduce(partial.state, { type: 'DISCONNECT', playerId: 'p1' }, { now: NOW + 2_000 });
+
+    expect(disconnected.state.finalAnswers['p1']).toBe('Tolkien');
+    expect(disconnected.state.players.find((p) => p.id === 'p1')?.connected).toBe(false);
+  });
+
+  it('preserves a submitted answer on reconnect', () => {
+    const state = setupFinalClue({ p1: 200, p2: 100 });
+    const partial = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+    const disconnected = reduce(partial.state, { type: 'DISCONNECT', playerId: 'p1' }, { now: NOW + 2_000 });
+
+    const reconnected = reduce(disconnected.state, { type: 'RECONNECT', playerId: 'p1' }, { now: NOW + 3_000 });
+
+    expect(reconnected.state.finalAnswers['p1']).toBe('Tolkien');
+    expect(reconnected.state.players.find((p) => p.id === 'p1')?.connected).toBe(true);
+  });
+});

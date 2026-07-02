@@ -376,6 +376,86 @@ function FinalWager({
   );
 }
 
+function FinalAnswer({
+  state,
+  error,
+  onSubmit,
+  clearError,
+}: {
+  state: ContestantView;
+  error?: string | null;
+  onSubmit?: (answer: string) => void;
+  clearError?: () => void;
+}) {
+  const [answer, setAnswer] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const isLocked = state.finalAnswerSubmitted;
+
+  if (!state.isEligibleForFinal) {
+    return (
+      <div data-testid="final-answer-ineligible">
+        <p>You are not eligible for Final Jeopardy.</p>
+      </div>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <div data-testid="final-answer-locked">
+        <p data-testid="final-answer-locked-message">Your Final Jeopardy answer is locked in.</p>
+        <p data-testid="final-answer-locked-text">Your answer: {state.myFinalAnswer}</p>
+      </div>
+    );
+  }
+
+  const isAnswerError = (msg?: string | null) => Boolean(msg && /answer/i.test(msg));
+  const displayError = validationError || (isAnswerError(error) ? error : null);
+
+  const handleAnswerChange = (value: string) => {
+    setAnswer(value);
+    if (validationError) {
+      setValidationError(null);
+    }
+    if (error && isAnswerError(error)) {
+      clearError?.();
+    }
+  };
+
+  const handleSubmit = () => {
+    onSubmit?.(answer);
+  };
+
+  return (
+    <div data-testid="final-answer-input">
+      <p data-testid="final-answer-heading">Final Jeopardy Answer</p>
+      <p>Enter your written answer before time expires.</p>
+      <textarea
+        value={answer}
+        onChange={(e) => handleAnswerChange(e.target.value)}
+        data-testid="final-answer-text-input"
+        aria-invalid={displayError ? 'true' : undefined}
+        aria-describedby={displayError ? 'final-answer-error' : undefined}
+        rows={3}
+        style={{ width: '100%', fontSize: '1.25rem' }}
+      />
+      {displayError && (
+        <p
+          id="final-answer-error"
+          data-testid="final-answer-error"
+          className="error"
+          role="alert"
+          aria-live="polite"
+        >
+          {displayError}
+        </p>
+      )}
+      <button type="button" onClick={handleSubmit} data-testid="final-answer-submit">
+        Submit Answer
+      </button>
+    </div>
+  );
+}
+
 function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
@@ -509,6 +589,12 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             <>
               <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
               <Buzzer key={gameState.currentClueId} state={gameState} onBuzz={socket.buzz} />
+            </>
+          )}
+          {gameState.phase === 'FINAL_CLUE' && (
+            <>
+              <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
+              <FinalAnswer state={gameState} onSubmit={socket.submitFinalAnswer} error={error} clearError={clearError} />
             </>
           )}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (

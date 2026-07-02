@@ -115,6 +115,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     ruleIncorrect: vi.fn(),
     submitDDWager: vi.fn(),
     submitFinalWager: vi.fn(),
+    submitFinalAnswer: vi.fn(),
     forceFinalWagers: vi.fn(),
     advanceRound: vi.fn(),
     openFinalWagers: vi.fn(),
@@ -1184,5 +1185,137 @@ describe('PlayRoute', () => {
     await userEvent.click(button);
 
     expect(await screen.findByTestId('contestant-clue-text')).toHaveTextContent('He wrote The Hobbit');
+  });
+
+  it('shows an answer input and countdown to an eligible contestant during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+        deadline: 30_000,
+        serverNow: 0,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('countdown')).toHaveTextContent('30');
+    expect(screen.getByTestId('final-answer-input')).toBeInTheDocument();
+    expect(screen.getByTestId('final-answer-heading')).toHaveTextContent('Final Jeopardy Answer');
+  });
+
+  it('submits a written Final answer and locks the input', async () => {
+    const submitFinalAnswer = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+      }),
+      null,
+      { submitFinalAnswer },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-input')).toBeInTheDocument();
+    await userEvent.type(screen.getByTestId('final-answer-text-input'), 'Tolkien');
+    await userEvent.click(screen.getByTestId('final-answer-submit'));
+    expect(submitFinalAnswer).toHaveBeenCalledWith('Tolkien');
+  });
+
+  it('shows a locked answer to the contestant after submission', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: false,
+        finalAnswerSubmitted: true,
+        myFinalAnswer: 'Tolkien',
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-locked')).toBeInTheDocument();
+    expect(screen.getByTestId('final-answer-locked-text')).toHaveTextContent('Tolkien');
+  });
+
+  it('shows an ineligible message to a contestant during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 200, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+        isEligibleForFinal: false,
+        canAnswer: false,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Bob');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-ineligible')).toBeInTheDocument();
   });
 });

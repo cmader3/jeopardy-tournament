@@ -253,3 +253,143 @@ describe('Final wager projections', () => {
     expect(view.finalWagerSubmissionStatus).toEqual({ p1: true });
   });
 });
+
+describe('Final answer projections', () => {
+  it('the board shows the Final clue and a deadline during FINAL_CLUE', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50 },
+      deadline: NOW + 30_000,
+    };
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.currentClueText).toBe('He wrote The Hobbit');
+    expect(view.deadline).toBe(NOW + 30_000);
+  });
+
+  it('the board tracks answer submission status without exposing answer text', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200, p2: 100 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50, p2: 25 },
+      finalAnswers: { p1: 'Tolkien' },
+    };
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalAnswerSubmissionStatus).toEqual({ p1: true, p2: false });
+    expect(view).not.toHaveProperty('finalAnswers');
+  });
+
+  it('the host tracks answer submission status but does not see answer text before reveal', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200, p2: 100 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50, p2: 25 },
+      finalAnswers: { p1: 'Tolkien', p2: 'Rowling' },
+    };
+
+    const view = projectHost(state, NOW);
+
+    expect(view.finalAnswerSubmissionStatus).toEqual({ p1: true, p2: true });
+    expect(view.answer).toBeNull();
+    expect(view).not.toHaveProperty('finalAnswers');
+  });
+
+  it('the host does not see the Final answer during FINAL_WAGER either', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200 }),
+      phase: 'FINAL_WAGER' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50 },
+    };
+
+    const view = projectHost(state, NOW);
+
+    expect(view.answer).toBeNull();
+  });
+
+  it('a contestant sees their own answer after submitting', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200, p2: 100 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50, p2: 25 },
+      finalAnswers: { p1: 'Tolkien' },
+    };
+
+    const p1 = projectContestant(state, 'p1', NOW);
+    expect(p1.myFinalAnswer).toBe('Tolkien');
+    expect(p1.finalAnswerSubmitted).toBe(true);
+    expect(p1.canAnswer).toBe(false);
+  });
+
+  it('a contestant cannot see another contestant answer', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200, p2: 100 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50, p2: 25 },
+      finalAnswers: { p1: 'Tolkien' },
+    };
+
+    const p2 = projectContestant(state, 'p2', NOW);
+    expect(p2.myFinalAnswer).toBeNull();
+    expect(p2.finalAnswerSubmitted).toBe(false);
+    expect(p2).not.toHaveProperty('finalAnswers');
+  });
+
+  it('eligible contestants can answer until they submit, then canAnswer locks', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50 },
+      finalAnswers: {},
+    };
+
+    const before = projectContestant(state, 'p1', NOW);
+    expect(before.canAnswer).toBe(true);
+
+    const afterState = { ...state, finalAnswers: { p1: 'Tolkien' } };
+    const after = projectContestant(afterState, 'p1', NOW);
+    expect(after.canAnswer).toBe(false);
+    expect(after.finalAnswerSubmitted).toBe(true);
+  });
+
+  it('ineligible contestants cannot answer during FINAL_CLUE', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200, p2: 0 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50 },
+      finalAnswers: {},
+    };
+
+    const p2 = projectContestant(state, 'p2', NOW);
+    expect(p2.canAnswer).toBe(false);
+    expect(p2.isEligibleForFinal).toBe(false);
+  });
+
+  it('the board does not leak Final answers after timer expiry', () => {
+    const state = {
+      ...setupFinalIntro({ p1: 200, p2: 100 }),
+      phase: 'FINAL_REVEAL' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50, p2: 25 },
+      finalAnswers: { p1: 'Tolkien', p2: 'Rowling' },
+      deadline: null,
+    };
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.currentClueText).toBeNull();
+    expect(view.answer).toBeNull();
+    expect(view).not.toHaveProperty('finalAnswers');
+  });
+});

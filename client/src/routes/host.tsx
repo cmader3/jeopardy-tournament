@@ -337,6 +337,47 @@ interface HostFinalWagerProps {
   onForceFinalWagers?: () => void;
 }
 
+interface HostFinalClueProps {
+  state: HostView;
+}
+
+function HostFinalClue({ state }: HostFinalClueProps) {
+  const category = state.round?.categories[0];
+  const eligibleSet = new Set(state.finalEligiblePlayerIds);
+
+  return (
+    <div className={styles.hostFinalClue} data-testid="host-final-clue">
+      <h2 data-testid="host-final-clue-heading">Final Jeopardy Clue</h2>
+      <div className={styles.hostFinalCategory} data-testid="host-final-category">
+        {category?.title ?? 'Final Category'}
+      </div>
+      <p className={styles.hostFinalClueText} data-testid="host-final-clue-text">
+        {state.currentClueText}
+      </p>
+      <Countdown deadline={state.deadline} serverNow={state.serverNow} />
+      <ul className={styles.hostFinalAnswerList} data-testid="host-final-answer-list">
+        {state.players.map((player) => {
+          const eligible = eligibleSet.has(player.id);
+          const submitted = state.finalAnswerSubmissionStatus[player.id] ?? false;
+          return (
+            <li key={player.id} data-testid={`host-final-answer-player-${player.id}`}>
+              <span className={styles.playerName}>{player.name}</span>
+              <span className={styles.playerScore}>{player.score}</span>
+              {eligible ? (
+                <span data-testid={submitted ? 'host-final-answer-submitted' : 'host-final-answer-pending'}>
+                  {submitted ? 'Answer submitted' : 'Pending'}
+                </span>
+              ) : (
+                <span data-testid="host-final-answer-not-participating">Not participating</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function HostFinalWager({ state, onForceFinalWagers }: HostFinalWagerProps) {
   const eligibleSet = new Set(state.finalEligiblePlayerIds);
 
@@ -450,6 +491,21 @@ export function HostInProgress({
     );
   }
 
+  if (state?.phase === 'FINAL_CLUE') {
+    return (
+      <main className={`${styles.hostInProgress} route-stub`}>
+        <h1>Game in Progress</h1>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+        <p className={styles.phase} data-testid="phase-indicator">
+          Phase: {state.phase}
+        </p>
+        <HostFinalClue state={state} />
+      </main>
+    );
+  }
+
   return (
     <main className={`${styles.hostInProgress} route-stub`}>
       <h1>Game in Progress</h1>
@@ -468,9 +524,11 @@ export function HostInProgress({
               <p className={styles.clueText} data-testid="clue-text">
                 {state?.currentClueText}
               </p>
-              <p className={styles.answerText} data-testid="answer-text">
-                Answer: {currentClue.answer}
-              </p>
+              {state?.answer && (
+                <p className={styles.answerText} data-testid="answer-text">
+                  Answer: {state.answer}
+                </p>
+              )}
               {state?.dailyDoubleWager != null && (
                 <p className={styles.wagerText} data-testid="daily-double-wager">
                   Daily Double wager: {'$'}{state.dailyDoubleWager}

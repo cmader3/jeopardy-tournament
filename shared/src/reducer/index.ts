@@ -21,6 +21,7 @@ export type Intent =
   | { type: 'REVEAL_ANSWER' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
   | { type: 'SUBMIT_FINAL_WAGER'; playerId: string; amount: number }
+  | { type: 'SUBMIT_FINAL_ANSWER'; playerId: string; answer: string }
   | { type: 'FORCE_FINAL_WAGERS' }
   | { type: 'CANCEL_DAILY_DOUBLE' }
   | { type: 'ADVANCE_ROUND' }
@@ -97,9 +98,11 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
     case 'SUBMIT_DD_WAGER':
       return handleSubmitDDWager(state, intent);
     case 'SUBMIT_FINAL_WAGER':
-      return handleSubmitFinalWager(state, intent);
+      return handleSubmitFinalWager(state, intent, ctx);
+    case 'SUBMIT_FINAL_ANSWER':
+      return handleSubmitFinalAnswer(state, intent, ctx);
     case 'FORCE_FINAL_WAGERS':
-      return handleForceFinalWagers(state);
+      return handleForceFinalWagers(state, ctx);
     case 'CANCEL_DAILY_DOUBLE':
       return handleCancelDailyDouble(state);
     case 'REVEAL_CLUE':
@@ -609,23 +612,42 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
 }
 
 function handleTimeExpire(state: GameState): ReducerResult {
-  if (state.phase !== 'BUZZERS_ARMED') {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Timer can only expire while buzzers are armed' }] };
+  if (state.phase === 'BUZZERS_ARMED') {
+    if (!state.currentClueId) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
+    }
+
+    const clue = getCurrentClue(state);
+    return {
+      state: {
+        ...resolveClueReturnToBoard(state, state.currentClueId),
+        revealedAnswer: clue?.answer ?? null,
+        lastOutcome: null,
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
   }
 
-  if (!state.currentClueId) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
+  if (state.phase === 'FINAL_CLUE') {
+    const eligible = getFinalEligiblePlayers(state.players);
+    const finalAnswers = { ...state.finalAnswers };
+    for (const player of eligible) {
+      if (finalAnswers[player.id] === undefined) {
+        finalAnswers[player.id] = '';
+      }
+    }
+    return {
+      state: {
+        ...state,
+        phase: 'FINAL_REVEAL',
+        finalAnswers,
+        deadline: null,
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
   }
 
-  const clue = getCurrentClue(state);
-  return {
-    state: {
-      ...resolveClueReturnToBoard(state, state.currentClueId),
-      revealedAnswer: clue?.answer ?? null,
-      lastOutcome: null,
-    },
-    effects: [{ type: 'BROADCAST_STATE' }],
-  };
+  return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Timer can only expire while buzzers are armed or during Final Jeopardy' }] };
 }
 
 const DEFAULT_MIN_WAGER = 5;
@@ -859,7 +881,7 @@ function getFinalRoundClueId(state: GameState): string | null {
   return round.clues[0]?.id ?? null;
 }
 
-function closeFinalWagerPhase(state: GameState): GameState {
+function closeFinalWagerPhase(state: GameState, ctx: ReducerCtx): GameState {
   const eligible = getFinalEligiblePlayers(state.players);
   const finalWagers = { ...state.finalWagers };
   for (const player of eligible) {
@@ -872,12 +894,14 @@ function closeFinalWagerPhase(state: GameState): GameState {
     phase: 'FINAL_CLUE',
     finalWagers,
     currentClueId: getFinalRoundClueId(state),
+    deadline: ctx.now + state.board.finalTimerSeconds * 1000,
   };
 }
 
 function handleSubmitFinalWager(
   state: GameState,
   intent: Extract<Intent, { type: 'SUBMIT_FINAL_WAGER' }>,
+  ctx: ReducerCtx,
 ): ReducerResult {
   if (state.phase !== 'FINAL_WAGER') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final wager is being accepted right now' }] };
@@ -912,18 +936,56 @@ function handleSubmitFinalWager(
   const allSubmitted = eligible.length > 0 && eligible.every((p) => updated.finalWagers[p.id] !== undefined);
 
   if (allSubmitted) {
-    return { state: closeFinalWagerPhase(updated), effects: [{ type: 'BROADCAST_STATE' }] };
+    return { state: closeFinalWagerPhase(updated, ctx), effects: [{ type: 'BROADCAST_STATE' }] };
   }
 
   return { state: updated, effects: [{ type: 'BROADCAST_STATE' }] };
 }
 
-function handleForceFinalWagers(state: GameState): ReducerResult {
+function handleSubmitFinalAnswer(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SUBMIT_FINAL_ANSWER' }>,
+  ctx: ReducerCtx,
+): ReducerResult {
+  if (state.phase !== 'FINAL_CLUE') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final answer is being accepted right now' }] };
+  }
+
+  if (state.deadline != null && ctx.now > state.deadline) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
+  }
+
+  const player = state.players.find((p) => p.id === intent.playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  if (player.score <= 0) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only eligible contestants can submit a Final answer' }] };
+  }
+
+  if (state.finalAnswers[player.id] !== undefined) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final answer has already been submitted' }] };
+  }
+
+  return {
+    state: {
+      ...state,
+      finalAnswers: { ...state.finalAnswers, [player.id]: intent.answer },
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleForceFinalWagers(
+  state: GameState,
+  ctx: ReducerCtx,
+): ReducerResult {
   if (state.phase !== 'FINAL_WAGER') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Final wagers cannot be forced right now' }] };
   }
 
-  return { state: closeFinalWagerPhase(state), effects: [{ type: 'BROADCAST_STATE' }] };
+  return { state: closeFinalWagerPhase(state, ctx), effects: [{ type: 'BROADCAST_STATE' }] };
 }
 
 function handleOpenFinalWagers(state: GameState): ReducerResult {
