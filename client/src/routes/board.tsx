@@ -201,6 +201,34 @@ function AnswerBanner({ state }: AnswerBannerProps) {
   );
 }
 
+interface IncorrectFeedbackProps {
+  state: BoardView;
+}
+
+function IncorrectFeedback({ state }: IncorrectFeedbackProps) {
+  const outcome = state.lastOutcome;
+  if (!outcome || outcome.type !== 'INCORRECT' || state.answer) return null;
+
+  const player = state.players.find((p) => p.id === outcome.playerId);
+  return (
+    <div
+      className={styles.incorrectFeedback}
+      data-testid="incorrect-feedback"
+      role="status"
+      aria-live="polite"
+    >
+      <span className={styles.incorrectIcon} aria-hidden="true">
+        ✗
+      </span>
+      <span className={styles.incorrectText}>
+        Incorrect!{' '}
+        <strong className={styles.incorrectPlayer}>{player?.name ?? 'Contestant'}</strong>{' '}
+        <span className={styles.incorrectValue}>{`-$${outcome.value}`}</span>
+      </span>
+    </div>
+  );
+}
+
 function renderStage(state: BoardView) {
   const clueOverlay =
     state.currentClueId && state.currentClueText ? (
@@ -213,6 +241,7 @@ function renderStage(state: BoardView) {
     return (
       <div className={styles.clueStage}>
         <GameStatusBanner state={state} />
+        <IncorrectFeedback state={state} />
         {clueOverlay}
       </div>
     );

@@ -362,4 +362,50 @@ describe('projections', () => {
     expect(hostView.lastOutcome).toEqual(boardView.lastOutcome);
     expect(contestantView.lastOutcome).toEqual(boardView.lastOutcome);
   });
+
+  it('all role projections expose the incorrect outcome on re-arm without revealing the answer to board or contestants', () => {
+    const board = makeBoard();
+    let state = createInitialState('s1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice', score: -100 });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', score: 0 });
+    state = {
+      ...state,
+      players: [alice, bob],
+      controllingPlayerId: alice.id,
+    };
+
+    state = {
+      ...state,
+      phase: 'BUZZERS_ARMED' as const,
+      currentClueId: 'cl1',
+      revealedAnswer: null,
+      lastOutcome: { playerId: alice.id, type: 'INCORRECT', value: 100 },
+      lockedOutPlayerIds: [alice.id],
+      deadline: NOW + 10_000,
+    };
+
+    const boardView = projectBoard(state, NOW);
+    const hostView = projectHost(state, NOW);
+    const contestantView = projectContestant(state, bob.id, NOW);
+
+    expect(boardView.phase).toBe('BUZZERS_ARMED');
+    expect(hostView.phase).toBe('BUZZERS_ARMED');
+    expect(contestantView.phase).toBe('BUZZERS_ARMED');
+
+    expect(boardView.lastOutcome).toEqual({ playerId: alice.id, type: 'INCORRECT', value: 100 });
+    expect(hostView.lastOutcome).toEqual(boardView.lastOutcome);
+    expect(contestantView.lastOutcome).toEqual(boardView.lastOutcome);
+
+    expect(boardView.answer).toBeNull();
+    expect(contestantView.answer).toBeNull();
+    // The host always sees the answer for the current clue.
+    expect(hostView.answer).toBe('Water');
+
+    expect(boardView.players).toEqual([
+      { id: alice.id, name: 'Alice', score: -100, connected: true },
+      { id: bob.id, name: 'Bob', score: 0, connected: true },
+    ]);
+    expect(hostView.players).toEqual(boardView.players);
+    expect(contestantView.players).toEqual(boardView.players);
+  });
 });

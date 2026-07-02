@@ -424,6 +424,42 @@
   color: var(--incorrect-red, #c62828);
 }
 
+.incorrectFeedback {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem 2rem;
+  background: rgba(183, 28, 28, 0.2);
+  border: 3px solid var(--incorrect-red, #c62828);
+  border-radius: 0.5rem;
+  color: var(--incorrect-red, #c62828);
+  text-align: center;
+  max-width: 90%;
+}
+
+.incorrectIcon {
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.incorrectText {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 3vw, 2.5rem);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.incorrectPlayer {
+  color: var(--text-light);
+}
+
+.incorrectValue {
+  font-weight: 700;
+}
+
 .controlling {
   outline: 3px solid var(--value-gold);
   outline-offset: 2px;

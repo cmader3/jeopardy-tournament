@@ -467,6 +467,40 @@ describe('BoardRoute', () => {
     expect(screen.getByTestId('outcome-label')).toHaveTextContent('-$100');
   });
 
+  it('shows a distinct incorrect feedback indicator while re-armed without revealing the answer', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        answer: null,
+        lastOutcome: { playerId: 'p1', type: 'INCORRECT', value: 100 },
+        deadline: 10_000,
+        serverNow: 0,
+        players: [
+          { id: 'p1', name: 'Alice', score: -100, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('incorrect-feedback')).toBeInTheDocument();
+    expect(screen.getByTestId('incorrect-feedback')).toHaveTextContent('Incorrect!');
+    expect(screen.getByTestId('incorrect-feedback')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('incorrect-feedback')).toHaveTextContent('-$100');
+    expect(screen.getByTestId('incorrect-feedback').className).toMatch(/incorrectFeedback/);
+    expect(screen.queryByTestId('answer-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+    expect(screen.getByTestId('clue-text')).toHaveTextContent('H2O is this compound');
+    expect(screen.getByTestId('armed-indicator')).toHaveTextContent('BUZZERS ARMED');
+  });
+
   it('shows the revealed answer after a timeout with no score change', async () => {
     mockUseSocket(
       makeBoardState({
