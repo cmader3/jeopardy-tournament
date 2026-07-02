@@ -1022,6 +1022,30 @@ function setupIncorrectRuling(): GameState {
   return reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 100 }).state;
 }
 
+function makeBoardWithTwoDailyDoubles(): Board {
+  const board = makeBoard();
+  const round = board.rounds[0];
+  round.clues = round.clues.map((clue) =>
+    clue.id === 'cl3' ? { ...clue, isDailyDouble: true } : clue,
+  );
+  for (const category of round.categories) {
+    category.clues = category.clues.map((clue) =>
+      clue.id === 'cl3' ? { ...clue, isDailyDouble: true } : clue,
+    );
+  }
+  return board;
+}
+
+function setupGameWithTwoDailyDoubles(): GameState {
+  const board = makeBoardWithTwoDailyDoubles();
+  let state = createInitialState('session-1', 'ABCD', board);
+  const alice = makePlayer({ id: 'p1', name: 'Alice', score: 1000 });
+  const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+  state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+  state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+  return reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+}
+
 describe('ADJUST_SCORE', () => {
   it('sets a contestant score to the requested value and records a manual audit entry', () => {
     const state = setupCorrectRuling();
@@ -1155,5 +1179,75 @@ describe('UNDO_LAST_RULING', () => {
     expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(-100);
     expect(result.state.auditLog).toHaveLength(1);
     expect(result.state.auditLog[0].type).toBe('INCORRECT');
+  });
+});
+
+describe('Daily Double wager state reset', () => {
+  it('clears the wager after a Daily Double is ruled correct and returns to BOARD_SELECT', () => {
+    let state = setupGameWithTwoDailyDoubles();
+    const controllerId = state.controllingPlayerId;
+
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
+    state = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
+    state = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 }).state;
+
+    expect(state.phase).toBe('BOARD_SELECT');
+    expect(state.dailyDoubleWager).toBeNull();
+    expect(state.usedClueIds).toContain('cl2');
+  });
+
+  it('clears the wager after a Daily Double is ruled incorrect and returns to BOARD_SELECT', () => {
+    let state = setupGameWithTwoDailyDoubles();
+    const controllerId = state.controllingPlayerId;
+
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
+    state = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
+    state = reduce(state, { type: 'RULE_INCORRECT', playerId: controllerId! }, { now: NOW + 100 }).state;
+
+    expect(state.phase).toBe('BOARD_SELECT');
+    expect(state.dailyDoubleWager).toBeNull();
+    expect(state.usedClueIds).toContain('cl2');
+  });
+
+  it('allows a fresh wager on a second Daily Double and does not leak the first wager', () => {
+    let state = setupGameWithTwoDailyDoubles();
+    const controllerId = state.controllingPlayerId;
+
+    // First Daily Double: wager 200 and rule correct.
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
+    state = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
+    state = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 }).state;
+
+    expect(state.dailyDoubleWager).toBeNull();
+
+    // Second Daily Double: a fresh wager must be accepted.
+    const secondSelect = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: controllerId }, { now: NOW + 200 });
+    expect(secondSelect.state.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(secondSelect.state.currentClueId).toBe('cl3');
+    expect(secondSelect.state.dailyDoubleWager).toBeNull();
+
+    const secondWager = reduce(secondSelect.state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 500 }, { now: NOW + 300 });
+    expect(secondWager.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(secondWager.state.dailyDoubleWager).toBe(500);
+    expect(secondWager.state.phase).toBe('DAILY_DOUBLE_WAGER');
+
+    const secondReveal = reduce(secondWager.state, { type: 'REVEAL_CLUE' }, { now: NOW + 400 });
+    expect(secondReveal.state.phase).toBe('DAILY_DOUBLE_CLUE');
+    expect(secondReveal.state.dailyDoubleWager).toBe(500);
+  });
+
+  it('rejects a second wager submission on the same Daily Double after one is locked', () => {
+    let state = setupGameWithTwoDailyDoubles();
+    const controllerId = state.controllingPlayerId;
+
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
+
+    const secondSubmit = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 300 }, { now: NOW + 100 });
+    expect(secondSubmit.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+    expect(secondSubmit.state.dailyDoubleWager).toBe(200);
   });
 });

@@ -259,6 +259,7 @@ function handleSelectClue(
       lockoutUntil: {},
       revealedAnswer: null,
       lastOutcome: null,
+      dailyDoubleWager: null,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -389,6 +390,7 @@ function resolveClueReturnToBoard(state: GameState, clueId: string): GameState {
     deadline: null,
     lockedOutPlayerIds: [],
     lockoutUntil: {},
+    dailyDoubleWager: null,
   };
 }
 
