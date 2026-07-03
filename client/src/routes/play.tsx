@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useSocket,
   getStoredContestantToken,
@@ -6,6 +6,7 @@ import {
 } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
 import { useServerTime } from '../hooks/useServerTime.js';
+import { useSyncTime } from '../hooks/useSyncTime.js';
 import type { ContestantView } from '@jeopardy/shared';
 import styles from './play.module.css';
 
@@ -23,14 +24,59 @@ interface ContestantLobbyProps {
 }
 
 function useClientTime(serverNow: number): number {
-  return useSyncExternalStore(
-    (callback) => {
-      const id = setInterval(callback, 50);
-      return () => clearInterval(id);
-    },
-    () => Date.now(),
-    () => serverNow,
-  );
+  const getTime = useCallback(() => Date.now(), []);
+  return useSyncTime(getTime, 50, serverNow);
+}
+
+function safeVibrate(pattern: number | number[]): void {
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
+    return;
+  }
+  try {
+    navigator.vibrate(pattern);
+  } catch {
+    // Vibration API is optional; ignore failures.
+  }
+}
+
+function getStatusDescription(state: ContestantView): string {
+  const me = state.players.find((p) => p.id === state.playerId);
+  const score = me?.score ?? 0;
+  const controller = state.players.find((p) => p.id === state.controllingPlayerId);
+  const isWinner = state.buzzWinnerId === state.playerId;
+
+  switch (state.phase) {
+    case 'LOBBY':
+      return `Score ${score}. Waiting for the host to start.`;
+    case 'ROUND_TRANSITION':
+      return `Score ${score}. Round transition.`;
+    case 'FINAL_INTRO':
+      return `Score ${score}. Final Jeopardy. ${state.isEligibleForFinal ? 'You are eligible.' : 'You are not eligible.'}`;
+    case 'FINAL_WAGER':
+      return `Score ${score}. Place your Final Jeopardy wager.`;
+    case 'BOARD_SELECT':
+      return state.isControllingPlayer
+        ? `Score ${score}. It is your turn to select a clue.`
+        : `Score ${score}. Waiting for ${controller?.name ?? 'the controller'} to select a clue.`;
+    case 'CLUE_REVEALED':
+      return `Score ${score}. Clue revealed. Buzzers are not yet armed.`;
+    case 'BUZZERS_ARMED':
+      return `Score ${score}. Buzzers are armed.`;
+    case 'BUZZED':
+      return isWinner ? `Score ${score}. You buzzed in first.` : `Score ${score}. Another contestant buzzed in.`;
+    case 'DAILY_DOUBLE_WAGER':
+      return `Score ${score}. Daily Double.`;
+    case 'DAILY_DOUBLE_CLUE':
+      return `Score ${score}. Daily Double clue.`;
+    case 'FINAL_CLUE':
+      return `Score ${score}. Final Jeopardy clue.`;
+    case 'FINAL_REVEAL':
+      return `Score ${score}. Final Jeopardy reveal.`;
+    case 'COMPLETE':
+      return `Score ${score}. Game over.`;
+    default:
+      return `Score ${score}.`;
+  }
 }
 
 const TOO_EARLY_DISPLAY_MS = 1500;
@@ -44,12 +90,20 @@ function Buzzer({
 }) {
   const clientTime = useClientTime(state.serverNow ?? 0);
   const [lastTooEarlyAt, setLastTooEarlyAt] = useState<number | null>(null);
+  const previousPhaseRef = useRef(state.phase);
 
   useEffect(() => {
     if (lastTooEarlyAt == null) return;
     const id = setTimeout(() => setLastTooEarlyAt(null), TOO_EARLY_DISPLAY_MS);
     return () => clearTimeout(id);
   }, [lastTooEarlyAt]);
+
+  useEffect(() => {
+    if (previousPhaseRef.current !== 'BUZZERS_ARMED' && state.phase === 'BUZZERS_ARMED') {
+      safeVibrate([40, 20, 40]);
+    }
+    previousPhaseRef.current = state.phase;
+  }, [state.phase]);
 
   const isServerLocked = state.isLockedOut || (state.lockoutUntil != null && state.lockoutUntil > clientTime);
   const isWinner = state.buzzWinnerId === state.playerId;
@@ -75,8 +129,10 @@ function Buzzer({
   const handlePress = useCallback(() => {
     if (state.phase === 'CLUE_REVEALED' && !isServerLocked && !displayLockout) {
       setLastTooEarlyAt(clientTime);
+      safeVibrate(50);
       onBuzz?.(state.playerId);
     } else if (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !isWinner && !isLoser) {
+      safeVibrate(80);
       onBuzz?.(state.playerId);
     }
   }, [state.phase, isServerLocked, displayLockout, isWinner, isLoser, onBuzz, state.playerId, clientTime]);
@@ -671,12 +727,17 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
       {gameState && (
         <div className={styles.state}>
           <p>Welcome, {me?.name ?? 'Contestant'}</p>
-          <p>
-            Score:{' '}
-            <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
-              {me?.score ?? 0}
-            </span>
-          </p>
+          <div aria-live="polite" aria-atomic="true">
+            <p>
+              Score:{' '}
+              <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
+                {me?.score ?? 0}
+              </span>
+            </p>
+          </div>
+          <div className={styles.srOnly} aria-live="polite" aria-atomic="true">
+            {getStatusDescription(gameState)}
+          </div>
           {gameState.phase === 'LOBBY' && (
             <>
               <p>Waiting for the host to start the game.</p>
@@ -739,7 +800,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             </>
           )}
           {showClue && (
-            <div className={`${styles.clueOverlay} ${styles.fullScreen}`} data-testid="contestant-clue-overlay">
+            <div className={styles.clueBanner} data-testid="contestant-clue-overlay">
               <p className={styles.clueText} data-testid="contestant-clue-text">{gameState.currentClueText}</p>
             </div>
           )}

@@ -16,7 +16,7 @@ interface ScoreboardProps {
 
 function Scoreboard({ players, controllingPlayerId }: ScoreboardProps) {
   return (
-    <div className={styles.scoreboard}>
+    <div className={styles.scoreboard} aria-live="polite" aria-atomic="false" data-testid="scoreboard">
       {players.map((player) => (
         <div
           key={player.id}
@@ -156,7 +156,7 @@ interface GameStatusBannerProps {
 function GameStatusBanner({ state }: GameStatusBannerProps) {
   if (state.phase === 'BUZZERS_ARMED') {
     return (
-      <div className={styles.statusGroup}>
+      <div className={styles.statusGroup} role="status" aria-live="polite" aria-atomic="true">
         <div className={styles.armedIndicator} data-testid="armed-indicator">
           <ArmedLights />
           BUZZERS ARMED
@@ -168,7 +168,7 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
 
   if (state.phase === 'FINAL_CLUE') {
     return (
-      <div className={styles.statusGroup}>
+      <div className={styles.statusGroup} role="status" aria-live="polite" aria-atomic="true">
         <Countdown deadline={state.deadline} serverNow={state.serverNow} showBar />
       </div>
     );
@@ -178,7 +178,7 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
     const winner = state.players.find((p) => p.id === state.buzzWinnerId);
     if (winner) {
       return (
-        <div className={styles.buzzedIndicator} data-testid="buzzed-indicator">
+        <div className={styles.buzzedIndicator} data-testid="buzzed-indicator" role="status" aria-live="polite" aria-atomic="true">
           Buzzed in: <strong data-testid="buzzed-player-name">{winner.name}</strong>
         </div>
       );

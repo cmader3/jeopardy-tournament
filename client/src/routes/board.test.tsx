@@ -973,3 +973,46 @@ describe('BoardRoute', () => {
     expect(toggle).toHaveAttribute('data-muted', 'true');
   });
 });
+
+describe('Board accessibility', () => {
+  it('marks the scoreboard as an aria-live region', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const scoreboard = await screen.findByTestId('scoreboard');
+    expect(scoreboard).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('marks the armed indicator as an aria-live status region', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const indicator = await screen.findByTestId('armed-indicator');
+    expect(indicator.parentElement).toHaveAttribute('role', 'status');
+    expect(indicator.parentElement).toHaveAttribute('aria-live', 'polite');
+  });
+});

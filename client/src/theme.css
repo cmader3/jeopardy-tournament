@@ -76,6 +76,16 @@ body {
   color: var(--value-gold);
 }
 
+/* Visible keyboard focus indicator across all views */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--value-gold);
+  outline-offset: 2px;
+}
+
 .player-list {
   list-style: none;
   padding: 0;

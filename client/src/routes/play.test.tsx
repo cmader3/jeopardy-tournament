@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { PlayRoute } from './play.js';
 import type { ContestantView } from '@jeopardy/shared';
 
@@ -1663,8 +1665,7 @@ describe('PlayRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
 
     const overlay = await screen.findByTestId('contestant-clue-overlay');
-    expect(overlay.className).toMatch(/clueOverlay/);
-    expect(overlay.className).toMatch(/fullScreen/);
+    expect(overlay.className).toMatch(/clueBanner/);
   });
 
   it('does not expose audio elements or an audio toggle on the contestant view', async () => {
@@ -1693,5 +1694,214 @@ describe('PlayRoute', () => {
     expect(screen.queryByTestId('audio-toggle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('countdown-bar')).not.toBeInTheDocument();
     expect(document.querySelector('audio')).not.toBeInTheDocument();
+  });
+});
+
+describe('Buzzer mobile and accessibility', () => {
+  let vibrateMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vibrateMock = vi.fn();
+    vi.stubGlobal('navigator', { ...navigator, vibrate: vibrateMock });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('viewport meta prevents user scaling', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf-8');
+    const match = html.match(/<meta[^>]*name="viewport"[^>]*content="([^"]*)"/i);
+    expect(match).toBeTruthy();
+    expect(match![1]).toContain('user-scalable=no');
+    expect(match![1]).toContain('maximum-scale=1');
+  });
+
+  it('renders the buzzer as a focusable button with a state label', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const buzzer = await screen.findByRole('button', { name: 'Buzz In' });
+    expect(buzzer.tagName).toBe('BUTTON');
+    expect(buzzer).toHaveAttribute('aria-label', 'Buzz In');
+  });
+
+  it('reflects the locked-out state in the accessible label and visible text', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: true,
+        lockoutUntil: Date.now() + 250,
+      }),
+      buzz: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const buzzer = await screen.findByRole('button', { name: 'Locked Out' });
+    expect(buzzer).toHaveAttribute('aria-label', 'Locked Out');
+    expect(buzzer).toHaveTextContent('Locked Out');
+  });
+
+  it('styles the buzzer to prevent text selection and double-tap zoom', async () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/routes/play.module.css'), 'utf-8');
+    expect(css).toContain('touch-action: manipulation');
+    expect(css).toContain('user-select: none');
+  });
+
+  it('vibrates on a successful buzz press', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const buzzer = await screen.findByRole('button', { name: 'Buzz In' });
+    await userEvent.click(buzzer);
+    expect(vibrateMock).toHaveBeenCalled();
+    expect(buzz).toHaveBeenCalledWith('p1');
+  });
+
+  it('vibrates when the buzzers transition from unarmed to armed', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+
+    const { rerender } = render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    await screen.findByRole('button', { name: 'Wait for Host' });
+    expect(vibrateMock).not.toHaveBeenCalled();
+
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+    rerender(<PlayRoute />);
+
+    await screen.findByRole('button', { name: 'Buzz In' });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(vibrateMock).toHaveBeenCalled();
+  });
+
+  it('handles a missing vibration API without errors', async () => {
+    vi.stubGlobal('navigator', { ...navigator, vibrate: undefined });
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const buzzer = await screen.findByRole('button', { name: 'Buzz In' });
+    await userEvent.click(buzzer);
+    expect(buzz).toHaveBeenCalledWith('p1');
+  });
+
+  it('announces score and status through aria-live regions', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'LOBBY',
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+      }),
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    await screen.findByText('Welcome, Alice');
+    const score = screen.getByText('Score:', { exact: false });
+    expect(score.parentElement).toHaveAttribute('aria-live', 'polite');
+    const announcer = screen.getByText('Score 0. Waiting for the host to start.');
+    expect(announcer).toHaveAttribute('aria-live', 'polite');
   });
 });
