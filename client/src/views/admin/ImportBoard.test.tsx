@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ImportBoard } from './ImportBoard.js';
+import styles from './admin.module.css';
 import type { BoardApiClient, ImportPreview } from '../../api/boards.js';
 
 const token = 'test-token';
@@ -439,6 +440,74 @@ describe('ImportBoard', () => {
     await userEvent.click(uploadButton);
 
     expect(await screen.findByRole('button', { name: /save board/i })).toBeInTheDocument();
+  });
+
+  it('shows a low-confidence indicator when confidence is below 100%', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview({ confidence: 0.75 }));
+    const file = new File(['csv content'], 'low-confidence.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    expect(await screen.findByTestId('low-confidence-indicator')).toHaveTextContent(/75%/);
+  });
+
+  it('does not show a low-confidence indicator when confidence is 100%', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview({ confidence: 1 }));
+    const file = new File(['csv content'], 'high-confidence.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    await screen.findByTestId('import-preview');
+    expect(screen.queryByTestId('low-confidence-indicator')).not.toBeInTheDocument();
+  });
+
+  it('renders Save Board and Cancel in a sticky action bar', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    const actionBar = await screen.findByTestId('import-preview-actions');
+    expect(actionBar).toHaveClass(styles.stickyPreviewActions);
+    expect(screen.getByRole('button', { name: /save board/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it('calls onBack when Cancel is clicked in the preview action bar', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    const onBack = vi.fn();
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={onBack} />);
+    const fileInput = screen.getByLabelText(/upload a spreadsheet/i);
+    const uploadButton = screen.getByRole('button', { name: /upload/i });
+
+    await userEvent.upload(fileInput, file);
+    await userEvent.click(uploadButton);
+
+    const cancelButton = await screen.findByRole('button', { name: /cancel/i });
+    await userEvent.click(cancelButton);
+
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it('saves the edited board via createBoard and notifies the parent', async () => {

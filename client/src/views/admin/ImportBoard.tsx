@@ -27,8 +27,19 @@ interface EditablePreviewProps {
   board: EditableBoard;
   onChange: (board: EditableBoard) => void;
   onSave: () => void;
+  onCancel: () => void;
   isSaving: boolean;
   error: string | null;
+}
+
+function ConfidenceIndicator({ confidence }: { confidence: number }) {
+  if (confidence >= 1) return null;
+  const percentage = Math.round(confidence * 100);
+  return (
+    <span className={styles.lowConfidenceIndicator} data-testid="low-confidence-indicator">
+      Low confidence: {percentage}%
+    </span>
+  );
 }
 
 function roundTitle(type: RoundInput['type']): string {
@@ -87,7 +98,7 @@ function findValidationErrors(board: EditableBoard): string[] {
   return errors;
 }
 
-function EditablePreview({ preview, board, onChange, onSave, isSaving, error }: EditablePreviewProps) {
+function EditablePreview({ preview, board, onChange, onSave, onCancel, isSaving, error }: EditablePreviewProps) {
   const validationErrors = findValidationErrors(board);
   const hasErrors = validationErrors.length > 0;
 
@@ -158,6 +169,9 @@ function EditablePreview({ preview, board, onChange, onSave, isSaving, error }: 
               Include Double Jeopardy
             </label>
           </div>
+        </div>
+        <div className={styles.previewConfidenceRow}>
+          <ConfidenceIndicator confidence={preview.confidence} />
         </div>
       </header>
 
@@ -333,7 +347,15 @@ function EditablePreview({ preview, board, onChange, onSave, isSaving, error }: 
         })}
       </div>
 
-      <div className={styles.previewActions}>
+      <div className={styles.stickyPreviewActions} data-testid="import-preview-actions">
+        <button
+          type="button"
+          className={styles.backButton}
+          onClick={() => void onCancel()}
+          disabled={isSaving}
+        >
+          Cancel
+        </button>
         <button
           type="button"
           className={styles.saveButton}
@@ -454,6 +476,7 @@ export function ImportBoard({ token, api, onBack, onSave }: ImportBoardProps) {
           board={editableBoard}
           onChange={setEditableBoard}
           onSave={handleSave}
+          onCancel={onBack}
           isSaving={isSaving}
           error={error}
         />

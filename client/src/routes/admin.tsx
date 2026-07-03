@@ -24,9 +24,9 @@ function AdminContent() {
         token={token}
         api={boardApi}
         onBack={() => setView('library')}
-        onSave={(savedBoard) => {
-          setSelectedBoard(savedBoard);
-          setView('editor');
+        onSave={() => {
+          setSelectedBoard(null);
+          setView('library');
         }}
       />
     );
