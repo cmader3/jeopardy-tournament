@@ -94,9 +94,17 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     finalNoEligiblePlayers: false,
     finalEligiblePlayerIds: [],
     finalWagerSubmissionStatus: {},
+    finalAnswerSubmissionStatus: {},
+    finalRevealOrder: [],
+    finalRevealIndex: 0,
+    finalRevealStep: 'ANSWER',
+    finalRevealedAnswers: {},
+    finalRevealedWagers: {},
     isEligibleForFinal: false,
     finalWagerSubmitted: false,
     myFinalWager: null,
+    finalAnswerSubmitted: false,
+    myFinalAnswer: null,
     roundComplete: false,
     ...overrides,
   };
@@ -2001,5 +2009,64 @@ describe('Buzzer mobile and accessibility', () => {
     expect(score.parentElement).toHaveAttribute('aria-live', 'polite');
     const announcer = screen.getByText('Score 0. Waiting for the host to start.');
     expect(announcer).toHaveAttribute('aria-live', 'polite');
+  });
+});
+
+describe('Final Jeopardy heading font on /play', () => {
+  it('styles the Final Reveal heading with the Michroma display font class', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_REVEAL',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [
+          { id: 'p1', name: 'Alice', score: 200, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+        finalRevealOrder: ['p2', 'p1'],
+        finalRevealIndex: 0,
+        finalRevealStep: 'ANSWER',
+        finalRevealedAnswers: {},
+        finalRevealedWagers: {},
+      }),
+    );
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const heading = await screen.findByTestId('contestant-final-reveal-heading');
+    expect(heading).toHaveTextContent('Final Jeopardy Reveal');
+    expect(heading.className).toMatch(/finalHeading/);
+  });
+
+  it('styles the Final Standings heading with the Michroma display font class', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'COMPLETE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [
+          { id: 'p1', name: 'Alice', score: 200, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+      }),
+    );
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const heading = await screen.findByTestId('contestant-final-standings-heading');
+    expect(heading).toHaveTextContent('Final Standings');
+    expect(heading.className).toMatch(/finalHeading/);
   });
 });

@@ -579,7 +579,7 @@ function FinalReveal({ state }: { state: ContestantView }) {
 
   return (
     <div data-testid="contestant-final-reveal">
-      <h2 data-testid="contestant-final-reveal-heading">Final Jeopardy Reveal</h2>
+      <h2 className={styles.finalHeading} data-testid="contestant-final-reveal-heading">Final Jeopardy Reveal</h2>
       {currentPlayer && (
         <div data-testid="contestant-final-reveal-current">
           <p data-testid="contestant-final-reveal-player-name">{currentPlayer.name}</p>
@@ -638,7 +638,7 @@ function FinalStandings({ state }: { state: ContestantView }) {
           No contestants were eligible for Final Jeopardy.
         </p>
       )}
-      <h2 data-testid="contestant-final-standings-heading">Final Standings</h2>
+      <h2 className={styles.finalHeading} data-testid="contestant-final-standings-heading">Final Standings</h2>
       <p data-testid="contestant-final-standings-self">
         Your final score:{' '}
         <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>

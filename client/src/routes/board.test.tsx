@@ -115,6 +115,11 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     finalEligiblePlayerIds: [],
     finalWagerSubmissionStatus: {},
     finalAnswerSubmissionStatus: {},
+    finalRevealOrder: [],
+    finalRevealIndex: 0,
+    finalRevealStep: 'ANSWER',
+    finalRevealedAnswers: {},
+    finalRevealedWagers: {},
     roundComplete: false,
     serverNow: 0,
     ...overrides,
@@ -1240,6 +1245,234 @@ describe('Board audio cues', () => {
       vi.advanceTimersByTime(8_000);
     });
 
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+  });
+
+  it('fires timeUp via transition detection when BUZZERS_ARMED expires to BOARD_SELECT after the deadline', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('armed-indicator');
+    expect(recordedCues).toContain('armed');
+    expect(recordedCues).not.toContain('timeUp');
+
+    // Advance server time past the deadline, then simulate the server
+    // broadcasting the expiry transition (BUZZERS_ARMED -> BOARD_SELECT).
+    mockServerTime(5_000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        deadline: null,
+        serverNow: 5_000,
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('board-grid');
+    // timeUp fires via transition detection even though the setTimeout was
+    // cancelled by the phase change cleanup.
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+  });
+
+  it('fires timeUp via transition detection when FINAL_CLUE expires to FINAL_REVEAL', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+        deadline: 30_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('clue-text');
+    expect(recordedCues).toContain('finalThink');
+    expect(recordedCues).not.toContain('timeUp');
+
+    // Simulate the server broadcasting the expiry transition (FINAL_CLUE -> FINAL_REVEAL).
+    mockServerTime(30_000);
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_REVEAL',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalRevealOrder: ['p1'],
+        finalRevealIndex: 0,
+        finalRevealStep: 'ANSWER',
+        finalRevealedAnswers: {},
+        finalRevealedWagers: {},
+        deadline: null,
+        serverNow: 30_000,
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('final-reveal');
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+  });
+
+  it('does not fire timeUp via transition detection on a buzz (BUZZERS_ARMED -> BUZZED)', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('armed-indicator');
+
+    // Advance partway, then simulate a contestant buzzing before the deadline.
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    mockServerTime(2_000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        buzzWinnerId: 'p1',
+        deadline: null,
+        serverNow: 2_000,
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('buzzed-indicator');
+    expect(recordedCues).not.toContain('timeUp');
+  });
+
+  it('does not fire timeUp via transition detection on an early host reveal (BUZZERS_ARMED -> BOARD_SELECT before deadline)', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('armed-indicator');
+
+    // Simulate an early host reveal while armed (before the deadline).
+    mockServerTime(2_000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        deadline: null,
+        serverNow: 2_000,
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('board-grid');
+    // timeUp must NOT fire because the transition happened before the deadline
+    // (early host reveal, not an expiry).
+    expect(recordedCues).not.toContain('timeUp');
+  });
+
+  it('dedupes transition-detection timeUp with the setTimeout backup so timeUp fires at most once per deadline', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('armed-indicator');
+
+    // Let the setTimeout fire the timeUp cue at the deadline.
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+
+    // Now simulate the server broadcast arriving (late) with the phase transition.
+    mockServerTime(5_000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        deadline: null,
+        serverNow: 5_000,
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('board-grid');
+    // The transition detection must not fire timeUp a second time for the same deadline.
     expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
   });
 });

@@ -564,6 +564,7 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const { muted, toggleMute, playCue } = useBoardAudio();
 
   const prevPhaseRef = useRef<BoardView['phase'] | null>(null);
+  const prevDeadlineRef = useRef<number | null>(null);
   const timeUpFiredForDeadlineRef = useRef<number | null>(null);
   const serverNow = useServerTime(state?.serverNow ?? 0);
   const serverNowRef = useRef(serverNow);
@@ -577,6 +578,7 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
 
     const phase = state.phase;
     const prevPhase = prevPhaseRef.current;
+    const prevDeadline = prevDeadlineRef.current;
 
     if (prevPhase !== 'BUZZERS_ARMED' && phase === 'BUZZERS_ARMED') {
       playCue('armed');
@@ -586,21 +588,47 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
       playCue('finalThink');
     }
 
-    // Reset the timeUp dedup when leaving a timed phase so a later timed phase
-    // with the same deadline can still fire its cue.
+    // Transition detection: fire timeUp when leaving a timed phase due to
+    // expiry. This handles the case where the server broadcasts the phase
+    // transition before the local setTimeout fires, causing the effect cleanup
+    // to cancel the scheduled cue. Both paths key on the same numeric deadline
+    // so timeUp fires at most once per deadline.
+
+    // BUZZERS_ARMED expiry: left for a non-buzz, non-armed phase after the
+    // deadline. The serverNow >= deadline guard excludes an early host
+    // REVEAL_ANSWER, which also yields BOARD_SELECT but before the deadline.
     if (
-      (prevPhase === 'BUZZERS_ARMED' || prevPhase === 'FINAL_CLUE') &&
-      prevPhase !== phase
+      prevPhase === 'BUZZERS_ARMED' &&
+      phase !== 'BUZZERS_ARMED' &&
+      phase !== 'BUZZED' &&
+      prevDeadline != null &&
+      serverNowRef.current >= prevDeadline &&
+      timeUpFiredForDeadlineRef.current !== prevDeadline
     ) {
-      timeUpFiredForDeadlineRef.current = null;
+      timeUpFiredForDeadlineRef.current = prevDeadline;
+      playCue('timeUp');
     }
 
+    // FINAL_CLUE expiry: FINAL_CLUE only ever exits via time expiry (to
+    // FINAL_REVEAL or COMPLETE), so no deadline guard is needed.
+    if (
+      prevPhase === 'FINAL_CLUE' &&
+      phase !== 'FINAL_CLUE' &&
+      prevDeadline != null &&
+      timeUpFiredForDeadlineRef.current !== prevDeadline
+    ) {
+      timeUpFiredForDeadlineRef.current = prevDeadline;
+      playCue('timeUp');
+    }
+
+    prevDeadlineRef.current = state.deadline;
     prevPhaseRef.current = phase;
   }, [state, playCue]);
 
-  // Dedicated deadline-based effect for the timeUp cue. It is keyed on the
-  // deadline and phase so it runs once per timed window, schedules a single
-  // setTimeout, and clears it on early phase change (e.g., a buzz or Final end).
+  // Dedicated deadline-based effect for the timeUp cue. Serves as a backup
+  // for the no-broadcast case (e.g., server doesn't broadcast the transition).
+  // Both this path and the transition-detection path key on the same numeric
+  // deadline so timeUp fires at most once per deadline.
   useEffect(() => {
     const deadline = state?.deadline;
     const phase = state?.phase;
