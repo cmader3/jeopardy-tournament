@@ -10,6 +10,7 @@ export const ClientToServer = {
   SUBMIT_DD_WAGER: 'submit_dd_wager',
   SUBMIT_FINAL_WAGER: 'submit_final_wager',
   SUBMIT_FINAL_ANSWER: 'submit_final_answer',
+  SUBMIT_FINAL_ANSWER_DRAFT: 'submit_final_answer_draft',
   FORCE_FINAL_WAGERS: 'force_final_wagers',
   REVEAL_CLUE: 'reveal_clue',
   REVEAL_ANSWER: 'reveal_answer',
@@ -55,6 +56,10 @@ export interface SubmitWagerPayload {
 }
 
 export interface SubmitFinalAnswerPayload {
+  answer: string;
+}
+
+export interface SubmitFinalAnswerDraftPayload {
   answer: string;
 }
 

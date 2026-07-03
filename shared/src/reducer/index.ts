@@ -22,6 +22,7 @@ export type Intent =
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
   | { type: 'SUBMIT_FINAL_WAGER'; playerId: string; amount: number }
   | { type: 'SUBMIT_FINAL_ANSWER'; playerId: string; answer: string }
+  | { type: 'SUBMIT_FINAL_ANSWER_DRAFT'; playerId: string; answer: string }
   | { type: 'FORCE_FINAL_WAGERS' }
   | { type: 'CANCEL_DAILY_DOUBLE' }
   | { type: 'ADVANCE_ROUND' }
@@ -68,6 +69,7 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     dailyDoubleWager: null,
     finalWagers: {},
     finalAnswers: {},
+    finalAnswerDrafts: {},
     revealedAnswer: null,
     transitionTarget: null,
     finalNoEligiblePlayers: false,
@@ -108,6 +110,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleSubmitFinalWager(state, intent, ctx);
     case 'SUBMIT_FINAL_ANSWER':
       return handleSubmitFinalAnswer(state, intent, ctx);
+    case 'SUBMIT_FINAL_ANSWER_DRAFT':
+      return handleSubmitFinalAnswerDraft(state, intent, ctx);
     case 'FORCE_FINAL_WAGERS':
       return handleForceFinalWagers(state, ctx);
     case 'CANCEL_DAILY_DOUBLE':
@@ -658,13 +662,13 @@ function handleTimeExpire(state: GameState): ReducerResult {
     const finalAnswers = { ...state.finalAnswers };
     for (const player of eligible) {
       if (finalAnswers[player.id] === undefined) {
-        finalAnswers[player.id] = '';
+        finalAnswers[player.id] = state.finalAnswerDrafts[player.id] ?? '';
       }
     }
     const finalRevealOrder = buildFinalRevealOrder(state.players, state.finalWagers);
     if (finalRevealOrder.length === 0) {
       return {
-        state: { ...state, phase: 'COMPLETE', finalAnswers, deadline: null },
+        state: { ...state, phase: 'COMPLETE', finalAnswers, finalAnswerDrafts: {}, deadline: null },
         effects: [{ type: 'BROADCAST_STATE' }],
       };
     }
@@ -673,6 +677,7 @@ function handleTimeExpire(state: GameState): ReducerResult {
         ...state,
         phase: 'FINAL_REVEAL',
         finalAnswers,
+        finalAnswerDrafts: {},
         deadline: null,
         finalRevealOrder,
         finalRevealIndex: 0,
@@ -1003,10 +1008,48 @@ function handleSubmitFinalAnswer(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final answer has already been submitted' }] };
   }
 
+  const remainingDrafts = { ...state.finalAnswerDrafts };
+  delete remainingDrafts[player.id];
   return {
     state: {
       ...state,
       finalAnswers: { ...state.finalAnswers, [player.id]: intent.answer },
+      finalAnswerDrafts: remainingDrafts,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleSubmitFinalAnswerDraft(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SUBMIT_FINAL_ANSWER_DRAFT' }>,
+  ctx: ReducerCtx,
+): ReducerResult {
+  if (state.phase !== 'FINAL_CLUE') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final answer is being accepted right now' }] };
+  }
+
+  if (state.deadline != null && ctx.now > state.deadline) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
+  }
+
+  const player = state.players.find((p) => p.id === intent.playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  if (player.score <= 0) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only eligible contestants can submit a Final answer' }] };
+  }
+
+  if (state.finalAnswers[player.id] !== undefined) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final answer has already been submitted' }] };
+  }
+
+  return {
+    state: {
+      ...state,
+      finalAnswerDrafts: { ...state.finalAnswerDrafts, [player.id]: intent.answer },
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PlayRoute } from './play.js';
 import type { ContestantView } from '@jeopardy/shared';
@@ -116,6 +116,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     submitDDWager: vi.fn(),
     submitFinalWager: vi.fn(),
     submitFinalAnswer: vi.fn(),
+    submitFinalAnswerDraft: vi.fn(),
     forceFinalWagers: vi.fn(),
     advanceRound: vi.fn(),
     openFinalWagers: vi.fn(),
@@ -1255,6 +1256,89 @@ describe('PlayRoute', () => {
     await userEvent.type(screen.getByTestId('final-answer-text-input'), 'Tolkien');
     await userEvent.click(screen.getByTestId('final-answer-submit'));
     expect(submitFinalAnswer).toHaveBeenCalledWith('Tolkien');
+  });
+
+  it('debounces and emits a Final answer draft while typing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const submitFinalAnswerDraft = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+      }),
+      null,
+      { submitFinalAnswerDraft },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-input')).toBeInTheDocument();
+    const textarea = screen.getByTestId('final-answer-text-input');
+    fireEvent.change(textarea, { target: { value: 'Tol' } });
+    expect(submitFinalAnswerDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(submitFinalAnswerDraft).toHaveBeenCalledWith('Tol');
+    vi.useRealTimers();
+  });
+
+  it('does not emit drafts after the answer is locked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const submitFinalAnswerDraft = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: false,
+        finalAnswerSubmitted: true,
+        myFinalAnswer: 'Tolkien',
+      }),
+      null,
+      { submitFinalAnswerDraft },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-locked')).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(submitFinalAnswerDraft).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('shows a locked answer to the contestant after submission', async () => {

@@ -651,3 +651,124 @@ describe('Final reveal full sequence', () => {
     expect(afterFirst.finalWagers['p1']).toBe(300);
   });
 });
+
+describe('SUBMIT_FINAL_ANSWER_DRAFT', () => {
+  it('records an eligible contestant latest draft', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tol' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalAnswerDrafts['p1']).toBe('Tol');
+  });
+
+  it('overwrites a previous draft with the latest text', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const first = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tol' }, { now: NOW + 1_000 });
+
+    const result = reduce(first.state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 2_000 });
+
+    expect(result.state.finalAnswerDrafts['p1']).toBe('Tolkien');
+  });
+
+  it('is rejected outside of FINAL_CLUE', () => {
+    const wager = setupFinalWager({ p1: 200 });
+
+    const result = reduce(wager, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+
+  it('is rejected after the answer deadline', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 31_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('closed') });
+  });
+
+  it('is rejected from an ineligible contestant', () => {
+    const state = setupFinalClue({ p1: 200, p2: 0 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p2', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('eligible') });
+  });
+
+  it('is rejected after the contestant has locked in a final answer', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const submitted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(submitted.state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Rowling' }, { now: NOW + 2_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+  });
+
+  it('clears the draft when an answer is explicitly submitted', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const drafted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(drafted.state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 2_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+    expect(result.state.finalAnswerDrafts['p1']).toBeUndefined();
+  });
+
+  it('accepts a blank draft', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: '' }, { now: NOW + 1_000 });
+
+    expect(result.state.finalAnswerDrafts['p1']).toBe('');
+  });
+});
+
+describe('TIME_EXPIRE in FINAL_CLUE with drafts', () => {
+  it('retains an unsubmitted draft as the answer at expiry', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const drafted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(drafted.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.phase).toBe('FINAL_REVEAL');
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+  });
+
+  it('keeps a submitted answer over a draft at expiry', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const drafted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tol' }, { now: NOW + 1_000 });
+    const submitted = reduce(drafted.state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 2_000 });
+
+    const result = reduce(submitted.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+  });
+
+  it('records a blank answer for an eligible contestant with no draft', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('');
+  });
+
+  it('uses the draft for only some contestants while others are blank', () => {
+    const state = setupFinalClue({ p1: 200, p2: 100 });
+    const drafted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(drafted.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
+    expect(result.state.finalAnswers['p2']).toBe('');
+  });
+
+  it('clears drafts when locking in answers at expiry', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const drafted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    const result = reduce(drafted.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalAnswerDrafts).toEqual({});
+  });
+});

@@ -433,4 +433,77 @@ describe('Final Jeopardy answer sockets', { timeout: 15000 }, () => {
     bob.disconnect();
     await server.close();
   });
+
+  it('syncs a draft answer server-side and retains it at timer expiry', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+    await advanceToFinalWager(server, roomCode, host, boardClient, alice, bob);
+    await advanceToFinalClue(server, roomCode, host, boardClient, alice, bob);
+
+    const state = server.engine.getState(roomCode)!;
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    const bobId = state.players.find((p) => p.name === 'Bob')!.id;
+
+    alice.emit('submit_final_answer_draft', { answer: 'Tolkien' });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const engineStateAfterDraft = server.engine.getState(roomCode)!;
+    expect(engineStateAfterDraft.finalAnswerDrafts[aliceId]).toBe('Tolkien');
+    expect(engineStateAfterDraft.finalAnswerDrafts[bobId]).toBeUndefined();
+
+    const revealHost = waitForState(host, (s) => s.phase === 'FINAL_REVEAL', 5000, 'host-reveal');
+    const revealBoard = waitForState(boardClient, (s) => s.phase === 'FINAL_REVEAL', 5000, 'board-reveal');
+    const revealAlice = waitForState(alice, (s) => s.phase === 'FINAL_REVEAL', 5000, 'alice-reveal');
+    const revealBob = waitForState(bob, (s) => s.phase === 'FINAL_REVEAL', 5000, 'bob-reveal');
+
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+
+    await Promise.all([revealHost, revealBoard, revealAlice, revealBob]);
+
+    const engineState = server.engine.getState(roomCode)!;
+    expect(engineState.finalAnswers[aliceId]).toBe('Tolkien');
+    expect(engineState.finalAnswers[bobId]).toBe('');
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
+  it('draft text is never visible on host or board projections', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+    await advanceToFinalWager(server, roomCode, host, boardClient, alice, bob);
+    await advanceToFinalClue(server, roomCode, host, boardClient, alice, bob);
+
+    const aliceId = server.engine.getState(roomCode)?.players.find((p) => p.name === 'Alice')?.id;
+
+    alice.emit('submit_final_answer_draft', { answer: 'Tolkien' });
+
+    const hostState = await waitForState(
+      host,
+      (s) => (s as { finalAnswerSubmissionStatus: Record<string, boolean> }).finalAnswerSubmissionStatus[aliceId!] === false,
+      5000,
+      'host-draft-broadcast',
+    );
+    const boardState = await waitForState(
+      boardClient,
+      (s) => (s as { finalAnswerSubmissionStatus: Record<string, boolean> }).finalAnswerSubmissionStatus[aliceId!] === false,
+      5000,
+      'board-draft-broadcast',
+    );
+
+    expect(hostState).not.toHaveProperty('finalAnswerDrafts');
+    expect(boardState).not.toHaveProperty('finalAnswerDrafts');
+    expect((hostState as { answer: string | null }).answer).toBeNull();
+    expect((boardState as { answer: string | null }).answer).toBeNull();
+    expect((hostState as { finalAnswerSubmissionStatus: Record<string, boolean> }).finalAnswerSubmissionStatus[aliceId!]).toBe(false);
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });

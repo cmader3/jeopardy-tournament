@@ -523,3 +523,47 @@ describe('Final reveal projections', () => {
     expect(p1.finalRevealedWagers).not.toHaveProperty('p1');
   });
 });
+
+describe('Final answer draft secrecy in projections', () => {
+  function setupFinalClueWithDrafts(): GameState {
+    return {
+      ...setupFinalIntro({ p1: 200, p2: 100 }),
+      phase: 'FINAL_CLUE' as const,
+      currentClueId: 'cl-final',
+      finalWagers: { p1: 50, p2: 25 },
+      finalAnswerDrafts: { p1: 'Tolkien', p2: 'Rowling' },
+      deadline: NOW + 30_000,
+    };
+  }
+
+  it('board projection never includes the draft payload', () => {
+    const state = setupFinalClueWithDrafts();
+
+    const view = projectBoard(state, NOW);
+
+    expect(view).not.toHaveProperty('finalAnswerDrafts');
+    expect(view.finalAnswerSubmissionStatus).toEqual({ p1: false, p2: false });
+  });
+
+  it('host projection never includes the draft payload or text', () => {
+    const state = setupFinalClueWithDrafts();
+
+    const view = projectHost(state, NOW);
+
+    expect(view).not.toHaveProperty('finalAnswerDrafts');
+    expect(view.finalAnswerSubmissionStatus).toEqual({ p1: false, p2: false });
+    expect(view.answer).toBeNull();
+  });
+
+  it('a contestant cannot see another contestant draft', () => {
+    const state = setupFinalClueWithDrafts();
+
+    const p1 = projectContestant(state, 'p1', NOW);
+    const p2 = projectContestant(state, 'p2', NOW);
+
+    expect(p1).not.toHaveProperty('finalAnswerDrafts');
+    expect(p2).not.toHaveProperty('finalAnswerDrafts');
+    expect(p1.myFinalAnswer).toBeNull();
+    expect(p2.myFinalAnswer).toBeNull();
+  });
+});

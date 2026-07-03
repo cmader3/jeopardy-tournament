@@ -94,6 +94,7 @@ export interface GameState {
   dailyDoubleWager: number | null;
   finalWagers: Record<string, number>;
   finalAnswers: Record<string, string>;
+  finalAnswerDrafts: Record<string, string>;
   revealedAnswer: string | null;
   transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
   finalNoEligiblePlayers: boolean;

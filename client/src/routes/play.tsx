@@ -376,20 +376,32 @@ function FinalWager({
   );
 }
 
+const DRAFT_DEBOUNCE_MS = 300;
+
 function FinalAnswer({
   state,
   error,
   onSubmit,
+  onDraft,
   clearError,
 }: {
   state: ContestantView;
   error?: string | null;
   onSubmit?: (answer: string) => void;
+  onDraft?: (answer: string) => void;
   clearError?: () => void;
 }) {
   const [answer, setAnswer] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const isLocked = state.finalAnswerSubmitted;
+
+  useEffect(() => {
+    if (isLocked || !onDraft) return;
+    const timer = setTimeout(() => {
+      onDraft(answer);
+    }, DRAFT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [answer, isLocked, onDraft]);
 
   if (!state.isEligibleForFinal) {
     return (
@@ -682,7 +694,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           {gameState.phase === 'FINAL_CLUE' && (
             <>
               <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
-              <FinalAnswer state={gameState} onSubmit={socket.submitFinalAnswer} error={error} clearError={clearError} />
+              <FinalAnswer state={gameState} onSubmit={socket.submitFinalAnswer} onDraft={socket.submitFinalAnswerDraft} error={error} clearError={clearError} />
             </>
           )}
           {gameState.phase === 'FINAL_REVEAL' && <FinalReveal state={gameState} />}
