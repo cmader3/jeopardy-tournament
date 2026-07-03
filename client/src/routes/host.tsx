@@ -328,9 +328,19 @@ function HostFinalIntro({ state, onOpenFinalWagers }: HostFinalIntroProps) {
           Open Final Wagers
         </button>
       ) : (
-        <p className={styles.hostNoEligible} data-testid="host-no-eligible">
-          No contestants are eligible for Final Jeopardy. The game will proceed to final standings.
-        </p>
+        <>
+          <p className={styles.hostNoEligible} data-testid="host-no-eligible">
+            No contestants are eligible for Final Jeopardy. The game will proceed to final standings.
+          </p>
+          <button
+            type="button"
+            className={styles.actionButton}
+            onClick={onOpenFinalWagers}
+            data-testid="proceed-to-standings-button"
+          >
+            Proceed to Final Standings
+          </button>
+        </>
       )}
     </div>
   );
@@ -500,6 +510,11 @@ function HostFinalStandings({ state }: HostFinalStandingsProps) {
 
   return (
     <div className={styles.hostFinalStandings} data-testid="host-final-standings">
+      {state.finalNoEligiblePlayers && (
+        <p className={styles.hostNoEligible} data-testid="host-no-eligible-standings">
+          No contestants were eligible for Final Jeopardy.
+        </p>
+      )}
       <h2 data-testid="host-final-standings-heading">Final Standings</h2>
       <ul className={styles.hostFinalStandingsList} data-testid="host-final-standings-list">
         {sorted.map((player) => (

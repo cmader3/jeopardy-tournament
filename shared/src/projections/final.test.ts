@@ -185,6 +185,37 @@ describe('Final intro projections', () => {
     expect(view.finalNoEligiblePlayers).toBe(true);
     expect(view.finalEligiblePlayerIds).toEqual([]);
   });
+
+  it('projectBoard exposes all contestants at their unchanged pre-Final scores after the all-ineligible skip', () => {
+    const state = { ...setupFinalIntro({ p1: 0, p2: -100, p3: -50 }), phase: 'COMPLETE' as const, finalNoEligiblePlayers: true };
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalNoEligiblePlayers).toBe(true);
+    expect(view.players.map((p) => ({ id: p.id, score: p.score }))).toEqual([
+      { id: 'p1', score: 0 },
+      { id: 'p2', score: -100 },
+      { id: 'p3', score: -50 },
+    ]);
+    expect(view.finalRevealedAnswers).toEqual({});
+    expect(view.finalRevealedWagers).toEqual({});
+    expect(view.answer).toBeNull();
+  });
+
+  it('projectHost exposes all contestants at their unchanged pre-Final scores after the all-ineligible skip', () => {
+    const state = { ...setupFinalIntro({ p1: 0, p2: -100 }), phase: 'COMPLETE' as const, finalNoEligiblePlayers: true };
+
+    const view = projectHost(state, NOW);
+
+    expect(view.finalNoEligiblePlayers).toBe(true);
+    expect(view.players.map((p) => ({ id: p.id, score: p.score }))).toEqual([
+      { id: 'p1', score: 0 },
+      { id: 'p2', score: -100 },
+    ]);
+    expect(view.finalRevealedAnswers).toEqual({});
+    expect(view.finalRevealedWagers).toEqual({});
+    expect(view.answer).toBeNull();
+  });
 });
 
 describe('Final wager projections', () => {

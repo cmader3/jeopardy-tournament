@@ -1318,4 +1318,39 @@ describe('PlayRoute', () => {
 
     expect(await screen.findByTestId('final-answer-ineligible')).toBeInTheDocument();
   });
+
+  it('shows the final standings alongside the no-eligible message after the all-ineligible skip', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'COMPLETE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p2',
+        finalNoEligiblePlayers: true,
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: -100, connected: true },
+        ],
+        isEligibleForFinal: false,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Bob');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('contestant-final-standings')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-final-no-eligible')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-final-standings-list')).toBeInTheDocument();
+    expect(screen.getByTestId('contestant-final-standing-name-p1')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('contestant-final-standing-score-p1')).toHaveTextContent('0');
+    expect(screen.getByTestId('contestant-final-standing-name-p2')).toHaveTextContent('Bob');
+    expect(screen.getByTestId('contestant-final-standing-score-p2')).toHaveTextContent('-100');
+  });
 });

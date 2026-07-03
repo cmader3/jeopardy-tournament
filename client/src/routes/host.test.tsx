@@ -859,7 +859,8 @@ describe('HostInProgress score tools', () => {
     expect(onOpenFinalWagers).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a no-eligible message when no contestants are eligible', () => {
+  it('shows a proceed-to-standings button when no contestants are eligible', () => {
+    const onOpenFinalWagers = vi.fn();
     const state = makeHostState({
       phase: 'FINAL_INTRO',
       roundIndex: 1,
@@ -870,10 +871,51 @@ describe('HostInProgress score tools', () => {
       ],
       finalEligiblePlayerIds: [],
     });
-    render(<HostInProgress roomCode="WXYZ" state={state} />);
+    render(<HostInProgress roomCode="WXYZ" state={state} onOpenFinalWagers={onOpenFinalWagers} />);
 
     expect(screen.getByTestId('host-no-eligible')).toBeInTheDocument();
+    expect(screen.getByTestId('proceed-to-standings-button')).toBeInTheDocument();
     expect(screen.queryByTestId('open-final-wagers-button')).not.toBeInTheDocument();
+  });
+
+  it('calls onOpenFinalWagers when the proceed-to-standings button is clicked', async () => {
+    const onOpenFinalWagers = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_INTRO',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true },
+        { id: 'p2', name: 'Bob', score: -100, connected: true },
+      ],
+      finalEligiblePlayerIds: [],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onOpenFinalWagers={onOpenFinalWagers} />);
+
+    await userEvent.click(screen.getByTestId('proceed-to-standings-button'));
+    expect(onOpenFinalWagers).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows final standings alongside the no-eligible message when COMPLETE was reached via the all-ineligible skip', () => {
+    const state = makeHostState({
+      phase: 'COMPLETE',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      finalNoEligiblePlayers: true,
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true },
+        { id: 'p2', name: 'Bob', score: -100, connected: true },
+      ],
+      finalEligiblePlayerIds: [],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-no-eligible-standings')).toBeInTheDocument();
+    expect(screen.getByTestId('host-final-standings-list')).toBeInTheDocument();
+    expect(screen.getByTestId('host-final-standing-p1')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('host-final-standing-p1')).toHaveTextContent('0');
+    expect(screen.getByTestId('host-final-standing-p2')).toHaveTextContent('Bob');
+    expect(screen.getByTestId('host-final-standing-p2')).toHaveTextContent('-100');
   });
 
   it('shows the Final wager phase with submission status and force button', () => {

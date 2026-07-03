@@ -391,16 +391,17 @@ function FinalStandings({ state }: CompleteScreenProps) {
 }
 
 function CompleteScreen({ state }: CompleteScreenProps) {
-  if (state.finalNoEligiblePlayers) {
-    return (
-      <div className={styles.finalIntro} data-testid="final-no-eligible">
-        <RoundBanner roundType="FINAL" />
-        <p className={styles.finalNoEligibleMessage}>No contestants were eligible for Final Jeopardy.</p>
-      </div>
-    );
-  }
-
-  return <FinalStandings state={state} />;
+  return (
+    <div className={styles.finalIntro} data-testid={state.finalNoEligiblePlayers ? 'final-no-eligible' : 'final-standings'}>
+      <RoundBanner roundType="FINAL" />
+      {state.finalNoEligiblePlayers && (
+        <p className={styles.finalNoEligibleMessage} data-testid="final-no-eligible-message">
+          No contestants were eligible for Final Jeopardy.
+        </p>
+      )}
+      <FinalStandings state={state} />
+    </div>
+  );
 }
 
 interface FinalRevealProps {

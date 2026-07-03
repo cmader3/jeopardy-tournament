@@ -132,6 +132,23 @@ describe('OPEN_FINAL_WAGERS', () => {
     expect(result.state.finalNoEligiblePlayers).toBe(true);
   });
 
+  it('preserves pre-Final scores and carries no wager/answer state in the all-ineligible skip path', () => {
+    const state = setupFinalIntro({ p1: -100, p2: 0, p3: -50 });
+
+    const result = reduce(state, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW });
+
+    expect(result.state.phase).toBe('COMPLETE');
+    expect(result.state.finalNoEligiblePlayers).toBe(true);
+    expect(result.state.players.map((p) => ({ id: p.id, score: p.score }))).toEqual([
+      { id: 'p1', score: -100 },
+      { id: 'p2', score: 0 },
+      { id: 'p3', score: -50 },
+    ]);
+    expect(result.state.finalWagers).toEqual({});
+    expect(result.state.finalAnswers).toEqual({});
+    expect(result.state.finalRevealOrder).toEqual([]);
+  });
+
   it('still plays Final when exactly one contestant is eligible', () => {
     const state = setupFinalIntro({ p1: 200, p2: 0, p3: -100 });
 

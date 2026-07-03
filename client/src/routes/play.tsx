@@ -520,6 +520,11 @@ function FinalStandings({ state }: { state: ContestantView }) {
 
   return (
     <div data-testid="contestant-final-standings">
+      {state.finalNoEligiblePlayers && (
+        <p data-testid="contestant-final-no-eligible">
+          No contestants were eligible for Final Jeopardy.
+        </p>
+      )}
       <h2 data-testid="contestant-final-standings-heading">Final Standings</h2>
       <p data-testid="contestant-final-standings-self">
         Your final score: {me?.score ?? 0}
