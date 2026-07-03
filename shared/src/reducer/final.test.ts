@@ -679,12 +679,21 @@ describe('SUBMIT_FINAL_ANSWER_DRAFT', () => {
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
   });
 
-  it('is rejected after the answer deadline', () => {
+  it('is rejected after the answer deadline grace window', () => {
     const state = setupFinalClue({ p1: 200 });
 
-    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 31_000 });
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 30_500 });
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('closed') });
+  });
+
+  it('accepts a draft within the grace window after the deadline', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 30_100 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalAnswerDrafts['p1']).toBe('Tolkien');
   });
 
   it('is rejected from an ineligible contestant', () => {
@@ -770,5 +779,15 @@ describe('TIME_EXPIRE in FINAL_CLUE with drafts', () => {
     const result = reduce(drafted.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
 
     expect(result.state.finalAnswerDrafts).toEqual({});
+  });
+
+  it('retains a draft submitted within the grace window after the deadline', () => {
+    const state = setupFinalClue({ p1: 200 });
+    const drafted = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 30_100 });
+
+    const result = reduce(drafted.state, { type: 'TIME_EXPIRE' }, { now: NOW + 30_200 });
+
+    expect(result.state.phase).toBe('FINAL_REVEAL');
+    expect(result.state.finalAnswers['p1']).toBe('Tolkien');
   });
 });

@@ -471,6 +471,37 @@ describe('Final Jeopardy answer sockets', { timeout: 15000 }, () => {
     await server.close();
   });
 
+  it('retains a draft typed within the last 300ms before the deadline', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob } = await setupGame(server);
+    await advanceToFinalWager(server, roomCode, host, boardClient, alice, bob);
+    await advanceToFinalClue(server, roomCode, host, boardClient, alice, bob);
+
+    const state = server.engine.getState(roomCode)!;
+    const aliceId = state.players.find((p) => p.name === 'Alice')!.id;
+    const bobId = state.players.find((p) => p.name === 'Bob')!.id;
+
+    const revealHost = waitForState(host, (s) => s.phase === 'FINAL_REVEAL', 5000, 'host-reveal');
+    const revealBoard = waitForState(boardClient, (s) => s.phase === 'FINAL_REVEAL', 5000, 'board-reveal');
+    const revealAlice = waitForState(alice, (s) => s.phase === 'FINAL_REVEAL', 5000, 'alice-reveal');
+    const revealBob = waitForState(bob, (s) => s.phase === 'FINAL_REVEAL', 5000, 'bob-reveal');
+
+    await new Promise((resolve) => setTimeout(resolve, 1_900));
+    alice.emit('submit_final_answer_draft', { answer: 'Tolkien' });
+
+    await Promise.all([revealHost, revealBoard, revealAlice, revealBob]);
+
+    const engineState = server.engine.getState(roomCode)!;
+    expect(engineState.finalAnswers[aliceId]).toBe('Tolkien');
+    expect(engineState.finalAnswers[bobId]).toBe('');
+
+    host.disconnect();
+    boardClient.disconnect();
+    alice.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
+
   it('draft text is never visible on host or board projections', async () => {
     const server = await createTestServer();
     const { roomCode, host, boardClient, alice, bob } = await setupGame(server);

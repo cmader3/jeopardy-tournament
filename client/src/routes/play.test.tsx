@@ -1302,6 +1302,129 @@ describe('PlayRoute', () => {
     vi.useRealTimers();
   });
 
+  it('emits drafts immediately without debounce when the deadline is within the debounce window', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const submitFinalAnswerDraft = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+        deadline: 200,
+        serverNow: 0,
+      }),
+      null,
+      { submitFinalAnswerDraft },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-input')).toBeInTheDocument();
+    const textarea = screen.getByTestId('final-answer-text-input');
+    fireEvent.change(textarea, { target: { value: 'T' } });
+    expect(submitFinalAnswerDraft).toHaveBeenCalledWith('T');
+    vi.useRealTimers();
+  });
+
+  it('flushes the pending draft when the deadline expires', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const submitFinalAnswerDraft = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+        deadline: 0,
+        serverNow: 0,
+      }),
+      null,
+      { submitFinalAnswerDraft },
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-input')).toBeInTheDocument();
+    const textarea = screen.getByTestId('final-answer-text-input');
+    fireEvent.change(textarea, { target: { value: 'Tolkien' } });
+    expect(submitFinalAnswerDraft).toHaveBeenCalledWith('Tolkien');
+    vi.useRealTimers();
+  });
+
+  it('flushes the pending draft on unmount', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const submitFinalAnswerDraft = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+        deadline: 30_000,
+        serverNow: 0,
+      }),
+      null,
+      { submitFinalAnswerDraft },
+    );
+
+    const { unmount } = render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-input')).toBeInTheDocument();
+    const textarea = screen.getByTestId('final-answer-text-input');
+    fireEvent.change(textarea, { target: { value: 'Tolkien' } });
+    expect(submitFinalAnswerDraft).not.toHaveBeenCalled();
+
+    unmount();
+    expect(submitFinalAnswerDraft).toHaveBeenCalledWith('Tolkien');
+    vi.useRealTimers();
+  });
+
   it('does not emit drafts after the answer is locked', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const submitFinalAnswerDraft = vi.fn();

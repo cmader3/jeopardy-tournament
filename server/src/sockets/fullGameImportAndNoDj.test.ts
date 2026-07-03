@@ -282,249 +282,277 @@ describe('full game sockets - import and no-DJ coverage', { timeout: 45000 }, ()
 
   it('imports, saves, and creates a game from a CSV board, then plays a full clue across roles', async () => {
     const server = await createTestServer();
-    const { roomCode, host, boardClient, alice, bob, carol } = await setupGameFromImport(server);
-    const clients: RoleClients = { host, boardClient, alice, bob, carol };
-    const engineState = () => server.engine.getState(roomCode)!;
+    let roomCode: string;
+    let host: ClientSocket;
+    let boardClient: ClientSocket;
+    let alice: ClientSocket;
+    let bob: ClientSocket;
+    let carol: ClientSocket;
+    try {
+      const setup = await setupGameFromImport(server);
+      roomCode = setup.roomCode;
+      host = setup.host;
+      boardClient = setup.boardClient;
+      alice = setup.alice;
+      bob = setup.bob;
+      carol = setup.carol;
+      const clients: RoleClients = { host, boardClient, alice, bob, carol };
+      const engineState = () => server.engine.getState(roomCode)!;
 
-    const importedClue = engineState().board.rounds[0].clues.find((c) => c.answer === 'Paris')!;
-    const aliceId = getPlayerId(engineState(), 'Alice');
-    const bobId = getPlayerId(engineState(), 'Bob');
-    const carolId = getPlayerId(engineState(), 'Carol');
+      const importedClue = engineState().board.rounds[0].clues.find((c) => c.answer === 'Paris')!;
+      const aliceId = getPlayerId(engineState(), 'Alice');
+      const bobId = getPlayerId(engineState(), 'Bob');
+      const carolId = getPlayerId(engineState(), 'Carol');
 
-    expect(importedClue.value).toBe(300);
-    expect(importedClue.clueText).toBe('This city is the capital of France');
-    expect(engineState().board.includeDoubleJeopardy).toBe(false);
+      expect(importedClue.value).toBe(300);
+      expect(importedClue.clueText).toBe('This city is the capital of France');
+      expect(engineState().board.includeDoubleJeopardy).toBe(false);
 
-    let awaitStates = collectStates(
-      clients,
-      (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === importedClue.id,
-      'import-clue-revealed',
-    );
-    host.emit('select_clue', { clueId: importedClue.id });
-    const [hostClueState, boardClueState, aliceClueState, bobClueState, carolClueState] = await awaitStates;
+      let awaitStates = collectStates(
+        clients,
+        (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === importedClue.id,
+        'import-clue-revealed',
+      );
+      host.emit('select_clue', { clueId: importedClue.id });
+      const [hostClueState, boardClueState, aliceClueState, bobClueState, carolClueState] = await awaitStates;
 
-    expect(hostClueState.answer).toBe('Paris');
-    expect(boardClueState.answer).toBeNull();
-    expect(aliceClueState.answer).toBeNull();
-    expect(bobClueState.answer).toBeNull();
-    expect(carolClueState.answer).toBeNull();
-    expect(boardClueState.currentClueText).toBe('This city is the capital of France');
-    expect(aliceClueState.currentClueText).toBe('This city is the capital of France');
+      expect(hostClueState.answer).toBe('Paris');
+      expect(boardClueState.answer).toBeNull();
+      expect(aliceClueState.answer).toBeNull();
+      expect(bobClueState.answer).toBeNull();
+      expect(carolClueState.answer).toBeNull();
+      expect(boardClueState.currentClueText).toBe('This city is the capital of France');
+      expect(aliceClueState.currentClueText).toBe('This city is the capital of France');
 
-    awaitStates = collectStates(
-      clients,
-      (s) => s.phase === 'BOARD_SELECT' && (s.usedClueIds as string[]).includes(importedClue.id),
-      'import-clue-resolved',
-    );
-    host.emit('arm_buzzers');
-    await new Promise((r) => setTimeout(r, 50));
-    alice.emit('buzz', { playerId: aliceId });
-    await waitForState(host, (s) => s.phase === 'BUZZED', 5000, 'import-buzzed');
-    host.emit('rule_correct');
-    await awaitStates;
+      awaitStates = collectStates(
+        clients,
+        (s) => s.phase === 'BOARD_SELECT' && (s.usedClueIds as string[]).includes(importedClue.id),
+        'import-clue-resolved',
+      );
+      host.emit('arm_buzzers');
+      await new Promise((r) => setTimeout(r, 50));
+      alice.emit('buzz', { playerId: aliceId });
+      await waitForState(host, (s) => s.phase === 'BUZZED', 5000, 'import-buzzed');
+      host.emit('rule_correct');
+      await awaitStates;
 
-    expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(300);
-    expect(engineState().controllingPlayerId).toBe(aliceId);
+      expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(300);
+      expect(engineState().controllingPlayerId).toBe(aliceId);
 
-    const [hostResolved, boardResolved, aliceResolved, bobResolved, carolResolved] = await awaitStates;
-    expect(scoreMap(hostResolved)).toEqual([
-      { id: aliceId, score: 300 },
-      { id: bobId, score: 0 },
-      { id: carolId, score: 0 },
-    ]);
-    expect(scoreMap(boardResolved)).toEqual(scoreMap(hostResolved));
-    expect(scoreMap(aliceResolved)).toEqual(scoreMap(hostResolved));
-    expect(scoreMap(bobResolved)).toEqual(scoreMap(hostResolved));
-    expect(scoreMap(carolResolved)).toEqual(scoreMap(hostResolved));
-
-    host.disconnect();
-    boardClient.disconnect();
-    alice.disconnect();
-    bob.disconnect();
-    carol.disconnect();
-    await server.close();
+      const [hostResolved, boardResolved, aliceResolved, bobResolved, carolResolved] = await awaitStates;
+      expect(scoreMap(hostResolved)).toEqual([
+        { id: aliceId, score: 300 },
+        { id: bobId, score: 0 },
+        { id: carolId, score: 0 },
+      ]);
+      expect(scoreMap(boardResolved)).toEqual(scoreMap(hostResolved));
+      expect(scoreMap(aliceResolved)).toEqual(scoreMap(hostResolved));
+      expect(scoreMap(bobResolved)).toEqual(scoreMap(hostResolved));
+      expect(scoreMap(carolResolved)).toEqual(scoreMap(hostResolved));
+    } finally {
+      host?.disconnect();
+      boardClient?.disconnect();
+      alice?.disconnect();
+      bob?.disconnect();
+      carol?.disconnect();
+      await server.close();
+    }
   });
 
   it('plays a full no-Double-Jeopardy game from single round through Final to standings', async () => {
     const server = await createTestServer();
-    const { roomCode, host, boardClient, alice, bob, carol } = await setupGameNoDoubleJeopardy(server);
-    const clients: RoleClients = { host, boardClient, alice, bob, carol };
-    const engineState = () => server.engine.getState(roomCode)!;
+    let roomCode: string;
+    let host: ClientSocket;
+    let boardClient: ClientSocket;
+    let alice: ClientSocket;
+    let bob: ClientSocket;
+    let carol: ClientSocket;
+    try {
+      const setup = await setupGameNoDoubleJeopardy(server);
+      roomCode = setup.roomCode;
+      host = setup.host;
+      boardClient = setup.boardClient;
+      alice = setup.alice;
+      bob = setup.bob;
+      carol = setup.carol;
+      const clients: RoleClients = { host, boardClient, alice, bob, carol };
+      const engineState = () => server.engine.getState(roomCode)!;
 
-    const clue100 = engineState().board.rounds[0].clues.find((c) => c.value === 100)!;
-    const clue200 = engineState().board.rounds[0].clues.find((c) => c.value === 200)!;
-    const aliceId = getPlayerId(engineState(), 'Alice');
-    const bobId = getPlayerId(engineState(), 'Bob');
-    const carolId = getPlayerId(engineState(), 'Carol');
+      const clue100 = engineState().board.rounds[0].clues.find((c) => c.value === 100)!;
+      const clue200 = engineState().board.rounds[0].clues.find((c) => c.value === 200)!;
+      const aliceId = getPlayerId(engineState(), 'Alice');
+      const bobId = getPlayerId(engineState(), 'Bob');
+      const carolId = getPlayerId(engineState(), 'Carol');
 
-    let awaitStates = collectStates(
-      clients,
-      (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === clue100.id,
-      'clue100-revealed',
-    );
-    host.emit('select_clue', { clueId: clue100.id });
-    const [hostClue100, boardClue100, , bobClue100] = await awaitStates;
-    expect(hostClue100.answer).toBe('Water');
-    expect(boardClue100.answer).toBeNull();
-    expect(bobClue100.answer).toBeNull();
-    expect(boardClue100.currentClueText).toBe('H2O');
+      let awaitStates = collectStates(
+        clients,
+        (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === clue100.id,
+        'clue100-revealed',
+      );
+      host.emit('select_clue', { clueId: clue100.id });
+      const [hostClue100, boardClue100, , bobClue100] = await awaitStates;
+      expect(hostClue100.answer).toBe('Water');
+      expect(boardClue100.answer).toBeNull();
+      expect(bobClue100.answer).toBeNull();
+      expect(boardClue100.currentClueText).toBe('H2O');
 
-    awaitStates = collectStates(
-      clients,
-      (s) => s.phase === 'BOARD_SELECT' && (s.usedClueIds as string[]).includes(clue100.id),
-      'clue100-resolved',
-    );
-    host.emit('arm_buzzers');
-    await new Promise((r) => setTimeout(r, 50));
-    alice.emit('buzz', { playerId: aliceId });
-    await waitForState(host, (s) => s.phase === 'BUZZED', 5000, 'clue100-buzzed');
-    host.emit('rule_correct');
-    await awaitStates;
-    expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(100);
-    expect(engineState().controllingPlayerId).toBe(aliceId);
+      awaitStates = collectStates(
+        clients,
+        (s) => s.phase === 'BOARD_SELECT' && (s.usedClueIds as string[]).includes(clue100.id),
+        'clue100-resolved',
+      );
+      host.emit('arm_buzzers');
+      await new Promise((r) => setTimeout(r, 50));
+      alice.emit('buzz', { playerId: aliceId });
+      await waitForState(host, (s) => s.phase === 'BUZZED', 5000, 'clue100-buzzed');
+      host.emit('rule_correct');
+      await awaitStates;
+      expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(100);
+      expect(engineState().controllingPlayerId).toBe(aliceId);
 
-    awaitStates = collectStates(
-      clients,
-      (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === clue200.id,
-      'clue200-revealed',
-    );
-    alice.emit('select_clue', { clueId: clue200.id });
-    const [, boardClue200, , bobClue200] = await awaitStates;
-    expect(boardClue200.answer).toBeNull();
-    expect(bobClue200.answer).toBeNull();
-    expect(boardClue200.currentClueText).toBe('This planet is the Red Planet');
+      awaitStates = collectStates(
+        clients,
+        (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === clue200.id,
+        'clue200-revealed',
+      );
+      alice.emit('select_clue', { clueId: clue200.id });
+      const [, boardClue200, , bobClue200] = await awaitStates;
+      expect(boardClue200.answer).toBeNull();
+      expect(bobClue200.answer).toBeNull();
+      expect(boardClue200.currentClueText).toBe('This planet is the Red Planet');
 
-    awaitStates = collectStates(
-      clients,
-      (s) => s.phase === 'BOARD_SELECT' && (s.usedClueIds as string[]).includes(clue200.id),
-      'clue200-resolved',
-    );
-    host.emit('arm_buzzers');
-    await new Promise((r) => setTimeout(r, 50));
-    bob.emit('buzz', { playerId: bobId });
-    await waitForState(host, (s) => s.phase === 'BUZZED', 5000, 'clue200-buzzed');
-    host.emit('rule_correct');
-    await awaitStates;
-    expect(engineState().players.find((p) => p.name === 'Bob')!.score).toBe(200);
-    expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(100);
+      awaitStates = collectStates(
+        clients,
+        (s) => s.phase === 'BOARD_SELECT' && (s.usedClueIds as string[]).includes(clue200.id),
+        'clue200-resolved',
+      );
+      host.emit('arm_buzzers');
+      await new Promise((r) => setTimeout(r, 50));
+      bob.emit('buzz', { playerId: bobId });
+      await waitForState(host, (s) => s.phase === 'BUZZED', 5000, 'clue200-buzzed');
+      host.emit('rule_correct');
+      await awaitStates;
+      expect(engineState().players.find((p) => p.name === 'Bob')!.score).toBe(200);
+      expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(100);
 
-    awaitStates = collectStates(clients, (s) => s.phase === 'ROUND_TRANSITION', 'final-transition');
-    host.emit('advance_round');
-    const [, boardTransition, , bobTransition] = await awaitStates;
-    expect(boardTransition.transitionTarget).toBe('FINAL');
-    expect(bobTransition.transitionTarget).toBe('FINAL');
+      awaitStates = collectStates(clients, (s) => s.phase === 'ROUND_TRANSITION', 'final-transition');
+      host.emit('advance_round');
+      const [, boardTransition, , bobTransition] = await awaitStates;
+      expect(boardTransition.transitionTarget).toBe('FINAL');
+      expect(bobTransition.transitionTarget).toBe('FINAL');
 
-    awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_INTRO', 'final-intro');
-    host.emit('advance_round');
-    const [hostFinalIntro, boardFinalIntro, aliceFinalIntro, bobFinalIntro, carolFinalIntro] = await awaitStates;
-    expect(boardFinalIntro.round?.type).toBe('FINAL');
-    expect(hostFinalIntro.finalEligiblePlayerIds?.sort()).toEqual([aliceId, bobId].sort());
-    expect(aliceFinalIntro.isEligibleForFinal).toBe(true);
-    expect(bobFinalIntro.isEligibleForFinal).toBe(true);
-    expect(carolFinalIntro.isEligibleForFinal).toBe(false);
+      awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_INTRO', 'final-intro');
+      host.emit('advance_round');
+      const [hostFinalIntro, boardFinalIntro, aliceFinalIntro, bobFinalIntro, carolFinalIntro] = await awaitStates;
+      expect(boardFinalIntro.round?.type).toBe('FINAL');
+      expect(hostFinalIntro.finalEligiblePlayerIds?.sort()).toEqual([aliceId, bobId].sort());
+      expect(aliceFinalIntro.isEligibleForFinal).toBe(true);
+      expect(bobFinalIntro.isEligibleForFinal).toBe(true);
+      expect(carolFinalIntro.isEligibleForFinal).toBe(false);
 
-    awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_WAGER', 'final-wager');
-    host.emit('open_final_wagers');
-    const [, boardFinalWager, aliceFinalWager, bobFinalWager, carolFinalWager] = await awaitStates;
-    expect(aliceFinalWager.isEligibleForFinal).toBe(true);
-    expect(bobFinalWager.isEligibleForFinal).toBe(true);
-    expect(carolFinalWager.isEligibleForFinal).toBe(false);
-    expect(carolFinalWager.canWager).toBe(false);
-    expect(boardFinalWager).not.toHaveProperty('finalWagers');
+      awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_WAGER', 'final-wager');
+      host.emit('open_final_wagers');
+      const [, boardFinalWager, aliceFinalWager, bobFinalWager, carolFinalWager] = await awaitStates;
+      expect(aliceFinalWager.isEligibleForFinal).toBe(true);
+      expect(bobFinalWager.isEligibleForFinal).toBe(true);
+      expect(carolFinalWager.isEligibleForFinal).toBe(false);
+      expect(carolFinalWager.canWager).toBe(false);
+      expect(boardFinalWager).not.toHaveProperty('finalWagers');
 
-    awaitStates = collectStates(
-      clients,
-      (s) => {
-        const status = (s.finalWagerSubmissionStatus as Record<string, boolean>) ?? {};
-        return status[aliceId] === true;
-      },
-      'alice-wager-submitted',
-    );
-    alice.emit('submit_final_wager', { amount: 100 });
-    const [, boardAfterAliceWager, aliceAfterWager, bobAfterAliceWager] = await awaitStates;
-    expect(boardAfterAliceWager).not.toHaveProperty('finalWagers');
-    expect(bobAfterAliceWager).not.toHaveProperty('finalWagers');
-    expect((aliceAfterWager as { myFinalWager: number }).myFinalWager).toBe(100);
+      awaitStates = collectStates(
+        clients,
+        (s) => {
+          const status = (s.finalWagerSubmissionStatus as Record<string, boolean>) ?? {};
+          return status[aliceId] === true;
+        },
+        'alice-wager-submitted',
+      );
+      alice.emit('submit_final_wager', { amount: 100 });
+      const [, boardAfterAliceWager, aliceAfterWager, bobAfterAliceWager] = await awaitStates;
+      expect(boardAfterAliceWager).not.toHaveProperty('finalWagers');
+      expect(bobAfterAliceWager).not.toHaveProperty('finalWagers');
+      expect((aliceAfterWager as { myFinalWager: number }).myFinalWager).toBe(100);
 
-    awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_CLUE', 'final-clue');
-    bob.emit('submit_final_wager', { amount: 200 });
-    const [, boardFinalClue, aliceFinalClue, bobFinalClue] = await awaitStates;
-    expect(boardFinalClue).not.toHaveProperty('finalWagers');
-    expect((aliceFinalClue as { myFinalWager: number }).myFinalWager).toBe(100);
-    expect((bobFinalClue as { myFinalWager: number }).myFinalWager).toBe(200);
-    expect(boardFinalClue).not.toHaveProperty('finalAnswers');
+      awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_CLUE', 'final-clue');
+      bob.emit('submit_final_wager', { amount: 200 });
+      const [, boardFinalClue, aliceFinalClue, bobFinalClue] = await awaitStates;
+      expect(boardFinalClue).not.toHaveProperty('finalWagers');
+      expect((aliceFinalClue as { myFinalWager: number }).myFinalWager).toBe(100);
+      expect((bobFinalClue as { myFinalWager: number }).myFinalWager).toBe(200);
+      expect(boardFinalClue).not.toHaveProperty('finalAnswers');
 
-    awaitStates = collectStates(
-      clients,
-      (s) => {
-        const status = (s.finalAnswerSubmissionStatus as Record<string, boolean>) ?? {};
-        return status[aliceId] === true;
-      },
-      'alice-answer-submitted',
-    );
-    alice.emit('submit_final_answer', { answer: 'Tolkien' });
-    const [, boardAfterAliceAnswer, , bobAfterAliceAnswer] = await awaitStates;
-    expect(boardAfterAliceAnswer).not.toHaveProperty('finalAnswers');
-    expect(bobAfterAliceAnswer).not.toHaveProperty('finalAnswers');
+      awaitStates = collectStates(
+        clients,
+        (s) => {
+          const status = (s.finalAnswerSubmissionStatus as Record<string, boolean>) ?? {};
+          return status[aliceId] === true;
+        },
+        'alice-answer-submitted',
+      );
+      alice.emit('submit_final_answer', { answer: 'Tolkien' });
+      const [, boardAfterAliceAnswer, , bobAfterAliceAnswer] = await awaitStates;
+      expect(boardAfterAliceAnswer).not.toHaveProperty('finalAnswers');
+      expect(bobAfterAliceAnswer).not.toHaveProperty('finalAnswers');
 
-    bob.emit('submit_final_answer', { answer: 'Tolkien' });
+      bob.emit('submit_final_answer', { answer: 'Tolkien' });
 
-    awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_REVEAL', 'final-reveal');
-    await new Promise((r) => setTimeout(r, 2500));
-    const [hostFinalReveal] = await awaitStates;
-    expect(engineState().finalRevealOrder).toEqual([aliceId, bobId]);
-    expect(hostFinalReveal).not.toHaveProperty('finalAnswers');
-    expect(hostFinalReveal).not.toHaveProperty('finalWagers');
+      awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_REVEAL', 'final-reveal');
+      await new Promise((r) => setTimeout(r, 2500));
+      const [hostFinalReveal] = await awaitStates;
+      expect(engineState().finalRevealOrder).toEqual([aliceId, bobId]);
+      expect(hostFinalReveal).not.toHaveProperty('finalAnswers');
+      expect(hostFinalReveal).not.toHaveProperty('finalWagers');
 
-    awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'RULE', 'reveal-answer-alice');
-    host.emit('reveal_final_answer');
-    const [, boardRevealAlice] = await awaitStates;
-    expect(Object.keys(boardRevealAlice.finalRevealedAnswers as Record<string, string>)).toEqual([aliceId]);
-    expect(boardRevealAlice.finalRevealedWagers).toEqual({});
+      awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'RULE', 'reveal-answer-alice');
+      host.emit('reveal_final_answer');
+      const [, boardRevealAlice] = await awaitStates;
+      expect(Object.keys(boardRevealAlice.finalRevealedAnswers as Record<string, string>)).toEqual([aliceId]);
+      expect(boardRevealAlice.finalRevealedWagers).toEqual({});
 
-    awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'WAGER', 'reveal-wager-alice');
-    host.emit('rule_final_correct');
-    await awaitStates;
-    expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(200);
+      awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'WAGER', 'reveal-wager-alice');
+      host.emit('rule_final_correct');
+      await awaitStates;
+      expect(engineState().players.find((p) => p.name === 'Alice')!.score).toBe(200);
 
-    awaitStates = collectStates(
-      clients,
-      (s) => (s as { finalRevealIndex: number }).finalRevealIndex === 1 && (s as { finalRevealStep: string }).finalRevealStep === 'ANSWER',
-      'reveal-next-bob',
-    );
-    host.emit('reveal_final_wager');
-    await awaitStates;
+      awaitStates = collectStates(
+        clients,
+        (s) => (s as { finalRevealIndex: number }).finalRevealIndex === 1 && (s as { finalRevealStep: string }).finalRevealStep === 'ANSWER',
+        'reveal-next-bob',
+      );
+      host.emit('reveal_final_wager');
+      await awaitStates;
 
-    awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'RULE', 'reveal-answer-bob');
-    host.emit('reveal_final_answer');
-    const [, boardRevealBob] = await awaitStates;
-    expect(Object.keys(boardRevealBob.finalRevealedAnswers as Record<string, string>)).toEqual([aliceId, bobId]);
+      awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'RULE', 'reveal-answer-bob');
+      host.emit('reveal_final_answer');
+      const [, boardRevealBob] = await awaitStates;
+      expect(Object.keys(boardRevealBob.finalRevealedAnswers as Record<string, string>)).toEqual([aliceId, bobId]);
 
-    awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'WAGER', 'reveal-wager-bob');
-    host.emit('rule_final_correct');
-    await awaitStates;
-    expect(engineState().players.find((p) => p.name === 'Bob')!.score).toBe(400);
+      awaitStates = collectStates(clients, (s) => (s as { finalRevealStep: string }).finalRevealStep === 'WAGER', 'reveal-wager-bob');
+      host.emit('rule_final_correct');
+      await awaitStates;
+      expect(engineState().players.find((p) => p.name === 'Bob')!.score).toBe(400);
 
-    awaitStates = collectStates(clients, (s) => s.phase === 'COMPLETE', 'game-complete');
-    host.emit('reveal_final_wager');
-    const [hostComplete, boardComplete, aliceComplete, bobComplete, carolComplete] = await awaitStates;
+      awaitStates = collectStates(clients, (s) => s.phase === 'COMPLETE', 'game-complete');
+      host.emit('reveal_final_wager');
+      const [hostComplete, boardComplete, aliceComplete, bobComplete, carolComplete] = await awaitStates;
 
-    const expectedScores = [
-      { id: aliceId, score: 200 },
-      { id: bobId, score: 400 },
-      { id: carolId, score: 0 },
-    ];
-    expect(scoreMap(hostComplete)).toEqual(expectedScores);
-    expect(scoreMap(boardComplete)).toEqual(expectedScores);
-    expect(scoreMap(aliceComplete)).toEqual(expectedScores);
-    expect(scoreMap(bobComplete)).toEqual(expectedScores);
-    expect(scoreMap(carolComplete)).toEqual(expectedScores);
-
-    host.disconnect();
-    boardClient.disconnect();
-    alice.disconnect();
-    bob.disconnect();
-    carol.disconnect();
-    await server.close();
+      const expectedScores = [
+        { id: aliceId, score: 200 },
+        { id: bobId, score: 400 },
+        { id: carolId, score: 0 },
+      ];
+      expect(scoreMap(hostComplete)).toEqual(expectedScores);
+      expect(scoreMap(boardComplete)).toEqual(expectedScores);
+      expect(scoreMap(aliceComplete)).toEqual(expectedScores);
+      expect(scoreMap(bobComplete)).toEqual(expectedScores);
+      expect(scoreMap(carolComplete)).toEqual(expectedScores);
+    } finally {
+      host?.disconnect();
+      boardClient?.disconnect();
+      alice?.disconnect();
+      bob?.disconnect();
+      carol?.disconnect();
+      await server.close();
+    }
   });
 });

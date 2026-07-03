@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   useSocket,
   getStoredContestantToken,
   clearStoredContestantToken,
 } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
+import { useServerTime } from '../hooks/useServerTime.js';
 import type { ContestantView } from '@jeopardy/shared';
 
 interface JoinForm {
@@ -384,24 +385,71 @@ function FinalAnswer({
   onSubmit,
   onDraft,
   clearError,
+  deadline,
+  serverNow,
 }: {
   state: ContestantView;
   error?: string | null;
   onSubmit?: (answer: string) => void;
   onDraft?: (answer: string) => void;
   clearError?: () => void;
+  deadline: number | null;
+  serverNow: number;
 }) {
   const [answer, setAnswer] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const isLocked = state.finalAnswerSubmitted;
+  const answerRef = useRef(answer);
+  const lastEmittedRef = useRef<string | null>(null);
+  const hasInteractedRef = useRef(false);
+  useEffect(() => {
+    answerRef.current = answer;
+  }, [answer]);
 
+  const now = useServerTime(serverNow);
+  const remainingMs = deadline != null ? Math.max(0, deadline - now) : null;
+  const isNearDeadline = remainingMs != null && remainingMs <= DRAFT_DEBOUNCE_MS;
+  const isExpired = remainingMs === 0;
+
+  const emitDraft = useCallback(
+    (value: string) => {
+      if (!onDraft || !hasInteractedRef.current) return;
+      if (value !== lastEmittedRef.current) {
+        onDraft(value);
+        lastEmittedRef.current = value;
+      }
+    },
+    [onDraft],
+  );
+
+  // Emit drafts: debounced normally, immediately when the deadline is close.
   useEffect(() => {
     if (isLocked || !onDraft) return;
-    const timer = setTimeout(() => {
-      onDraft(answer);
-    }, DRAFT_DEBOUNCE_MS);
+    if (isExpired) return;
+    if (isNearDeadline) {
+      emitDraft(answer);
+      return;
+    }
+    const timer = setTimeout(() => emitDraft(answer), DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [answer, isLocked, onDraft]);
+  }, [answer, isLocked, onDraft, isNearDeadline, isExpired, emitDraft]);
+
+  // Flush any pending draft the moment the local countdown reaches zero.
+  useEffect(() => {
+    if (isLocked || !onDraft || !isExpired) return;
+    emitDraft(answer);
+  }, [isExpired, isLocked, onDraft, emitDraft, answer]);
+
+  // Flush the current draft if the input locks or the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (!onDraft) return;
+      const latest = answerRef.current;
+      if (hasInteractedRef.current && latest !== lastEmittedRef.current) {
+        onDraft(latest);
+      }
+    };
+  }, [onDraft]);
 
   if (!state.isEligibleForFinal) {
     return (
@@ -424,6 +472,7 @@ function FinalAnswer({
   const displayError = validationError || (isAnswerError(error) ? error : null);
 
   const handleAnswerChange = (value: string) => {
+    hasInteractedRef.current = true;
     setAnswer(value);
     if (validationError) {
       setValidationError(null);
@@ -694,7 +743,15 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           {gameState.phase === 'FINAL_CLUE' && (
             <>
               <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
-              <FinalAnswer state={gameState} onSubmit={socket.submitFinalAnswer} onDraft={socket.submitFinalAnswerDraft} error={error} clearError={clearError} />
+              <FinalAnswer
+                state={gameState}
+                onSubmit={socket.submitFinalAnswer}
+                onDraft={socket.submitFinalAnswerDraft}
+                error={error}
+                clearError={clearError}
+                deadline={gameState.deadline}
+                serverNow={gameState.serverNow}
+              />
             </>
           )}
           {gameState.phase === 'FINAL_REVEAL' && <FinalReveal state={gameState} />}

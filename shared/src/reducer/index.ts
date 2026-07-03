@@ -47,6 +47,7 @@ export interface ReducerResult {
 
 const MAX_PLAYERS = 5;
 const EARLY_BUZZ_LOCKOUT_MS = 250;
+const FINAL_ANSWER_DRAFT_GRACE_MS = 300;
 
 export function createInitialState(sessionId: string, roomCode: string, board: GameState['board']): GameState {
   return {
@@ -1029,7 +1030,7 @@ function handleSubmitFinalAnswerDraft(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final answer is being accepted right now' }] };
   }
 
-  if (state.deadline != null && ctx.now > state.deadline) {
+  if (state.deadline != null && ctx.now > state.deadline + FINAL_ANSWER_DRAFT_GRACE_MS) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
   }
 
