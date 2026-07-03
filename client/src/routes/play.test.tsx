@@ -1668,6 +1668,104 @@ describe('PlayRoute', () => {
     expect(overlay.className).toMatch(/clueBanner/);
   });
 
+  it('keeps the buzzer reachable and tappable while the clue is displayed in CLUE_REVEALED', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const clue = await screen.findByTestId('contestant-clue-overlay');
+    expect(clue.className).not.toMatch(/clueOverlay|fullScreen/);
+    expect(clue.className).toMatch(/clueBanner/);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toBeEnabled();
+    await userEvent.click(buzzer);
+    expect(buzz).toHaveBeenCalledWith('p1');
+  });
+
+  it('keeps the buzzer reachable and tappable while the clue is displayed in BUZZERS_ARMED', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+      }),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const clue = await screen.findByTestId('contestant-clue-overlay');
+    expect(clue.className).not.toMatch(/clueOverlay|fullScreen/);
+    expect(clue.className).toMatch(/clueBanner/);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toBeEnabled();
+    await userEvent.click(buzzer);
+    expect(buzz).toHaveBeenCalledWith('p1');
+  });
+
+  it('renders the clue in a non-overlay banner while the buzzer is shown in BUZZED', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        buzzWinnerId: 'p2',
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+        ],
+      }),
+      buzz: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const clue = await screen.findByTestId('contestant-clue-overlay');
+    expect(clue.className).not.toMatch(/clueOverlay|fullScreen/);
+    expect(clue.className).toMatch(/clueBanner/);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toBeInTheDocument();
+  });
+
   it('does not expose audio elements or an audio toggle on the contestant view', async () => {
     useSocket.mockReturnValue({
       connected: true,

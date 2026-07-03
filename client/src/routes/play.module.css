@@ -207,24 +207,6 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.clueOverlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  background: var(--jeopardy-blue);
-  z-index: 10;
-  animation: clueZoomIn 0.35s ease-out forwards;
-}
-
-.fullScreen {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-}
-
 .clueBanner {
   flex: 0 0 auto;
   display: flex;
@@ -321,21 +303,3 @@
   cursor: not-allowed;
 }
 
-@keyframes clueZoomIn {
-  from {
-    transform: scale(0.85);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .clueOverlay,
-  .fullScreen {
-    animation: none;
-    transition: none;
-  }
-}
