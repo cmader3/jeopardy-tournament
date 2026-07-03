@@ -1,12 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
+import { useState, useCallback } from 'react';
 import { BoardRoute } from './board.js';
 import type { BoardView } from '@jeopardy/shared';
 
 function renderBoardRoute() {
-  render(
+  return render(
     <MemoryRouter>
       <BoardRoute />
     </MemoryRouter>,
@@ -18,7 +19,54 @@ vi.mock('../socket/useSocket.js', () => ({
   __esModule: true,
 }));
 
+const mockServerTimeNow = { current: 0 };
+
+vi.mock('../hooks/useServerTime.js', () => ({
+  useServerTime: () => mockServerTimeNow.current,
+  __esModule: true,
+}));
+
+const recordedCues: string[] = [];
+const mockAudioMuted = { current: false };
+
+function MockUseBoardAudio() {
+  const [muted, setMuted] = useState(mockAudioMuted.current);
+
+  const playCue = useCallback((cue: string) => {
+    recordedCues.push(cue);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    setMuted((m) => {
+      const next = !m;
+      mockAudioMuted.current = next;
+      return next;
+    });
+  }, []);
+
+  return { muted, toggleMute, playCue };
+}
+
+vi.mock('../hooks/useBoardAudio.js', () => ({
+  useBoardAudio: MockUseBoardAudio,
+  __esModule: true,
+}));
+
 import { useSocket } from '../socket/useSocket.js';
+
+function mockServerTime(now: number) {
+  mockServerTimeNow.current = now;
+}
+
+function mockBoardAudioReset() {
+  mockAudioMuted.current = false;
+  recordedCues.length = 0;
+}
+
+beforeEach(() => {
+  mockServerTime(0);
+  mockBoardAudioReset();
+});
 
 function makeRound(overrides: Partial<BoardView['round']> = {}): NonNullable<BoardView['round']> {
   return {
@@ -971,6 +1019,228 @@ describe('BoardRoute', () => {
 
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(toggle).toHaveAttribute('data-muted', 'true');
+  });
+});
+
+describe('Board audio cues', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockServerTime(0);
+    mockBoardAudioReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires the armed cue on entering BUZZERS_ARMED', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('armed-indicator');
+    expect(recordedCues).toContain('armed');
+  });
+
+  it('fires timeUp exactly once at the deadline during BUZZERS_ARMED', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('armed-indicator');
+    expect(recordedCues).not.toContain('timeUp');
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+
+    // Advancing further must not replay the cue for the same deadline.
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+  });
+
+  it('fires timeUp exactly once at the deadline during FINAL_CLUE', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+        deadline: 30_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('clue-text');
+    expect(recordedCues).toContain('finalThink');
+    expect(recordedCues).not.toContain('timeUp');
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
+  });
+
+  it('cancels the scheduled timeUp cue when the phase changes away before the deadline', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('armed-indicator');
+
+    // Advance partway, then simulate a contestant buzzing before the deadline.
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        buzzWinnerId: 'p1',
+        deadline: null,
+        serverNow: 2_000,
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('buzzed-indicator');
+
+    // Pass the original deadline: the canceled cue must not fire.
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(recordedCues).not.toContain('timeUp');
+  });
+
+  it('does not fire timeUp when the deadline is already expired on entry', async () => {
+    mockServerTime(10_000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 10_000,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('armed-indicator');
+
+    // Let any immediate timers flush.
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+
+    expect(recordedCues).not.toContain('timeUp');
+  });
+
+  it('schedules a fresh timeUp cue when the deadline advances without changing phase', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+    await screen.findByTestId('armed-indicator');
+
+    // Re-arm with a later deadline (e.g., after a wrong answer re-arm).
+    mockServerTime(2_000);
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 10_000,
+        serverNow: 2_000,
+        players: [{ id: 'p1', name: 'Alice', score: -100, connected: true }],
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    // The first deadline has passed; the new cue should not have fired yet.
+    expect(recordedCues).not.toContain('timeUp');
+
+    act(() => {
+      vi.advanceTimersByTime(8_000);
+    });
+
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
   });
 });
 

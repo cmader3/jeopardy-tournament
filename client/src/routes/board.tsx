@@ -6,6 +6,7 @@ import { FitText } from '../components/FitText.js';
 import { RoundBanner } from '../components/RoundBanner.js';
 import { AudioToggle } from '../components/AudioToggle.js';
 import { useBoardAudio } from '../hooks/useBoardAudio.js';
+import { useServerTime } from '../hooks/useServerTime.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
 import styles from './board.module.css';
 
@@ -563,15 +564,19 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const { muted, toggleMute, playCue } = useBoardAudio();
 
   const prevPhaseRef = useRef<BoardView['phase'] | null>(null);
-  const prevDeadlineRef = useRef<number | null>(null);
   const timeUpFiredForDeadlineRef = useRef<number | null>(null);
+  const serverNow = useServerTime(state?.serverNow ?? 0);
+  const serverNowRef = useRef(serverNow);
+
+  useEffect(() => {
+    serverNowRef.current = serverNow;
+  }, [serverNow]);
 
   useEffect(() => {
     if (!state) return;
 
     const phase = state.phase;
     const prevPhase = prevPhaseRef.current;
-    const deadline = state.deadline;
 
     if (prevPhase !== 'BUZZERS_ARMED' && phase === 'BUZZERS_ARMED') {
       playCue('armed');
@@ -581,19 +586,37 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
       playCue('finalThink');
     }
 
+    // Reset the timeUp dedup when leaving a timed phase so a later timed phase
+    // with the same deadline can still fire its cue.
     if (
-      deadline != null &&
-      deadline <= Date.now() &&
-      (phase === 'BUZZERS_ARMED' || phase === 'FINAL_CLUE') &&
-      timeUpFiredForDeadlineRef.current !== deadline
+      (prevPhase === 'BUZZERS_ARMED' || prevPhase === 'FINAL_CLUE') &&
+      prevPhase !== phase
     ) {
-      timeUpFiredForDeadlineRef.current = deadline;
-      playCue('timeUp');
+      timeUpFiredForDeadlineRef.current = null;
     }
 
     prevPhaseRef.current = phase;
-    prevDeadlineRef.current = deadline;
   }, [state, playCue]);
+
+  // Dedicated deadline-based effect for the timeUp cue. It is keyed on the
+  // deadline and phase so it runs once per timed window, schedules a single
+  // setTimeout, and clears it on early phase change (e.g., a buzz or Final end).
+  useEffect(() => {
+    const deadline = state?.deadline;
+    const phase = state?.phase;
+    if (deadline == null || (phase !== 'BUZZERS_ARMED' && phase !== 'FINAL_CLUE')) return;
+    if (deadline < serverNowRef.current) return;
+
+    const delay = Math.max(0, deadline - serverNowRef.current);
+    const timer = setTimeout(() => {
+      if (timeUpFiredForDeadlineRef.current !== deadline) {
+        timeUpFiredForDeadlineRef.current = deadline;
+        playCue('timeUp');
+      }
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [state?.deadline, state?.phase, playCue]);
 
   if (socket.error) {
     return (
