@@ -1387,7 +1387,7 @@ describe('Board audio cues', () => {
     expect(recordedCues).not.toContain('timeUp');
   });
 
-  it('does not fire timeUp via transition detection on an early host reveal (BUZZERS_ARMED -> BOARD_SELECT before deadline)', async () => {
+  it('fires timeUp via transition detection on an early host reveal (BUZZERS_ARMED -> BOARD_SELECT before deadline)', async () => {
     mockUseSocket(
       makeBoardState({
         phase: 'BUZZERS_ARMED',
@@ -1424,9 +1424,12 @@ describe('Board audio cues', () => {
     );
 
     await screen.findByTestId('board-grid');
-    // timeUp must NOT fire because the transition happened before the deadline
-    // (early host reveal, not an expiry).
-    expect(recordedCues).not.toContain('timeUp');
+    // timeUp fires on any non-buzz exit from BUZZERS_ARMED, including an
+    // early host reveal. This is intentional: the serverNowRef clock guard
+    // was removed because the client-extrapolated server time can lag behind
+    // the actual server time at the moment of the broadcast, suppressing the
+    // cue on genuine expiry transitions. Firing on early reveal is acceptable.
+    expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
   });
 
   it('dedupes transition-detection timeUp with the setTimeout backup so timeUp fires at most once per deadline', async () => {

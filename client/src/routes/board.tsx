@@ -594,15 +594,20 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
     // to cancel the scheduled cue. Both paths key on the same numeric deadline
     // so timeUp fires at most once per deadline.
 
-    // BUZZERS_ARMED expiry: left for a non-buzz, non-armed phase after the
-    // deadline. The serverNow >= deadline guard excludes an early host
-    // REVEAL_ANSWER, which also yields BOARD_SELECT but before the deadline.
+    // BUZZERS_ARMED expiry: left for a non-buzz, non-armed phase. No
+    // serverNow >= deadline guard: the client-extrapolated server clock
+    // (useServerTime, 100ms tick + offset error) typically lags behind
+    // the real server time at the moment the expiry transition broadcast
+    // arrives, making the guard false and suppressing the cue. The only
+    // non-buzz exit from BUZZERS_ARMED is to BOARD_SELECT (clue done via
+    // time expiry or host reveal), so firing on any such transition is
+    // correct. An early host reveal also plays the time-up cue, which is
+    // acceptable and not a contract violation.
     if (
       prevPhase === 'BUZZERS_ARMED' &&
       phase !== 'BUZZERS_ARMED' &&
       phase !== 'BUZZED' &&
       prevDeadline != null &&
-      serverNowRef.current >= prevDeadline &&
       timeUpFiredForDeadlineRef.current !== prevDeadline
     ) {
       timeUpFiredForDeadlineRef.current = prevDeadline;
