@@ -90,6 +90,10 @@ export interface HostInProgressProps {
   onOpenFinalWagers?: () => void;
   onForceFinalWagers?: () => void;
   onOverrideControl?: (playerId: string) => void;
+  onRevealFinalAnswer?: () => void;
+  onRuleFinalCorrect?: () => void;
+  onRuleFinalIncorrect?: () => void;
+  onRevealFinalWager?: () => void;
 }
 
 function HostGrid({
@@ -378,6 +382,148 @@ function HostFinalClue({ state }: HostFinalClueProps) {
   );
 }
 
+interface HostFinalRevealProps {
+  state: HostView;
+  onRevealFinalAnswer?: () => void;
+  onRuleFinalCorrect?: () => void;
+  onRuleFinalIncorrect?: () => void;
+  onRevealFinalWager?: () => void;
+}
+
+function HostFinalReveal({
+  state,
+  onRevealFinalAnswer,
+  onRuleFinalCorrect,
+  onRuleFinalIncorrect,
+  onRevealFinalWager,
+}: HostFinalRevealProps) {
+  const currentPlayerId = state.finalRevealOrder[state.finalRevealIndex] ?? null;
+  const currentPlayer = currentPlayerId ? state.players.find((p) => p.id === currentPlayerId) : undefined;
+  const currentAnswer = currentPlayerId ? state.finalRevealedAnswers[currentPlayerId] : undefined;
+  const currentWager = currentPlayerId ? state.finalRevealedWagers[currentPlayerId] : undefined;
+  const revealedPlayerIds = state.finalRevealOrder.slice(0, state.finalRevealIndex);
+
+  return (
+    <div className={styles.hostFinalReveal} data-testid="host-final-reveal">
+      <h2 data-testid="host-final-reveal-heading">Final Jeopardy Reveal</h2>
+      {currentPlayer && (
+        <div className={styles.hostFinalRevealCurrent} data-testid="host-final-reveal-current">
+          <p data-testid="host-final-reveal-player-name">
+            {currentPlayer.name} — <span data-testid="host-final-reveal-player-score">${currentPlayer.score}</span>
+          </p>
+          {state.finalRevealStep === 'ANSWER' && (
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={onRevealFinalAnswer}
+              data-testid="host-reveal-final-answer-button"
+            >
+              Reveal Answer
+            </button>
+          )}
+          {state.finalRevealStep === 'RULE' && (
+            <>
+              <p className={styles.hostFinalRevealAnswer} data-testid="host-final-reveal-answer">
+                {currentAnswer}
+              </p>
+              <div className={styles.actionRow} data-testid="host-final-ruling-buttons">
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={onRuleFinalCorrect}
+                  data-testid="host-rule-final-correct-button"
+                >
+                  Correct
+                </button>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={onRuleFinalIncorrect}
+                  data-testid="host-rule-final-incorrect-button"
+                >
+                  Incorrect
+                </button>
+              </div>
+            </>
+          )}
+          {state.finalRevealStep === 'WAGER' && (
+            <>
+              <p className={styles.hostFinalRevealAnswer} data-testid="host-final-reveal-answer">
+                {currentAnswer}
+              </p>
+              <p className={styles.hostFinalRevealWager} data-testid="host-final-reveal-wager">
+                {'Wager: $'}{currentWager}
+              </p>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={onRevealFinalWager}
+                data-testid="host-reveal-final-wager-button"
+              >
+                Reveal Wager / Next
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {revealedPlayerIds.length > 0 && (
+        <div className={styles.hostFinalRevealedList} data-testid="host-final-revealed-list">
+          <h3>Revealed</h3>
+          <ul>
+            {revealedPlayerIds.map((playerId) => {
+              const player = state.players.find((p) => p.id === playerId);
+              if (!player) return null;
+              return (
+                <li key={playerId} data-testid={`host-final-revealed-player-${playerId}`}>
+                  <span className={styles.playerName}>{player.name}</span>
+                  <span className={styles.playerScore}>${player.score}</span>
+                  <span data-testid={`host-final-revealed-answer-${playerId}`}>{state.finalRevealedAnswers[playerId]}</span>
+                  <span data-testid={`host-final-revealed-wager-${playerId}`}>${state.finalRevealedWagers[playerId]}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface HostFinalStandingsProps {
+  state: HostView;
+}
+
+function HostFinalStandings({ state }: HostFinalStandingsProps) {
+  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  const topScore = sorted[0]?.score ?? null;
+  const coWinners = topScore != null ? sorted.filter((p) => p.score === topScore).map((p) => p.id) : [];
+
+  return (
+    <div className={styles.hostFinalStandings} data-testid="host-final-standings">
+      <h2 data-testid="host-final-standings-heading">Final Standings</h2>
+      <ul className={styles.hostFinalStandingsList} data-testid="host-final-standings-list">
+        {sorted.map((player) => (
+          <li
+            key={player.id}
+            className={coWinners.includes(player.id) ? styles.hostFinalWinner : undefined}
+            data-testid={`host-final-standing-${player.id}`}
+          >
+            <span className={styles.playerName}>{player.name}</span>
+            <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>
+              {player.score}
+            </span>
+            {coWinners.includes(player.id) && (
+              <span className={styles.hostFinalWinnerBadge} data-testid={`host-final-winner-${player.id}`}>
+                Winner
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function HostFinalWager({ state, onForceFinalWagers }: HostFinalWagerProps) {
   const eligibleSet = new Set(state.finalEligiblePlayerIds);
 
@@ -432,6 +578,10 @@ export function HostInProgress({
   onOpenFinalWagers,
   onForceFinalWagers,
   onOverrideControl,
+  onRevealFinalAnswer,
+  onRuleFinalCorrect,
+  onRuleFinalIncorrect,
+  onRevealFinalWager,
 }: HostInProgressProps) {
   const players = state?.players ?? [];
   const currentClue = state?.currentClueId
@@ -502,6 +652,42 @@ export function HostInProgress({
           Phase: {state.phase}
         </p>
         <HostFinalClue state={state} />
+      </main>
+    );
+  }
+
+  if (state?.phase === 'FINAL_REVEAL') {
+    return (
+      <main className={`${styles.hostInProgress} route-stub`}>
+        <h1>Game in Progress</h1>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+        <p className={styles.phase} data-testid="phase-indicator">
+          Phase: {state.phase}
+        </p>
+        <HostFinalReveal
+          state={state}
+          onRevealFinalAnswer={onRevealFinalAnswer}
+          onRuleFinalCorrect={onRuleFinalCorrect}
+          onRuleFinalIncorrect={onRuleFinalIncorrect}
+          onRevealFinalWager={onRevealFinalWager}
+        />
+      </main>
+    );
+  }
+
+  if (state?.phase === 'COMPLETE') {
+    return (
+      <main className={`${styles.hostInProgress} route-stub`}>
+        <h1>Game in Progress</h1>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+        <p className={styles.phase} data-testid="phase-indicator">
+          Phase: {state.phase}
+        </p>
+        <HostFinalStandings state={state} />
       </main>
     );
   }
@@ -779,6 +965,18 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleRevealFinalAnswer = useCallback(() => {
+    hostSocket.revealFinalAnswer?.();
+  }, [hostSocket]);
+  const handleRuleFinalCorrect = useCallback(() => {
+    hostSocket.ruleFinalCorrect?.();
+  }, [hostSocket]);
+  const handleRuleFinalIncorrect = useCallback(() => {
+    hostSocket.ruleFinalIncorrect?.();
+  }, [hostSocket]);
+  const handleRevealFinalWager = useCallback(() => {
+    hostSocket.revealFinalWager?.();
+  }, [hostSocket]);
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -810,6 +1008,10 @@ export function HostContent() {
         onOpenFinalWagers={handleOpenFinalWagers}
         onForceFinalWagers={handleForceFinalWagers}
         onOverrideControl={handleOverrideControl}
+        onRevealFinalAnswer={handleRevealFinalAnswer}
+        onRuleFinalCorrect={handleRuleFinalCorrect}
+        onRuleFinalIncorrect={handleRuleFinalIncorrect}
+        onRevealFinalWager={handleRevealFinalWager}
       />
     );
   }

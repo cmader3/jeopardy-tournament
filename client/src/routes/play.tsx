@@ -456,6 +456,89 @@ function FinalAnswer({
   );
 }
 
+function FinalReveal({ state }: { state: ContestantView }) {
+  const currentPlayerId = state.finalRevealOrder[state.finalRevealIndex] ?? null;
+  const currentPlayer = currentPlayerId ? state.players.find((p) => p.id === currentPlayerId) : undefined;
+  const currentAnswer = currentPlayerId ? state.finalRevealedAnswers[currentPlayerId] : undefined;
+  const currentWager = currentPlayerId ? state.finalRevealedWagers[currentPlayerId] : undefined;
+  const revealedPlayerIds = state.finalRevealOrder.slice(0, state.finalRevealIndex);
+  const isMe = currentPlayerId === state.playerId;
+
+  return (
+    <div data-testid="contestant-final-reveal">
+      <h2 data-testid="contestant-final-reveal-heading">Final Jeopardy Reveal</h2>
+      {currentPlayer && (
+        <div data-testid="contestant-final-reveal-current">
+          <p data-testid="contestant-final-reveal-player-name">{currentPlayer.name}</p>
+          <p data-testid="contestant-final-reveal-player-score">Score: {currentPlayer.score}</p>
+          {currentAnswer !== undefined && (
+            <p data-testid="contestant-final-reveal-answer">Answer: {currentAnswer}</p>
+          )}
+          {currentWager !== undefined && (
+            <p data-testid="contestant-final-reveal-wager">{'Wager: $'}{currentWager}</p>
+          )}
+          {isMe && <p data-testid="contestant-final-reveal-is-me">This is your reveal!</p>}
+          {state.lastOutcome && (
+            <p data-testid="contestant-final-reveal-outcome">
+              {state.lastOutcome.type === 'CORRECT' ? 'Correct!' : 'Incorrect!'}
+            </p>
+          )}
+        </div>
+      )}
+      {revealedPlayerIds.length > 0 && (
+        <div data-testid="contestant-final-revealed-list">
+          <h3>Revealed</h3>
+          <ul>
+            {revealedPlayerIds.map((playerId) => {
+              const player = state.players.find((p) => p.id === playerId);
+              if (!player) return null;
+              return (
+                <li key={playerId} data-testid="contestant-final-revealed-player">
+                  <span>{player.name}</span>
+                  <span> {player.score}</span>
+                  <span data-testid={`contestant-final-revealed-answer-${playerId}`}>
+                    {state.finalRevealedAnswers[playerId]}
+                  </span>
+                  <span data-testid={`contestant-final-revealed-wager-${playerId}`}>
+                    {'$'}{state.finalRevealedWagers[playerId]}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinalStandings({ state }: { state: ContestantView }) {
+  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  const topScore = sorted[0]?.score ?? null;
+  const coWinners = topScore != null ? sorted.filter((p) => p.score === topScore).map((p) => p.id) : [];
+  const me = state.players.find((p) => p.id === state.playerId);
+
+  return (
+    <div data-testid="contestant-final-standings">
+      <h2 data-testid="contestant-final-standings-heading">Final Standings</h2>
+      <p data-testid="contestant-final-standings-self">
+        Your final score: {me?.score ?? 0}
+      </p>
+      <ul data-testid="contestant-final-standings-list">
+        {sorted.map((player) => (
+          <li key={player.id} data-testid="contestant-final-standing">
+            <span data-testid={`contestant-final-standing-name-${player.id}`}>{player.name}</span>
+            <span data-testid={`contestant-final-standing-score-${player.id}`}>{player.score}</span>
+            {coWinners.includes(player.id) && (
+              <span data-testid={`contestant-final-winner-${player.id}`}>Winner</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
@@ -597,6 +680,8 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               <FinalAnswer state={gameState} onSubmit={socket.submitFinalAnswer} error={error} clearError={clearError} />
             </>
           )}
+          {gameState.phase === 'FINAL_REVEAL' && <FinalReveal state={gameState} />}
+          {gameState.phase === 'COMPLETE' && <FinalStandings state={gameState} />}
           {gameState.phase === 'DAILY_DOUBLE_WAGER' && (
             <DailyDoubleWager state={gameState} onSubmit={socket.submitDDWager} error={error} clearError={clearError} />
           )}

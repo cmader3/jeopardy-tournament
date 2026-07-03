@@ -393,3 +393,102 @@ describe('Final answer projections', () => {
     expect(view).not.toHaveProperty('finalAnswers');
   });
 });
+
+function setupFinalRevealState(
+  step: 'ANSWER' | 'RULE' | 'WAGER',
+  index = 0,
+): GameState {
+  return {
+    ...setupFinalIntro({ p1: 300, p2: 100, p3: 200 }),
+    phase: 'FINAL_REVEAL' as const,
+    currentClueId: 'cl-final',
+    finalWagers: { p1: 300, p2: 100, p3: 200 },
+    finalAnswers: { p1: 'Tolkien', p2: 'Rowling', p3: 'Lewis' },
+    finalRevealOrder: ['p2', 'p3', 'p1'],
+    finalRevealIndex: index,
+    finalRevealStep: step,
+    deadline: null,
+  };
+}
+
+describe('Final reveal projections', () => {
+  it('board projection hides every answer and wager in the ANSWER step', () => {
+    const state = setupFinalRevealState('ANSWER', 0);
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalRevealOrder).toEqual(['p2', 'p3', 'p1']);
+    expect(view.finalRevealIndex).toBe(0);
+    expect(view.finalRevealStep).toBe('ANSWER');
+    expect(view.finalRevealedAnswers).toEqual({});
+    expect(view.finalRevealedWagers).toEqual({});
+  });
+
+  it('board projection reveals the current answer after REVEAL_FINAL_ANSWER', () => {
+    const state = setupFinalRevealState('RULE', 0);
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalRevealedAnswers).toEqual({ p2: 'Rowling' });
+    expect(view.finalRevealedWagers).toEqual({});
+  });
+
+  it('board projection hides the current wager until REVEAL_FINAL_WAGER', () => {
+    const state = setupFinalRevealState('RULE', 0);
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalRevealedWagers).not.toHaveProperty('p2');
+  });
+
+  it('board projection reveals the current wager after a ruling', () => {
+    const state = setupFinalRevealState('WAGER', 0);
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalRevealedAnswers).toEqual({ p2: 'Rowling' });
+    expect(view.finalRevealedWagers).toEqual({ p2: 100 });
+  });
+
+  it('board projection reveals previous contestants answers and wagers', () => {
+    const state = setupFinalRevealState('ANSWER', 1);
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalRevealedAnswers).toEqual({ p2: 'Rowling' });
+    expect(view.finalRevealedWagers).toEqual({ p2: 100 });
+  });
+
+  it('board projection keeps future contestants answers and wagers hidden', () => {
+    const state = setupFinalRevealState('ANSWER', 1);
+
+    const view = projectBoard(state, NOW);
+
+    expect(view.finalRevealedAnswers).not.toHaveProperty('p3');
+    expect(view.finalRevealedAnswers).not.toHaveProperty('p1');
+    expect(view.finalRevealedWagers).not.toHaveProperty('p3');
+    expect(view.finalRevealedWagers).not.toHaveProperty('p1');
+  });
+
+  it('host projection follows the same reveal rules as the board', () => {
+    const state = setupFinalRevealState('RULE', 1);
+
+    const view = projectHost(state, NOW);
+
+    expect(view.finalRevealedAnswers).toEqual({ p2: 'Rowling', p3: 'Lewis' });
+    expect(view.finalRevealedWagers).toEqual({ p2: 100 });
+    expect(view.finalRevealedWagers).not.toHaveProperty('p3');
+    expect(view.finalRevealedAnswers).not.toHaveProperty('p1');
+  });
+
+  it('contestant projection follows the same reveal rules as the board', () => {
+    const state = setupFinalRevealState('WAGER', 1);
+
+    const p1 = projectContestant(state, 'p1', NOW);
+
+    expect(p1.finalRevealedAnswers).toEqual({ p2: 'Rowling', p3: 'Lewis' });
+    expect(p1.finalRevealedWagers).toEqual({ p2: 100, p3: 200 });
+    expect(p1.finalRevealedAnswers).not.toHaveProperty('p1');
+    expect(p1.finalRevealedWagers).not.toHaveProperty('p1');
+  });
+});

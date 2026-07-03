@@ -359,6 +359,37 @@ interface CompleteScreenProps {
   state: BoardView;
 }
 
+function FinalStandings({ state }: CompleteScreenProps) {
+  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  const topScore = sorted[0]?.score ?? null;
+  const coWinners = topScore != null ? sorted.filter((p) => p.score === topScore).map((p) => p.id) : [];
+
+  return (
+    <div className={styles.finalStandings} data-testid="final-standings">
+      <h2 className={styles.finalStandingsHeading} data-testid="final-standings-heading">Final Standings</h2>
+      <div className={styles.finalStandingsList} data-testid="final-standings-list">
+        {sorted.map((player) => (
+          <div
+            key={player.id}
+            className={`${styles.finalStanding} ${coWinners.includes(player.id) ? styles.finalStandingWinner : ''}`}
+            data-testid="final-standing"
+          >
+            <span className={`${styles.name} ${styles.truncated}`} data-testid={`final-standing-name-${player.id}`}>
+              {player.name}
+            </span>
+            <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${player.id}`}>
+              {player.score}
+            </span>
+            {coWinners.includes(player.id) && (
+              <span className={styles.finalWinnerBadge} data-testid={`final-winner-${player.id}`}>Winner</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CompleteScreen({ state }: CompleteScreenProps) {
   if (state.finalNoEligiblePlayers) {
     return (
@@ -369,9 +400,72 @@ function CompleteScreen({ state }: CompleteScreenProps) {
     );
   }
 
+  return <FinalStandings state={state} />;
+}
+
+interface FinalRevealProps {
+  state: BoardView;
+}
+
+function FinalReveal({ state }: FinalRevealProps) {
+  const currentPlayerId = state.finalRevealOrder[state.finalRevealIndex] ?? null;
+  const currentPlayer = currentPlayerId ? state.players.find((p) => p.id === currentPlayerId) : undefined;
+  const currentAnswer = currentPlayerId ? state.finalRevealedAnswers[currentPlayerId] : undefined;
+  const currentWager = currentPlayerId ? state.finalRevealedWagers[currentPlayerId] : undefined;
+  const revealedPlayerIds = state.finalRevealOrder.slice(0, state.finalRevealIndex);
+
   return (
-    <div className={styles.finalIntro} data-testid="game-complete">
-      <h2 className={styles.finalCompleteHeading}>Game Complete</h2>
+    <div className={styles.finalReveal} data-testid="final-reveal">
+      <h2 className={styles.finalRevealHeading} data-testid="final-reveal-heading">Final Jeopardy Reveal</h2>
+      {currentPlayer && (
+        <div className={styles.finalRevealCurrent} data-testid="final-reveal-current">
+          <p className={styles.finalRevealPlayerName} data-testid="final-reveal-player-name">
+            {currentPlayer.name}
+          </p>
+          <p className={styles.finalRevealPlayerScore} data-testid="final-reveal-player-score">
+            {'$'}{currentPlayer.score}
+          </p>
+          {currentAnswer !== undefined && (
+            <p className={styles.finalRevealAnswer} data-testid="final-reveal-answer">
+              {currentAnswer}
+            </p>
+          )}
+          {currentWager !== undefined && (
+            <p className={styles.finalRevealWager} data-testid="final-reveal-wager">
+              {'Wager: $'}{currentWager}
+            </p>
+          )}
+          {state.lastOutcome && (
+            <p
+              className={
+                state.lastOutcome.type === 'CORRECT' ? styles.finalRevealCorrect : styles.finalRevealIncorrect
+              }
+              data-testid="final-reveal-outcome"
+            >
+              {state.lastOutcome.type === 'CORRECT' ? 'Correct!' : 'Incorrect!'}
+            </p>
+          )}
+        </div>
+      )}
+      {revealedPlayerIds.length > 0 && (
+        <div className={styles.finalRevealedList} data-testid="final-revealed-list">
+          <h3>Revealed</h3>
+          <div className={styles.finalRevealedGrid}>
+            {revealedPlayerIds.map((playerId) => {
+              const player = state.players.find((p) => p.id === playerId);
+              if (!player) return null;
+              return (
+                <div key={playerId} className={styles.finalRevealedPlayer} data-testid="final-revealed-player">
+                  <span className={styles.finalRevealPlayerName}>{player.name}</span>
+                  <span className={styles.finalRevealPlayerScore}>${player.score}</span>
+                  <span data-testid={`final-revealed-answer-${playerId}`}>{state.finalRevealedAnswers[playerId]}</span>
+                  <span data-testid={`final-revealed-wager-${playerId}`}>{'$'}{state.finalRevealedWagers[playerId]}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -387,6 +481,10 @@ function renderStage(state: BoardView) {
 
   if (state.phase === 'FINAL_WAGER') {
     return <FinalWager state={state} />;
+  }
+
+  if (state.phase === 'FINAL_REVEAL') {
+    return <FinalReveal state={state} />;
   }
 
   if (state.phase === 'COMPLETE') {

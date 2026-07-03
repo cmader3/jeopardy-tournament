@@ -429,3 +429,208 @@ describe('Final answer phase disconnect preservation', () => {
     expect(reconnected.state.players.find((p) => p.id === 'p1')?.connected).toBe(true);
   });
 });
+
+function setupFinalClueWithWagers(scores: Record<string, number>, wagers: Record<string, number>): GameState {
+  const wager = setupFinalWager(scores);
+  let state = wager;
+  for (const [playerId, amount] of Object.entries(wagers)) {
+    state = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId, amount }, { now: NOW }).state;
+  }
+  return reduce(state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+}
+
+function setupFinalReveal(
+  scores: Record<string, number>,
+  answers?: Record<string, string>,
+  wagers?: Record<string, number>,
+): GameState {
+  const clue = wagers ? setupFinalClueWithWagers(scores, wagers) : setupFinalClue(scores);
+  const withAnswers = answers
+    ? Object.entries(answers).reduce(
+        (state, [playerId, answer]) =>
+          reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId, answer }, { now: NOW + 1_000 }).state,
+        clue,
+      )
+    : clue;
+  return reduce(withAnswers, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 }).state;
+}
+
+describe('TIME_EXPIRE builds Final reveal order', () => {
+  it('orders participants by pre-Final score ascending', () => {
+    const state = setupFinalReveal({ p1: 300, p2: 100, p3: 200 });
+
+    expect(state.phase).toBe('FINAL_REVEAL');
+    expect(state.finalRevealOrder).toEqual(['p2', 'p3', 'p1']);
+    expect(state.finalRevealIndex).toBe(0);
+    expect(state.finalRevealStep).toBe('ANSWER');
+  });
+
+  it('breaks pre-Final score ties by seat order', () => {
+    const board = makeBoard();
+    const players = [
+      makePlayer({ id: 'p1', name: 'Alice', score: 200, seatOrder: 2 }),
+      makePlayer({ id: 'p2', name: 'Bob', score: 200, seatOrder: 0 }),
+      makePlayer({ id: 'p3', name: 'Carol', score: 200, seatOrder: 1 }),
+    ];
+    const intro = {
+      ...createInitialState('session-1', 'ABCD', board),
+      phase: 'FINAL_INTRO' as const,
+      roundIndex: 1,
+      players,
+    };
+    const wager = reduce(intro, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW }).state;
+    const clue = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+    const result = reduce(clue, { type: 'TIME_EXPIRE' }, { now: NOW + 30_000 });
+
+    expect(result.state.finalRevealOrder).toEqual(['p2', 'p3', 'p1']);
+  });
+
+  it('excludes non-participants from the reveal order', () => {
+    const state = setupFinalReveal({ p1: 300, p2: 0, p3: -100, p4: 50 });
+
+    expect(state.finalRevealOrder).toEqual(['p4', 'p1']);
+  });
+});
+
+describe('REVEAL_FINAL_ANSWER', () => {
+  it('reveals the current contestant answer and moves to the ruling step', () => {
+    const state = setupFinalReveal({ p1: 200, p2: 100 }, { p1: 'Tolkien', p2: 'Rowling' }, { p1: 100, p2: 50 });
+
+    const result = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalRevealStep).toBe('RULE');
+    expect(result.state.finalRevealIndex).toBe(0);
+  });
+
+  it('is rejected outside of FINAL_REVEAL', () => {
+    const clue = setupFinalClue({ p1: 200 });
+
+    const result = reduce(clue, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+
+  it('is rejected when the answer is already revealed', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+
+    const result = reduce(revealed, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 32_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+  });
+});
+
+describe('RULE_FINAL_CORRECT', () => {
+  it('adds the wager to the current contestant score and moves to the wager reveal step', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' }, { p1: 200 });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+
+    const result = reduce(revealed, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 32_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalRevealStep).toBe('WAGER');
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(400);
+    expect(result.state.lastOutcome).toEqual({ playerId: 'p1', type: 'CORRECT', value: 200 });
+  });
+
+  it('is rejected when the answer has not been revealed', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' });
+
+    const result = reduce(state, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 31_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('answer') });
+  });
+});
+
+describe('RULE_FINAL_INCORRECT', () => {
+  it('subtracts the wager from the current contestant score and moves to the wager reveal step', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' }, { p1: 200 });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+
+    const result = reduce(revealed, { type: 'RULE_FINAL_INCORRECT' }, { now: NOW + 32_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalRevealStep).toBe('WAGER');
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+    expect(result.state.lastOutcome).toEqual({ playerId: 'p1', type: 'INCORRECT', value: 200 });
+  });
+});
+
+describe('REVEAL_FINAL_WAGER', () => {
+  it('advances to the next contestant after the wager is revealed', () => {
+    const state = setupFinalReveal({ p1: 200, p2: 100 }, { p1: 'Tolkien', p2: 'Rowling' }, { p1: 200, p2: 100 });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+    const ruled = reduce(revealed, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 32_000 }).state;
+
+    const result = reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.finalRevealIndex).toBe(1);
+    expect(result.state.finalRevealStep).toBe('ANSWER');
+    expect(result.state.lastOutcome).toBeNull();
+  });
+
+  it('transitions to COMPLETE after the last contestant wager is revealed', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' }, { p1: 200 });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+    const ruled = reduce(revealed, { type: 'RULE_FINAL_INCORRECT' }, { now: NOW + 32_000 }).state;
+
+    const result = reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('COMPLETE');
+    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+  });
+
+  it('is rejected when the wager has not been ruled on', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+
+    const result = reduce(revealed, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 32_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('ruling') });
+  });
+});
+
+describe('Final reveal full sequence', () => {
+  it('visits every participant exactly once in ascending score order', () => {
+    const state = setupFinalReveal(
+      { p1: 300, p2: 100, p3: 200 },
+      { p1: 'Tolkien', p2: 'Rowling', p3: 'Lewis' },
+      { p1: 300, p2: 100, p3: 200 },
+    );
+    expect(state.finalRevealOrder).toEqual(['p2', 'p3', 'p1']);
+
+    const visited: string[] = [];
+    let current = state;
+    for (let i = 0; i < 3; i++) {
+      const revealed = reduce(current, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 + i * 3 }).state;
+      const ruled = reduce(revealed, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 32_000 + i * 3 }).state;
+      visited.push(ruled.finalRevealOrder[ruled.finalRevealIndex]);
+      current = reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 + i * 3 }).state;
+    }
+
+    expect(visited).toEqual(['p2', 'p3', 'p1']);
+    expect(current.phase).toBe('COMPLETE');
+  });
+
+  it('preserves already-revealed answers, wagers, and scores while advancing', () => {
+    const state = setupFinalReveal(
+      { p1: 300, p2: 100 },
+      { p1: 'Tolkien', p2: 'Rowling' },
+      { p1: 300, p2: 100 },
+    );
+
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+    const ruled = reduce(revealed, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 32_000 }).state;
+    const afterFirst = reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 }).state;
+
+    expect(afterFirst.finalRevealIndex).toBe(1);
+    expect(afterFirst.finalAnswers['p2']).toBe('Rowling');
+    expect(afterFirst.finalWagers['p2']).toBe(100);
+    expect(afterFirst.players.find((p) => p.id === 'p2')?.score).toBe(200);
+    expect(afterFirst.finalAnswers['p1']).toBe('Tolkien');
+    expect(afterFirst.finalWagers['p1']).toBe(300);
+  });
+});

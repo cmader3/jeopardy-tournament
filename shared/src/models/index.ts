@@ -97,6 +97,9 @@ export interface GameState {
   revealedAnswer: string | null;
   transitionTarget: 'DOUBLE_JEOPARDY' | 'FINAL' | null;
   finalNoEligiblePlayers: boolean;
+  finalRevealOrder: string[];
+  finalRevealIndex: number;
+  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER';
   lastOutcome: {
     playerId: string;
     type: 'CORRECT' | 'INCORRECT';

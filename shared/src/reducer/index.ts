@@ -28,7 +28,11 @@ export type Intent =
   | { type: 'OVERRIDE_CONTROL'; playerId: string }
   | { type: 'ADJUST_SCORE'; playerId: string; score: number }
   | { type: 'UNDO_LAST_RULING' }
-  | { type: 'OPEN_FINAL_WAGERS' };
+  | { type: 'OPEN_FINAL_WAGERS' }
+  | { type: 'REVEAL_FINAL_ANSWER' }
+  | { type: 'RULE_FINAL_CORRECT' }
+  | { type: 'RULE_FINAL_INCORRECT' }
+  | { type: 'REVEAL_FINAL_WAGER' };
 
 export type Effect =
   | { type: 'NOOP' }
@@ -67,6 +71,9 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     revealedAnswer: null,
     transitionTarget: null,
     finalNoEligiblePlayers: false,
+    finalRevealOrder: [],
+    finalRevealIndex: 0,
+    finalRevealStep: 'ANSWER',
     lastOutcome: null,
   };
 }
@@ -119,6 +126,14 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleUndoLastRuling(state);
     case 'OPEN_FINAL_WAGERS':
       return handleOpenFinalWagers(state);
+    case 'REVEAL_FINAL_ANSWER':
+      return handleRevealFinalAnswer(state);
+    case 'RULE_FINAL_CORRECT':
+      return handleRuleFinalCorrect(state, ctx);
+    case 'RULE_FINAL_INCORRECT':
+      return handleRuleFinalIncorrect(state, ctx);
+    case 'REVEAL_FINAL_WAGER':
+      return handleRevealFinalWager(state);
     default:
       return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Unknown intent' }] };
   }
@@ -611,6 +626,16 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
   };
 }
 
+function buildFinalRevealOrder(players: Player[], finalWagers: Record<string, number>): string[] {
+  return players
+    .filter((p) => finalWagers[p.id] !== undefined)
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      return a.seatOrder - b.seatOrder;
+    })
+    .map((p) => p.id);
+}
+
 function handleTimeExpire(state: GameState): ReducerResult {
   if (state.phase === 'BUZZERS_ARMED') {
     if (!state.currentClueId) {
@@ -636,12 +661,22 @@ function handleTimeExpire(state: GameState): ReducerResult {
         finalAnswers[player.id] = '';
       }
     }
+    const finalRevealOrder = buildFinalRevealOrder(state.players, state.finalWagers);
+    if (finalRevealOrder.length === 0) {
+      return {
+        state: { ...state, phase: 'COMPLETE', finalAnswers, deadline: null },
+        effects: [{ type: 'BROADCAST_STATE' }],
+      };
+    }
     return {
       state: {
         ...state,
         phase: 'FINAL_REVEAL',
         finalAnswers,
         deadline: null,
+        finalRevealOrder,
+        finalRevealIndex: 0,
+        finalRevealStep: 'ANSWER',
       },
       effects: [{ type: 'BROADCAST_STATE' }],
     };
@@ -1112,4 +1147,155 @@ function handleUndoLastRuling(state: GameState): ReducerResult {
   }
 
   return { state: updatedState, effects: [{ type: 'BROADCAST_STATE' }] };
+}
+
+function getCurrentFinalPlayerId(state: GameState): string | null {
+  return state.finalRevealOrder[state.finalRevealIndex] ?? null;
+}
+
+function handleRevealFinalAnswer(state: GameState): ReducerResult {
+  if (state.phase !== 'FINAL_REVEAL') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot reveal a Final answer right now' }] };
+  }
+
+  if (state.finalRevealStep !== 'ANSWER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The answer has already been revealed' }] };
+  }
+
+  if (getCurrentFinalPlayerId(state) == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is queued for reveal' }] };
+  }
+
+  return {
+    state: { ...state, finalRevealStep: 'RULE' },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRuleFinalCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
+  if (state.phase !== 'FINAL_REVEAL') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot rule a Final answer right now' }] };
+  }
+
+  if (state.finalRevealStep !== 'RULE') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The answer must be revealed before ruling' }] };
+  }
+
+  const playerId = getCurrentFinalPlayerId(state);
+  if (playerId == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is queued for reveal' }] };
+  }
+
+  const playerIndex = state.players.findIndex((p) => p.id === playerId);
+  if (playerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  const player = state.players[playerIndex];
+  const wager = state.finalWagers[playerId] ?? 0;
+  const scoreBefore = player.score;
+  const scoreAfter = scoreBefore + wager;
+  const updatedPlayers = [...state.players];
+  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+
+  const auditEntry = createAuditRecord(
+    'CORRECT',
+    playerId,
+    wager,
+    scoreBefore,
+    scoreAfter,
+    state.controllingPlayerId,
+    ctx.now,
+  );
+
+  return {
+    state: {
+      ...state,
+      players: updatedPlayers,
+      auditLog: [...state.auditLog, auditEntry],
+      finalRevealStep: 'WAGER',
+      lastOutcome: { playerId, type: 'CORRECT', value: wager },
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRuleFinalIncorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
+  if (state.phase !== 'FINAL_REVEAL') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot rule a Final answer right now' }] };
+  }
+
+  if (state.finalRevealStep !== 'RULE') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The answer must be revealed before ruling' }] };
+  }
+
+  const playerId = getCurrentFinalPlayerId(state);
+  if (playerId == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is queued for reveal' }] };
+  }
+
+  const playerIndex = state.players.findIndex((p) => p.id === playerId);
+  if (playerIndex === -1) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  const player = state.players[playerIndex];
+  const wager = state.finalWagers[playerId] ?? 0;
+  const scoreBefore = player.score;
+  const scoreAfter = scoreBefore - wager;
+  const updatedPlayers = [...state.players];
+  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+
+  const auditEntry = createAuditRecord(
+    'INCORRECT',
+    playerId,
+    wager,
+    scoreBefore,
+    scoreAfter,
+    state.controllingPlayerId,
+    ctx.now,
+  );
+
+  return {
+    state: {
+      ...state,
+      players: updatedPlayers,
+      auditLog: [...state.auditLog, auditEntry],
+      finalRevealStep: 'WAGER',
+      lastOutcome: { playerId, type: 'INCORRECT', value: wager },
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRevealFinalWager(state: GameState): ReducerResult {
+  if (state.phase !== 'FINAL_REVEAL') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot reveal a Final wager right now' }] };
+  }
+
+  if (state.finalRevealStep !== 'WAGER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The wager can only be revealed after ruling' }] };
+  }
+
+  const nextIndex = state.finalRevealIndex + 1;
+  if (nextIndex >= state.finalRevealOrder.length) {
+    return {
+      state: {
+        ...state,
+        phase: 'COMPLETE',
+        finalRevealStep: 'ANSWER',
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  return {
+    state: {
+      ...state,
+      finalRevealIndex: nextIndex,
+      finalRevealStep: 'ANSWER',
+      lastOutcome: null,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
 }

@@ -68,6 +68,11 @@ export interface BoardView {
   finalEligiblePlayerIds: string[];
   finalWagerSubmissionStatus: Record<string, boolean>;
   finalAnswerSubmissionStatus: Record<string, boolean>;
+  finalRevealOrder: string[];
+  finalRevealIndex: number;
+  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER';
+  finalRevealedAnswers: Record<string, string>;
+  finalRevealedWagers: Record<string, number>;
   roundComplete: boolean;
   serverNow: number;
 }
@@ -94,6 +99,11 @@ export interface HostView {
   finalEligiblePlayerIds: string[];
   finalWagerSubmissionStatus: Record<string, boolean>;
   finalAnswerSubmissionStatus: Record<string, boolean>;
+  finalRevealOrder: string[];
+  finalRevealIndex: number;
+  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER';
+  finalRevealedAnswers: Record<string, string>;
+  finalRevealedWagers: Record<string, number>;
   roundComplete: boolean;
   serverNow: number;
 }
@@ -236,6 +246,34 @@ function getFinalAnswerSubmissionStatus(state: GameState): Record<string, boolea
   return status;
 }
 
+function getFinalRevealedAnswers(state: GameState): Record<string, string> {
+  if (state.phase !== 'FINAL_REVEAL') return {};
+  const revealed: Record<string, string> = {};
+  for (let i = 0; i < state.finalRevealOrder.length; i++) {
+    const playerId = state.finalRevealOrder[i];
+    if (i < state.finalRevealIndex) {
+      revealed[playerId] = state.finalAnswers[playerId] ?? '';
+    } else if (i === state.finalRevealIndex && (state.finalRevealStep === 'RULE' || state.finalRevealStep === 'WAGER')) {
+      revealed[playerId] = state.finalAnswers[playerId] ?? '';
+    }
+  }
+  return revealed;
+}
+
+function getFinalRevealedWagers(state: GameState): Record<string, number> {
+  if (state.phase !== 'FINAL_REVEAL') return {};
+  const revealed: Record<string, number> = {};
+  for (let i = 0; i < state.finalRevealOrder.length; i++) {
+    const playerId = state.finalRevealOrder[i];
+    if (i < state.finalRevealIndex) {
+      revealed[playerId] = state.finalWagers[playerId] ?? 0;
+    } else if (i === state.finalRevealIndex && state.finalRevealStep === 'WAGER') {
+      revealed[playerId] = state.finalWagers[playerId] ?? 0;
+    }
+  }
+  return revealed;
+}
+
 export function projectBoard(state: GameState, now: number): BoardView {
   const round = getCurrentRound(state);
   const currentClue = getCurrentClue(state);
@@ -263,6 +301,11 @@ export function projectBoard(state: GameState, now: number): BoardView {
     finalEligiblePlayerIds: getFinalEligiblePlayerIds(state),
     finalWagerSubmissionStatus: getFinalWagerSubmissionStatus(state),
     finalAnswerSubmissionStatus: getFinalAnswerSubmissionStatus(state),
+    finalRevealOrder: state.finalRevealOrder,
+    finalRevealIndex: state.finalRevealIndex,
+    finalRevealStep: state.finalRevealStep,
+    finalRevealedAnswers: getFinalRevealedAnswers(state),
+    finalRevealedWagers: getFinalRevealedWagers(state),
     roundComplete: isRoundComplete(state),
     serverNow: now,
   };
@@ -297,6 +340,11 @@ export function projectHost(state: GameState, now: number): HostView {
     finalEligiblePlayerIds: getFinalEligiblePlayerIds(state),
     finalWagerSubmissionStatus: getFinalWagerSubmissionStatus(state),
     finalAnswerSubmissionStatus: getFinalAnswerSubmissionStatus(state),
+    finalRevealOrder: state.finalRevealOrder,
+    finalRevealIndex: state.finalRevealIndex,
+    finalRevealStep: state.finalRevealStep,
+    finalRevealedAnswers: getFinalRevealedAnswers(state),
+    finalRevealedWagers: getFinalRevealedWagers(state),
     roundComplete: isRoundComplete(state),
     serverNow: now,
   };

@@ -19,6 +19,10 @@ export const ClientToServer = {
   OVERRIDE_CONTROL: 'override_control',
   ADJUST_SCORE: 'adjust_score',
   UNDO_LAST_RULING: 'undo_last_ruling',
+  REVEAL_FINAL_ANSWER: 'reveal_final_answer',
+  RULE_FINAL_CORRECT: 'rule_final_correct',
+  RULE_FINAL_INCORRECT: 'rule_final_incorrect',
+  REVEAL_FINAL_WAGER: 'reveal_final_wager',
 } as const;
 
 export type ClientToServerEvent = (typeof ClientToServer)[keyof typeof ClientToServer];
