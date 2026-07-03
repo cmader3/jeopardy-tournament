@@ -871,4 +871,105 @@ describe('BoardRoute', () => {
     expect(overlay.className).toMatch(/clueOverlay/);
     expect(overlay.className).toMatch(/fullScreen/);
   });
+
+  it('shows lit armed indicator lights only when buzzers are armed', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const lights = await screen.findByTestId('armed-indicator-lights');
+    expect(lights).toBeInTheDocument();
+    const bulbs = screen.getAllByTestId('armed-light');
+    expect(bulbs.length).toBeGreaterThan(0);
+  });
+
+  it('does not show armed indicator lights while a clue is merely revealed', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('clue-overlay');
+    expect(screen.queryByTestId('armed-indicator-lights')).not.toBeInTheDocument();
+  });
+
+  it('shows a countdown bar alongside the numeric countdown while armed', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('countdown')).toHaveTextContent('5');
+    expect(screen.getByTestId('countdown-bar')).toBeInTheDocument();
+  });
+
+  it('exposes a visible audio mute toggle on the board', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const toggle = await screen.findByTestId('audio-toggle');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toHaveAttribute('data-muted', 'false');
+  });
+
+  it('reflects the muted state in the audio toggle after clicking it', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const toggle = await screen.findByTestId('audio-toggle');
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveAttribute('data-muted', 'true');
+  });
 });

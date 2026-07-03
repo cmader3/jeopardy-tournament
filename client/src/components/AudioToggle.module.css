@@ -1,0 +1,39 @@
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-light);
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.toggle:hover {
+  background: rgba(214, 159, 40, 0.15);
+}
+
+.toggle[data-muted='true'] {
+  border-color: var(--incorrect-red);
+  color: var(--incorrect-red);
+}
+
+.icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle {
+    transition: none;
+  }
+}

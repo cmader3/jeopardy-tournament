@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useSocket } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
 import { FitText } from '../components/FitText.js';
 import { RoundBanner } from '../components/RoundBanner.js';
+import { AudioToggle } from '../components/AudioToggle.js';
+import { useBoardAudio } from '../hooks/useBoardAudio.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
 import styles from './board.module.css';
 
@@ -135,6 +137,18 @@ function ClueOverlay({ clueText, isDailyDouble }: ClueOverlayProps) {
   );
 }
 
+function ArmedLights() {
+  return (
+    <div className={styles.armedLights} data-testid="armed-indicator-lights" aria-hidden="true">
+      <span className={styles.armedLight} data-testid="armed-light" />
+      <span className={styles.armedLight} data-testid="armed-light" />
+      <span className={styles.armedLight} data-testid="armed-light" />
+      <span className={styles.armedLight} data-testid="armed-light" />
+      <span className={styles.armedLight} data-testid="armed-light" />
+    </div>
+  );
+}
+
 interface GameStatusBannerProps {
   state: BoardView;
 }
@@ -144,9 +158,10 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
     return (
       <div className={styles.statusGroup}>
         <div className={styles.armedIndicator} data-testid="armed-indicator">
+          <ArmedLights />
           BUZZERS ARMED
         </div>
-        <Countdown deadline={state.deadline} serverNow={state.serverNow} />
+        <Countdown deadline={state.deadline} serverNow={state.serverNow} showBar />
       </div>
     );
   }
@@ -154,7 +169,7 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
   if (state.phase === 'FINAL_CLUE') {
     return (
       <div className={styles.statusGroup}>
-        <Countdown deadline={state.deadline} serverNow={state.serverNow} />
+        <Countdown deadline={state.deadline} serverNow={state.serverNow} showBar />
       </div>
     );
   }
@@ -545,6 +560,40 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const [gameState, setGameState] = useState<BoardView | null>(null);
   const socket = useSocket<BoardView>('board', roomCode, setGameState);
   const state = gameState ?? socket.data;
+  const { muted, toggleMute, playCue } = useBoardAudio();
+
+  const prevPhaseRef = useRef<BoardView['phase'] | null>(null);
+  const prevDeadlineRef = useRef<number | null>(null);
+  const timeUpFiredForDeadlineRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!state) return;
+
+    const phase = state.phase;
+    const prevPhase = prevPhaseRef.current;
+    const deadline = state.deadline;
+
+    if (prevPhase !== 'BUZZERS_ARMED' && phase === 'BUZZERS_ARMED') {
+      playCue('armed');
+    }
+
+    if (prevPhase !== 'FINAL_CLUE' && phase === 'FINAL_CLUE') {
+      playCue('finalThink');
+    }
+
+    if (
+      deadline != null &&
+      deadline <= Date.now() &&
+      (phase === 'BUZZERS_ARMED' || phase === 'FINAL_CLUE') &&
+      timeUpFiredForDeadlineRef.current !== deadline
+    ) {
+      timeUpFiredForDeadlineRef.current = deadline;
+      playCue('timeUp');
+    }
+
+    prevPhaseRef.current = phase;
+    prevDeadlineRef.current = deadline;
+  }, [state, playCue]);
 
   if (socket.error) {
     return (
@@ -586,6 +635,7 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
         </p>
+        <AudioToggle muted={muted} onToggle={toggleMute} />
       </header>
       <div className={styles.stage}>{renderStage(state)}</div>
       <div className={styles.shareSection}>

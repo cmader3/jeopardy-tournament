@@ -1666,4 +1666,32 @@ describe('PlayRoute', () => {
     expect(overlay.className).toMatch(/clueOverlay/);
     expect(overlay.className).toMatch(/fullScreen/);
   });
+
+  it('does not expose audio elements or an audio toggle on the contestant view', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+      buzz: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    await screen.findByTestId('contestant-buzzer');
+    expect(screen.queryByTestId('audio-toggle')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('countdown-bar')).not.toBeInTheDocument();
+    expect(document.querySelector('audio')).not.toBeInTheDocument();
+  });
 });

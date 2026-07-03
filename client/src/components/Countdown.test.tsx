@@ -11,6 +11,52 @@ describe('Countdown', () => {
     expect(screen.getByTestId('countdown')).toHaveTextContent('5');
   });
 
+  it('renders a shrinking countdown bar whose width is based on remaining time', () => {
+    const serverNow = 0;
+    const deadline = serverNow + 5_000;
+    render(<Countdown deadline={deadline} serverNow={serverNow} showBar />);
+
+    const bar = screen.getByTestId('countdown-bar');
+    expect(bar).toHaveAttribute('data-width-percent', '100');
+  });
+
+  it('updates the bar width as time advances', () => {
+    vi.useFakeTimers();
+    const serverNow = 0;
+    const deadline = serverNow + 5_000;
+    render(<Countdown deadline={deadline} serverNow={serverNow} showBar />);
+
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
+
+    const bar = screen.getByTestId('countdown-bar');
+    const width = Number(bar.getAttribute('data-width-percent'));
+    expect(width).toBeGreaterThan(0);
+    expect(width).toBeLessThan(100);
+
+    vi.useRealTimers();
+  });
+
+  it('resets the bar width when the deadline changes to a larger remaining value', () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<Countdown deadline={5_000} serverNow={0} showBar />);
+
+    act(() => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    let bar = screen.getByTestId('countdown-bar');
+    expect(Number(bar.getAttribute('data-width-percent'))).toBeLessThan(100);
+
+    // Re-arm with a fresh deadline: 10 seconds from the new serverNow.
+    rerender(<Countdown deadline={13_000} serverNow={3_000} showBar />);
+    bar = screen.getByTestId('countdown-bar');
+    expect(Number(bar.getAttribute('data-width-percent'))).toBe(100);
+
+    vi.useRealTimers();
+  });
+
   it('decrements visibly over time', () => {
     vi.useFakeTimers();
     const serverNow = 0;

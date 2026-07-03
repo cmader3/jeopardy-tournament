@@ -63,11 +63,12 @@
 .header {
   padding: 1rem 1.5rem;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 2px solid var(--value-gold);
   background: rgba(0, 0, 0, 0.2);
+  flex-wrap: wrap;
 }
 
 .headerTitle {
@@ -344,6 +345,52 @@
 
 .armedIndicator {
   animation: pulse 1s infinite;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.armedLights {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.armedLight {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  animation: lightBlink 0.8s infinite alternate;
+}
+
+.armedLight:nth-child(1) {
+  animation-delay: 0s;
+}
+.armedLight:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.armedLight:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.armedLight:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.armedLight:nth-child(5) {
+  animation-delay: 0.4s;
+}
+
+@keyframes lightBlink {
+  from {
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+  to {
+    background: var(--value-gold);
+    box-shadow: 0 0 0.5rem var(--value-gold), inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
 }
 
 @keyframes pulse {
@@ -371,9 +418,14 @@
   .clueOverlay,
   .fullScreen,
   .armedIndicator,
-  .buzzedIndicator {
+  .buzzedIndicator,
+  .armedLight {
     animation: none;
     transition: none;
+  }
+
+  .armedLight {
+    background: var(--value-gold);
   }
 }
 
