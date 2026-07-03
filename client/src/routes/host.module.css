@@ -192,6 +192,7 @@
   justify-content: center;
   text-align: center;
   font-family: var(--font-board-header);
+  font-weight: 700;
   font-size: clamp(0.75rem, 1.5vw, 1.25rem);
   text-transform: uppercase;
   color: var(--text-light);
@@ -207,9 +208,14 @@
   text-align: center;
   aspect-ratio: 16 / 9;
   color: var(--value-gold);
-  font-family: var(--font-value);
+  font-family: var(--font-board-header);
   font-size: clamp(1rem, 2vw, 2rem);
   cursor: pointer;
+}
+
+.value {
+  font-family: var(--font-board-header);
+  color: var(--value-gold);
 }
 
 .hostCell:disabled {

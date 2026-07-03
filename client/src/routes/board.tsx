@@ -121,7 +121,7 @@ interface ClueOverlayProps {
 
 function ClueOverlay({ clueText, isDailyDouble }: ClueOverlayProps) {
   return (
-    <div className={styles.clueOverlay} data-testid="clue-overlay">
+    <div className={`${styles.clueOverlay} ${styles.fullScreen}`} data-testid="clue-overlay">
       {isDailyDouble ? (
         <div className={styles.dailyDoubleSplash} data-testid="daily-double-splash">
           DAILY DOUBLE

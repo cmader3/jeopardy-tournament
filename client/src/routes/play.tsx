@@ -7,6 +7,7 @@ import {
 import { Countdown } from '../components/Countdown.js';
 import { useServerTime } from '../hooks/useServerTime.js';
 import type { ContestantView } from '@jeopardy/shared';
+import styles from './play.module.css';
 
 interface JoinForm {
   roomCode: string;
@@ -88,15 +89,7 @@ function Buzzer({
       aria-label={label}
       disabled={!canBuzz}
       onClick={handlePress}
-      style={{
-        width: '100%',
-        minHeight: '50vh',
-        fontSize: '2rem',
-        fontWeight: 'bold',
-        textTransform: 'uppercase',
-        touchAction: 'manipulation',
-        userSelect: 'none',
-      }}
+      className={styles.buzzer}
     >
       {label}
     </button>
@@ -139,31 +132,31 @@ function ContestantGrid({
 
   return (
     <div
-      className="contestant-grid"
+      className={styles.grid}
       data-testid="contestant-grid"
-      style={{ display: 'grid', gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)`, gap: '0.5rem' }}
+      style={{ gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)` }}
     >
       {state.round.categories.map((category) => (
-        <div key={category.id} className="contestant-category-header" data-testid="contestant-category-header">
+        <div key={category.id} className={styles.categoryHeader} data-testid="contestant-category-header">
           {category.title}
         </div>
       ))}
       {rows.map((row) =>
         state.round!.categories.map((category) => {
           const clue = category.clues.find((c) => c.row === row);
-          if (!clue) return <div key={`${category.id}-${row}`} className="contestant-cell" />;
+          if (!clue) return <div key={`${category.id}-${row}`} className={styles.cell} />;
           const used = state.usedClueIds.includes(clue.id);
           return (
             <button
               key={clue.id}
               type="button"
-              className="contestant-cell"
+              className={styles.cell}
               data-testid={used ? 'contestant-used-cell' : 'contestant-clue-cell'}
               data-clue-id={clue.id}
               disabled={used || !canSelect}
               onClick={() => onSelectClue?.(clue.id)}
             >
-              {used ? '' : `$${clue.value}`}
+              {used ? '' : <span className={styles.value}>${clue.value}</span>}
             </button>
           );
         }),
@@ -198,7 +191,7 @@ function DailyDoubleWager({
   if (!state.isControllingPlayer) {
     return (
       <div data-testid="daily-double-passive">
-        <p data-testid="daily-double-splash">DAILY DOUBLE</p>
+        <p className={styles.dailyDoubleSplash} data-testid="daily-double-splash">DAILY DOUBLE</p>
         <p>Waiting for {controllerName} to wager.</p>
       </div>
     );
@@ -207,7 +200,7 @@ function DailyDoubleWager({
   if (isLocked) {
     return (
       <div data-testid="daily-double-wager-locked">
-        <p data-testid="daily-double-splash">DAILY DOUBLE</p>
+        <p className={styles.dailyDoubleSplash} data-testid="daily-double-splash">DAILY DOUBLE</p>
         <p data-testid="dd-wager-locked-amount">Your wager: {'$'}{state.dailyDoubleWager}</p>
       </div>
     );
@@ -245,7 +238,7 @@ function DailyDoubleWager({
 
   return (
     <div data-testid="daily-double-wager-input">
-      <p data-testid="daily-double-splash">DAILY DOUBLE</p>
+      <p className={styles.dailyDoubleSplash} data-testid="daily-double-splash">DAILY DOUBLE</p>
       <p>Enter your wager ({'$'}{minWager} - {'$'}{maxWager})</p>
       <input
         type="number"
@@ -255,6 +248,7 @@ function DailyDoubleWager({
         min={minWager}
         max={maxWager}
         data-testid="dd-wager-input"
+        className={styles.input}
         aria-invalid={displayError ? 'true' : undefined}
         aria-describedby={displayError ? 'dd-wager-error' : undefined}
       />
@@ -262,7 +256,7 @@ function DailyDoubleWager({
         <p
           id="dd-wager-error"
           data-testid="dd-wager-error"
-          className="error"
+          className={styles.error}
           role="alert"
           aria-live="polite"
         >
@@ -271,6 +265,7 @@ function DailyDoubleWager({
       )}
       <button
         type="button"
+        className={styles.button}
         onClick={handleSubmit}
         data-testid="dd-wager-submit"
       >
@@ -346,7 +341,7 @@ function FinalWager({
 
   return (
     <div data-testid="final-wager-input">
-      <p data-testid="final-wager-heading">Final Jeopardy Wager</p>
+      <p className={styles.finalHeading} data-testid="final-wager-heading">Final Jeopardy Wager</p>
       <p>Enter your wager ({'$'}0 - {'$'}{maxWager})</p>
       <input
         type="number"
@@ -356,6 +351,7 @@ function FinalWager({
         min={0}
         max={maxWager}
         data-testid="final-wager-amount-input"
+        className={styles.input}
         aria-invalid={displayError ? 'true' : undefined}
         aria-describedby={displayError ? 'final-wager-error' : undefined}
       />
@@ -363,14 +359,14 @@ function FinalWager({
         <p
           id="final-wager-error"
           data-testid="final-wager-error"
-          className="error"
+          className={styles.error}
           role="alert"
           aria-live="polite"
         >
           {displayError}
         </p>
       )}
-      <button type="button" onClick={handleSubmit} data-testid="final-wager-submit">
+      <button type="button" className={styles.button} onClick={handleSubmit} data-testid="final-wager-submit">
         Submit Wager
       </button>
     </div>
@@ -488,7 +484,7 @@ function FinalAnswer({
 
   return (
     <div data-testid="final-answer-input">
-      <p data-testid="final-answer-heading">Final Jeopardy Answer</p>
+      <p className={styles.finalHeading} data-testid="final-answer-heading">Final Jeopardy Answer</p>
       <p>Enter your written answer before time expires.</p>
       <textarea
         value={answer}
@@ -497,20 +493,20 @@ function FinalAnswer({
         aria-invalid={displayError ? 'true' : undefined}
         aria-describedby={displayError ? 'final-answer-error' : undefined}
         rows={3}
-        style={{ width: '100%', fontSize: '1.25rem' }}
+        className={styles.textarea}
       />
       {displayError && (
         <p
           id="final-answer-error"
           data-testid="final-answer-error"
-          className="error"
+          className={styles.error}
           role="alert"
           aria-live="polite"
         >
           {displayError}
         </p>
       )}
-      <button type="button" onClick={handleSubmit} data-testid="final-answer-submit">
+      <button type="button" className={styles.button} onClick={handleSubmit} data-testid="final-answer-submit">
         Submit Answer
       </button>
     </div>
@@ -588,13 +584,21 @@ function FinalStandings({ state }: { state: ContestantView }) {
       )}
       <h2 data-testid="contestant-final-standings-heading">Final Standings</h2>
       <p data-testid="contestant-final-standings-self">
-        Your final score: {me?.score ?? 0}
+        Your final score:{' '}
+        <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
+          {me?.score ?? 0}
+        </span>
       </p>
       <ul data-testid="contestant-final-standings-list">
         {sorted.map((player) => (
           <li key={player.id} data-testid="contestant-final-standing">
             <span data-testid={`contestant-final-standing-name-${player.id}`}>{player.name}</span>
-            <span data-testid={`contestant-final-standing-score-${player.id}`}>{player.score}</span>
+            <span
+              data-testid={`contestant-final-standing-score-${player.id}`}
+              className={player.score < 0 ? styles.negativeScore : styles.scoreDisplay}
+            >
+              {player.score}
+            </span>
             {coWinners.includes(player.id) && (
               <span data-testid={`contestant-final-winner-${player.id}`}>Winner</span>
             )}
@@ -646,13 +650,13 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
       : null;
 
   return (
-    <main className="route-stub">
-      <h1>Play</h1>
-      <p className="room-code" data-testid="room-code">
+    <main className={styles.play}>
+      <h1 className={styles.title}>Play</h1>
+      <p className={styles.roomCode} data-testid="room-code">
         Room Code: {roomCode}
       </p>
       {isJoinError && (
-        <div className="error" role="alert" data-testid="join-error">
+        <div className={styles.error} role="alert" data-testid="join-error">
           <p>{error}</p>
           <button type="button" onClick={onTryAgain}>
             Try Again
@@ -660,14 +664,19 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
         </div>
       )}
       {isTransientError && (
-        <div className="error-toast" role="status" data-testid="transient-error" aria-live="polite">
+        <div className={styles.errorToast} role="status" data-testid="transient-error" aria-live="polite">
           {error}
         </div>
       )}
       {gameState && (
-        <div className="contestant-state">
+        <div className={styles.state}>
           <p>Welcome, {me?.name ?? 'Contestant'}</p>
-          <p>Score: {me?.score ?? 0}</p>
+          <p>
+            Score:{' '}
+            <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
+              {me?.score ?? 0}
+            </span>
+          </p>
           {gameState.phase === 'LOBBY' && (
             <>
               <p>Waiting for the host to start the game.</p>
@@ -698,9 +707,9 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           )}
           {gameState.phase === 'FINAL_INTRO' && (
             <div data-testid="contestant-final-intro">
-              <h2 data-testid="contestant-final-heading">Final Jeopardy!</h2>
-              <p data-testid="contestant-final-category">
-                Category: {gameState.round?.categories[0]?.title ?? 'Final Category'}
+              <h2 className={styles.finalHeading} data-testid="contestant-final-heading">Final Jeopardy!</h2>
+              <p className={styles.finalCategory} data-testid="contestant-final-category">
+                {gameState.round?.categories[0]?.title ?? 'Final Category'}
               </p>
               {gameState.isEligibleForFinal ? (
                 <p data-testid="contestant-final-eligible">You are eligible for Final Jeopardy. Wait for the host to open wagers.</p>
@@ -730,8 +739,8 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             </>
           )}
           {showClue && (
-            <div className="clue-overlay" data-testid="contestant-clue-overlay">
-              <p data-testid="contestant-clue-text">{gameState.currentClueText}</p>
+            <div className={`${styles.clueOverlay} ${styles.fullScreen}`} data-testid="contestant-clue-overlay">
+              <p className={styles.clueText} data-testid="contestant-clue-text">{gameState.currentClueText}</p>
             </div>
           )}
           {showBuzzer && (
@@ -797,9 +806,10 @@ export function PlayRoute() {
   }
 
   return (
-    <main className="route-stub">
-      <h1>Join Game</h1>
+    <main className={styles.entry}>
+      <h1 className={styles.title}>Join Game</h1>
       <form
+        className={styles.form}
         onSubmit={(e) => {
           e.preventDefault();
           if (!trimmedRoomCode) {
@@ -815,13 +825,14 @@ export function PlayRoute() {
         }}
       >
         {validationError && (
-          <p className="error" role="alert">
+          <p className={styles.error} role="alert">
             {validationError}
           </p>
         )}
         <label htmlFor="play-room-code">Room Code</label>
         <input
           id="play-room-code"
+          className={styles.input}
           value={form.roomCode}
           onChange={(e) => {
             setForm({ ...form, roomCode: e.target.value });
@@ -832,6 +843,7 @@ export function PlayRoute() {
         <label htmlFor="play-name">Your Name</label>
         <input
           id="play-name"
+          className={styles.input}
           value={form.name}
           onChange={(e) => {
             setForm({ ...form, name: e.target.value });
@@ -839,7 +851,7 @@ export function PlayRoute() {
           }}
           placeholder="Your name"
         />
-        <button type="submit" disabled={!canSubmit}>
+        <button type="submit" className={styles.button} disabled={!canSubmit}>
           Join Game
         </button>
       </form>

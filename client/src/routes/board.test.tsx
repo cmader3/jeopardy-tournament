@@ -851,4 +851,24 @@ describe('BoardRoute', () => {
     expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
     expect(screen.queryByText('Tolkien')).not.toBeInTheDocument();
   });
+
+  it('styles the full-screen clue overlay with a dedicated theme class', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const overlay = await screen.findByTestId('clue-overlay');
+    expect(overlay.className).toMatch(/clueOverlay/);
+    expect(overlay.className).toMatch(/fullScreen/);
+  });
 });

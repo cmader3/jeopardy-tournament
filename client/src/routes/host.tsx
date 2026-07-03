@@ -22,7 +22,7 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
   const canStart = connectedCount > 0;
 
   return (
-    <main className={`${styles.hostLobby} route-stub`}>
+    <main className={styles.hostLobby}>
       <h1>Host Lobby</h1>
       <p className={styles.roomCode} data-testid="room-code">
         Room Code: {roomCode}
@@ -135,7 +135,7 @@ function HostGrid({
               disabled={used}
               onClick={() => onSelectClue?.(clue.id)}
             >
-              {used ? '' : `$${clue.value}`}
+              {used ? '' : <span className={styles.value}>${clue.value}</span>}
             </button>
           );
         }),
@@ -613,7 +613,7 @@ export function HostInProgress({
 
   if (state?.phase === 'ROUND_TRANSITION') {
     return (
-      <main className={`${styles.hostInProgress} route-stub`}>
+      <main className={styles.hostInProgress}>
         <h1>Game in Progress</h1>
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
@@ -628,7 +628,7 @@ export function HostInProgress({
 
   if (state?.phase === 'FINAL_INTRO') {
     return (
-      <main className={`${styles.hostInProgress} route-stub`}>
+      <main className={styles.hostInProgress}>
         <h1>Game in Progress</h1>
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
@@ -643,7 +643,7 @@ export function HostInProgress({
 
   if (state?.phase === 'FINAL_WAGER') {
     return (
-      <main className={`${styles.hostInProgress} route-stub`}>
+      <main className={styles.hostInProgress}>
         <h1>Game in Progress</h1>
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
@@ -658,7 +658,7 @@ export function HostInProgress({
 
   if (state?.phase === 'FINAL_CLUE') {
     return (
-      <main className={`${styles.hostInProgress} route-stub`}>
+      <main className={styles.hostInProgress}>
         <h1>Game in Progress</h1>
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
@@ -673,7 +673,7 @@ export function HostInProgress({
 
   if (state?.phase === 'FINAL_REVEAL') {
     return (
-      <main className={`${styles.hostInProgress} route-stub`}>
+      <main className={styles.hostInProgress}>
         <h1>Game in Progress</h1>
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
@@ -694,7 +694,7 @@ export function HostInProgress({
 
   if (state?.phase === 'COMPLETE') {
     return (
-      <main className={`${styles.hostInProgress} route-stub`}>
+      <main className={styles.hostInProgress}>
         <h1>Game in Progress</h1>
         <p className={styles.roomCode} data-testid="room-code">
           Room Code: {roomCode}
@@ -708,7 +708,7 @@ export function HostInProgress({
   }
 
   return (
-    <main className={`${styles.hostInProgress} route-stub`}>
+    <main className={styles.hostInProgress}>
       <h1>Game in Progress</h1>
       <p className={styles.roomCode} data-testid="room-code">
         Room Code: {roomCode}

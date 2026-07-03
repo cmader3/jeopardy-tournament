@@ -402,7 +402,9 @@ describe('PlayRoute', () => {
     await userEvent.type(nameInput, 'Alice');
     await userEvent.click(button);
 
-    expect(await screen.findByTestId('daily-double-splash')).toBeInTheDocument();
+    const splash = await screen.findByTestId('daily-double-splash');
+    expect(splash).toBeInTheDocument();
+    expect(splash.className).toMatch(/dailyDoubleSplash/);
   });
 
   it('shows a wager input only to the controlling contestant during a Daily Double', async () => {
@@ -1162,6 +1164,37 @@ describe('PlayRoute', () => {
     expect(screen.getByTestId('final-wager-error')).toHaveTextContent(/cannot exceed/i);
   });
 
+  it('styles the Final Jeopardy header and category on the contestant view', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_INTRO',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        isEligibleForFinal: true,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    const heading = await screen.findByTestId('contestant-final-heading');
+    expect(heading).toHaveTextContent('Final Jeopardy!');
+    expect(heading.className).toMatch(/finalHeading/);
+    const category = screen.getByTestId('contestant-final-category');
+    expect(category).toHaveTextContent('Literature');
+    expect(category.className).toMatch(/finalCategory/);
+  });
+
   it('shows the Final clue text during FINAL_CLUE', async () => {
     mockUseSocket(
       makeContestantState({
@@ -1559,5 +1592,78 @@ describe('PlayRoute', () => {
     expect(screen.getByTestId('contestant-final-standing-score-p1')).toHaveTextContent('0');
     expect(screen.getByTestId('contestant-final-standing-name-p2')).toHaveTextContent('Bob');
     expect(screen.getByTestId('contestant-final-standing-score-p2')).toHaveTextContent('-100');
+  });
+
+  it('styles the buzzer with a themed CSS module class', async () => {
+    const buzz = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+      buzz,
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer.className).toMatch(/buzzer/);
+  });
+
+  it('styles the contestant grid with the shared theme value class', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+      }),
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const grid = await screen.findByTestId('contestant-grid');
+    const cell = grid.querySelector('[data-testid="contestant-clue-cell"]');
+    expect(cell).toBeTruthy();
+    expect(cell?.className).toMatch(/cell/);
+    expect(cell?.querySelector('span')?.className).toMatch(/value/);
+  });
+
+  it('styles the revealed clue overlay with the shared theme overlay class', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+      }),
+    });
+
+    render(<PlayRoute />);
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    const overlay = await screen.findByTestId('contestant-clue-overlay');
+    expect(overlay.className).toMatch(/clueOverlay/);
+    expect(overlay.className).toMatch(/fullScreen/);
   });
 });

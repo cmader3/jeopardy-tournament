@@ -1003,4 +1003,18 @@ describe('HostInProgress score tools', () => {
     expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
     expect(screen.queryByText('J.R.R. Tolkien')).not.toBeInTheDocument();
   });
+
+  it('wraps host grid dollar values in a themed value span', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    const cells = screen.getAllByTestId('host-clue-cell');
+    expect(cells[0].className).toMatch(/hostCell/);
+    const valueSpan = cells[0].querySelector('span');
+    expect(valueSpan).toBeTruthy();
+    expect(valueSpan?.className).toMatch(/value/);
+  });
 });
