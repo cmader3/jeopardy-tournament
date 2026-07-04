@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { HostLobby, HostInProgress, HostContent } from './host.js';
+import { HostLobby, HostInProgress, HostContent, HostGameControls } from './host.js';
 import type { HostView } from '@jeopardy/shared';
 
 vi.mock('../auth/useHostAuth.js', () => ({ useHostAuth: vi.fn() }));
@@ -219,6 +219,45 @@ describe('HostLobby', () => {
 
     expect(screen.getByTestId('start-game-button')).toBeInTheDocument();
     expect(screen.queryByText('Game started!')).not.toBeInTheDocument();
+  });
+});
+
+describe('HostGameControls', () => {
+  it('restarts only after confirming in the warning dialog', async () => {
+    const onRestart = vi.fn();
+    render(<HostGameControls onRestart={onRestart} onBackToMenu={vi.fn()} />);
+
+    await userEvent.click(screen.getByTestId('restart-game-button'));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(onRestart).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId('confirm-restart-button'));
+    expect(onRestart).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('cancels the restart without calling the handler', async () => {
+    const onRestart = vi.fn();
+    render(<HostGameControls onRestart={onRestart} onBackToMenu={vi.fn()} />);
+
+    await userEvent.click(screen.getByTestId('restart-game-button'));
+    await userEvent.click(screen.getByTestId('cancel-restart-button'));
+
+    expect(onRestart).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('returns to the menu only after confirming', async () => {
+    const onBackToMenu = vi.fn();
+    render(<HostGameControls onRestart={vi.fn()} onBackToMenu={onBackToMenu} />);
+
+    await userEvent.click(screen.getByTestId('back-to-menu-button'));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(onBackToMenu).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId('confirm-back-to-menu-button'));
+    expect(onBackToMenu).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 });
 

@@ -11,6 +11,7 @@ export interface SocketState<T> {
   error: string | null;
   data: T | null;
   startGame?: () => void;
+  restartGame?: () => void;
   leaveGame?: () => void;
   selectClue?: (clueId: string) => void;
   revealClue?: () => void;
@@ -112,6 +113,10 @@ export function useSocket<T>(
     socketRef.current?.emit('start_game');
   }, []);
 
+  const restartGame = useCallback(() => {
+    socketRef.current?.emit('restart_game');
+  }, []);
+
   const leaveGame = useCallback(() => {
     socketRef.current?.emit('leave');
   }, []);
@@ -208,7 +213,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
+  return { connected, error, data, startGame, restartGame, leaveGame, selectClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
 }
 
 export function getStoredContestantToken(): {

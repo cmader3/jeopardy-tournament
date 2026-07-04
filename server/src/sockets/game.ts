@@ -146,6 +146,25 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('restart_game', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can restart the game' });
+        return;
+      }
+
+      try {
+        const result = await engine.restartGame(meta.roomCode);
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Restart game failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('select_clue', async (payload: { clueId: string }) => {
       const meta = getSocketMeta(socket);
       if (!meta) {

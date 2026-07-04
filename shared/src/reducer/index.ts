@@ -11,6 +11,7 @@ export type Intent =
   | { type: 'DISCONNECT'; playerId: string }
   | { type: 'RECONNECT'; playerId: string }
   | { type: 'START_GAME' }
+  | { type: 'RESTART_GAME' }
   | { type: 'SELECT_CLUE'; clueId: string; selectorId?: string; hostOverride?: boolean }
   | { type: 'ARM_BUZZERS' }
   | { type: 'BUZZ'; playerId: string }
@@ -93,6 +94,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleReconnect(state, intent.playerId);
     case 'START_GAME':
       return handleStartGame(state);
+    case 'RESTART_GAME':
+      return handleRestartGame(state);
     case 'SELECT_CLUE':
       return handleSelectClue(state, intent);
     case 'ARM_BUZZERS':
@@ -223,6 +226,15 @@ function handleReconnect(state: GameState, playerId: string): ReducerResult {
   const updated = state.players.map((p) => (p.id === playerId ? { ...p, connected: true } : p));
   return {
     state: { ...state, players: updated },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRestartGame(state: GameState): ReducerResult {
+  const fresh = createInitialState(state.sessionId, state.roomCode, state.board);
+  const players = state.players.map((player) => ({ ...player, score: 0 }));
+  return {
+    state: { ...fresh, players },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

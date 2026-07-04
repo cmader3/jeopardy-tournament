@@ -885,6 +885,85 @@ export function HostInProgress({
   );
 }
 
+export function HostGameControls({
+  onRestart,
+  onBackToMenu,
+}: {
+  onRestart: () => void;
+  onBackToMenu: () => void;
+}) {
+  const [confirm, setConfirm] = useState<null | 'restart' | 'menu'>(null);
+
+  return (
+    <>
+      <div className={styles.gameControlsBar}>
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={() => setConfirm('restart')}
+          data-testid="restart-game-button"
+        >
+          Restart Game
+        </button>
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={() => setConfirm('menu')}
+          data-testid="back-to-menu-button"
+        >
+          Back to Menu
+        </button>
+      </div>
+      {confirm === 'restart' && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
+          <div className={styles.confirmCard}>
+            <p>Restart the game? All scores and progress will be cleared and players return to the lobby.</p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => {
+                  onRestart();
+                  setConfirm(null);
+                }}
+                data-testid="confirm-restart-button"
+              >
+                Restart Game
+              </button>
+              <button type="button" onClick={() => setConfirm(null)} data-testid="cancel-restart-button">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirm === 'menu' && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
+          <div className={styles.confirmCard}>
+            <p>Leave this game and return to the menu? The current game will be abandoned.</p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => {
+                  onBackToMenu();
+                  setConfirm(null);
+                }}
+                data-testid="confirm-back-to-menu-button"
+              >
+                Back to Menu
+              </button>
+              <button type="button" onClick={() => setConfirm(null)} data-testid="cancel-back-to-menu-button">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 const HOST_ROOM_KEY = 'jeopardy-host-room';
 
 export function HostContent() {
@@ -928,6 +1007,9 @@ export function HostContent() {
   const hostSocket = useSocket<HostView>('host', roomCode ?? '', setGameState, undefined, undefined, token ?? '');
   const handleStartGame = useCallback(() => {
     hostSocket.startGame?.();
+  }, [hostSocket]);
+  const handleRestartGame = useCallback(() => {
+    hostSocket.restartGame?.();
   }, [hostSocket]);
   const handleSelectClue = useCallback(
     (clueId: string) => {
@@ -1007,7 +1089,9 @@ export function HostContent() {
       );
     }
     return (
-      <HostInProgress
+      <>
+        <HostGameControls onRestart={handleRestartGame} onBackToMenu={handleCreateNewGame} />
+        <HostInProgress
         roomCode={roomCode}
         state={gameState}
         onSelectClue={handleSelectClue}
@@ -1027,7 +1111,8 @@ export function HostContent() {
         onRuleFinalCorrect={handleRuleFinalCorrect}
         onRuleFinalIncorrect={handleRuleFinalIncorrect}
         onRevealFinalWager={handleRevealFinalWager}
-      />
+        />
+      </>
     );
   }
 

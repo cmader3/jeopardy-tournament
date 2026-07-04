@@ -157,6 +157,12 @@ export class GameEngine {
     return result;
   }
 
+  async restartGame(roomCode: string): Promise<ReducerResult> {
+    const result = await this.applyIntent(roomCode, { type: 'RESTART_GAME' }, { now: Date.now() });
+    await this.sessionRepo.updateStatus(result.state.sessionId, GameSessionStatus.LOBBY);
+    return result;
+  }
+
   async persistSnapshot(state: GameState): Promise<void> {
     await this.sessionRepo.updateSnapshot(state.sessionId, JSON.stringify(state));
   }

@@ -1305,3 +1305,52 @@ describe('Daily Double wager state reset', () => {
     expect(secondSubmit.state.dailyDoubleWager).toBe(200);
   });
 });
+
+describe('RESTART_GAME', () => {
+  it('resets an in-progress game to the lobby, preserving players with cleared scores', () => {
+    const board = makeBoard();
+    const base = createInitialState('session-1', 'ABCD', board);
+    const state: GameState = {
+      ...base,
+      phase: 'BOARD_SELECT',
+      players: [
+        makePlayer({ id: 'p1', name: 'Alice', score: 800, seatOrder: 0, reconnectToken: 'token-alice' }),
+        makePlayer({ id: 'p2', name: 'Bob', score: -200, seatOrder: 1, reconnectToken: 'token-bob' }),
+      ],
+      controllingPlayerId: 'p1',
+      usedClueIds: ['cl1', 'cl3'],
+      currentClueId: 'cl2',
+    };
+
+    const result = reduce(state, { type: 'RESTART_GAME' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('LOBBY');
+    expect(result.state.players.map((p) => p.id)).toEqual(['p1', 'p2']);
+    expect(result.state.players.map((p) => p.score)).toEqual([0, 0]);
+    expect(result.state.players.map((p) => p.reconnectToken)).toEqual(['token-alice', 'token-bob']);
+    expect(result.state.controllingPlayerId).toBeNull();
+    expect(result.state.usedClueIds).toEqual([]);
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.roundIndex).toBe(0);
+    expect(result.state.board).toBe(board);
+  });
+
+  it('preserves player connection status on restart', () => {
+    const board = makeBoard();
+    const base = createInitialState('session-1', 'ABCD', board);
+    const state: GameState = {
+      ...base,
+      phase: 'BUZZED',
+      players: [
+        makePlayer({ id: 'p1', name: 'Alice', score: 400, connected: true }),
+        makePlayer({ id: 'p2', name: 'Bob', score: 100, connected: false, reconnectToken: 'token-bob' }),
+      ],
+    };
+
+    const result = reduce(state, { type: 'RESTART_GAME' }, { now: NOW });
+
+    expect(result.state.players.map((p) => p.connected)).toEqual([true, false]);
+    expect(result.state.phase).toBe('LOBBY');
+  });
+});
