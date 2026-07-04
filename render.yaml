@@ -13,10 +13,6 @@ services:
       - key: TOKEN_SECRET
         generateValue: true
       - key: DATABASE_URL
-        value: file:/opt/render/project/src/server/data/jeopardy.db
+        sync: false
       - key: PORT
         value: 10000
-    disk:
-      name: jeopardy-data
-      mountPath: /opt/render/project/src/server/data
-      sizeGB: 1
