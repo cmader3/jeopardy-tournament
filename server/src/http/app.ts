@@ -24,7 +24,11 @@ export function createApp(engine: GameEngine = new GameEngine()) {
   const clientDist = join(__dirname, '../../../client/dist');
   if (process.env.NODE_ENV === 'production' && existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    app.get('*', (_req, res) => {
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api')) {
+        next();
+        return;
+      }
       res.sendFile(join(clientDist, 'index.html'));
     });
   }
