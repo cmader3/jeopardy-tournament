@@ -42,6 +42,7 @@ function AdminContent() {
           setSelectedBoard(null);
           setView('library');
         }}
+        onImport={() => setView('import')}
       />
     );
   }

@@ -446,7 +446,8 @@
   border-radius: 0.25rem;
   min-height: 2.5rem;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
   scroll-margin-top: 5rem;
 }

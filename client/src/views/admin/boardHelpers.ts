@@ -131,17 +131,23 @@ export function computeResizeImpact(
   let affectedCells = 0;
   let wouldDelete = false;
 
+  // Only clue content counts as "populated"; auto-generated titles and default
+  // tier values must not trigger the confirmation prompt.
+  const isPopulated = (clue: Clue): boolean => isAuthoredClue(clue) || clue.isDailyDouble;
+
   for (let i = desiredCategories; i < round.categories.length; i += 1) {
-    if (isAuthoredCategory(round.categories[i])) {
-      wouldDelete = true;
-      affectedCells += round.categories[i].clues.length;
+    for (const clue of round.categories[i].clues) {
+      if (isPopulated(clue)) {
+        wouldDelete = true;
+        affectedCells += 1;
+      }
     }
   }
 
   for (let i = 0; i < Math.min(desiredCategories, round.categories.length); i += 1) {
     const category = round.categories[i];
     for (let row = desiredRows; row < category.clues.length; row += 1) {
-      if (isAuthoredClue(category.clues[row])) {
+      if (isPopulated(category.clues[row])) {
         wouldDelete = true;
         affectedCells += 1;
       }

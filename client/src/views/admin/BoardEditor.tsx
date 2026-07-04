@@ -32,6 +32,7 @@ interface BoardEditorProps {
   token: string;
   api: BoardApiClient;
   onBack: () => void;
+  onImport?: () => void;
 }
 
 interface PendingResize {
@@ -46,7 +47,7 @@ interface PendingDelete {
   categoryTitle: string;
 }
 
-export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
+export function BoardEditor({ board, token, api, onBack, onImport }: BoardEditorProps) {
   const [draft, setDraft] = useState<BoardWithRounds>(board);
   const [settings, setSettings] = useState(() => deriveSettings(board));
   const [pendingResize, setPendingResize] = useState<PendingResize | null>(null);
@@ -264,6 +265,15 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
     onBack();
   };
 
+  const handleImport = () => {
+    if (!onImport) return;
+    if (hasChanges) {
+      const confirmed = window.confirm('You have unsaved changes. Leave without saving?');
+      if (!confirmed) return;
+    }
+    onImport();
+  };
+
   const timerErrorClass = (value: string): string | undefined => {
     return parsePositiveInteger(value) === null ? styles.invalidInput : undefined;
   };
@@ -280,6 +290,16 @@ export function BoardEditor({ board, token, api, onBack }: BoardEditorProps) {
             <span className={styles.incompleteIndicator}>Incomplete</span>
           )}
           {hasChanges && <span className={styles.unsavedIndicator}>Unsaved changes</span>}
+          {onImport && (
+            <button
+              type="button"
+              className={styles.importButton}
+              onClick={handleImport}
+              disabled={isSaving}
+            >
+              Import (CSV or XLSX)
+            </button>
+          )}
           <button
             type="button"
             className={styles.saveButton}
