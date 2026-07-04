@@ -164,11 +164,16 @@ function AnswerBanner({ state }: { state: ContestantView }) {
         : null;
 
   return (
-    <div data-testid="contestant-answer-banner" role="status" aria-live="polite">
-      <p>
-        Answer: <strong data-testid="contestant-answer-text">{state.answer}</strong>
+    <div className={styles.answerBanner} data-testid="contestant-answer-banner" role="status" aria-live="polite">
+      <p className={styles.answerLabel}>Answer</p>
+      <p className={styles.answerValue}>
+        <strong data-testid="contestant-answer-text">{state.answer}</strong>
       </p>
-      {outcomeLabel && <p data-testid="contestant-outcome-label">{outcomeLabel}</p>}
+      {outcomeLabel && (
+        <p className={styles.outcomeLabel} data-testid="contestant-outcome-label">
+          {outcomeLabel}
+        </p>
+      )}
     </div>
   );
 }
@@ -707,10 +712,12 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
 
   return (
     <main className={styles.play}>
-      <h1 className={styles.title}>Play</h1>
-      <p className={styles.roomCode} data-testid="room-code">
-        Room Code: {roomCode}
-      </p>
+      <header className={styles.playerBar}>
+        <span className={styles.playerBrand}>Jeopardy!</span>
+        <p className={styles.roomCode} data-testid="room-code">
+          Room Code: {roomCode}
+        </p>
+      </header>
       {isJoinError && (
         <div className={styles.error} role="alert" data-testid="join-error">
           <p>{error}</p>
@@ -726,14 +733,14 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
       )}
       {gameState && (
         <div className={styles.state}>
-          <p>Welcome, {me?.name ?? 'Contestant'}</p>
-          <div aria-live="polite" aria-atomic="true">
-            <p>
-              Score:{' '}
+          <div className={styles.playerCard}>
+            <p className={styles.playerName}>Welcome, {me?.name ?? 'Contestant'}</p>
+            <div className={styles.scoreBlock} aria-live="polite" aria-atomic="true">
+              <span className={styles.scoreLabel}>Score:</span>
               <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
                 {me?.score ?? 0}
               </span>
-            </p>
+            </div>
           </div>
           <div className={styles.srOnly} aria-live="polite" aria-atomic="true">
             {getStatusDescription(gameState)}
@@ -790,11 +797,12 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           {gameState.phase === 'BOARD_SELECT' && gameState.round && (
             <>
               {gameState.answer && <AnswerBanner state={gameState} />}
-              <p>Phase: {gameState.phase}</p>
               {gameState.isControllingPlayer ? (
-                <p>Select a clue from the board.</p>
+                <p className={styles.instruction}>Select a clue from the board.</p>
               ) : (
-                <p>Waiting for {gameState.players.find((p) => p.id === gameState.controllingPlayerId)?.name ?? 'the controller'} to select a clue.</p>
+                <p className={styles.instruction}>
+                  Waiting for {gameState.players.find((p) => p.id === gameState.controllingPlayerId)?.name ?? 'the controller'} to select a clue.
+                </p>
               )}
               <ContestantGrid state={gameState} onSelectClue={socket.selectClue} />
             </>

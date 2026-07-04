@@ -25,10 +25,10 @@ const router = createBrowserRouter([
     children: [
       { path: '/admin', element: <AdminRoute /> },
       { path: '/host', element: <HostRoute /> },
-      { path: '/board', element: <BoardRoute /> },
-      { path: '/play', element: <PlayRoute /> },
     ],
   },
+  { path: '/board', element: <BoardRoute /> },
+  { path: '/play', element: <PlayRoute /> },
 ]);
 
 export function App() {
