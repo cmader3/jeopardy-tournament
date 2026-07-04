@@ -50,17 +50,21 @@ export function useSocket<T>(
   const [data, setData] = useState<T | null>(null);
   const onStateRef = useRef(onState);
   const socketRef = useRef<Socket | null>(null);
+  const reconnectTokenRef = useRef<string | undefined>(reconnectToken);
 
   useEffect(() => {
     onStateRef.current = onState;
   });
 
   useEffect(() => {
+    reconnectTokenRef.current = reconnectToken;
+  }, [reconnectToken]);
+
+  useEffect(() => {
     if (!roomCode) {
       return;
     }
 
-    const payload: JoinPayload = { role, roomCode, name, reconnectToken, hostToken };
     const socket = io(API_BASE_URL, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
@@ -70,6 +74,13 @@ export function useSocket<T>(
     socket.on('connect', () => {
       setConnected(true);
       setError(null);
+      const payload: JoinPayload = {
+        role,
+        roomCode,
+        name,
+        reconnectToken: reconnectTokenRef.current,
+        hostToken,
+      };
       socket.emit('join', payload);
     });
 
@@ -88,6 +99,7 @@ export function useSocket<T>(
 
     socket.on('token', (token: { reconnectToken: string; playerId: string }) => {
       localStorage.setItem('jeopardy-contestant-token', JSON.stringify({ ...token, roomCode }));
+      reconnectTokenRef.current = token.reconnectToken;
     });
 
     return () => {

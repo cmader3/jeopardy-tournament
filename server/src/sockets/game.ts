@@ -57,6 +57,37 @@ interface SocketMeta {
   playerId?: string;
 }
 
+const DISCONNECT_GRACE_MS = 8000;
+const pendingDisconnects = new Map<string, ReturnType<typeof setTimeout>>();
+
+function disconnectKey(roomCode: string, playerId: string): string {
+  return `${roomCode}:${playerId}`;
+}
+
+function cancelPendingDisconnect(roomCode: string, playerId: string): void {
+  const key = disconnectKey(roomCode, playerId);
+  const timer = pendingDisconnects.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    pendingDisconnects.delete(key);
+  }
+}
+
+function schedulePlayerDisconnect(engine: GameEngine, roomCode: string, playerId: string): void {
+  const key = disconnectKey(roomCode, playerId);
+  const existing = pendingDisconnects.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const timer = setTimeout(() => {
+    pendingDisconnects.delete(key);
+    engine.disconnectPlayer(roomCode, playerId).catch(() => {
+      // Session may already be gone; ignore.
+    });
+  }, DISCONNECT_GRACE_MS);
+  pendingDisconnects.set(key, timer);
+}
+
 export function registerGameSockets(io: Server, engine: GameEngine) {
   engine.broadcast = (roomCode: string, state: GameState) => {
     broadcastToRoles(io, roomCode, state);
@@ -678,16 +709,12 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', () => {
       const meta = getSocketMeta(socket);
       if (!meta) return;
 
       if (meta.role === 'contestant' && meta.playerId) {
-        try {
-          await engine.disconnectPlayer(meta.roomCode, meta.playerId);
-        } catch {
-          // Session may already be gone; ignore.
-        }
+        schedulePlayerDisconnect(engine, meta.roomCode, meta.playerId);
       }
     });
   });
@@ -736,6 +763,7 @@ async function handleContestantJoin(
       return;
     }
 
+    cancelPendingDisconnect(roomCode, player.id);
     await joinSessionRoom(socket, roomCode, `contestant:${player.id}`);
     setSocketMeta(socket, { role: 'contestant', roomCode, playerId: player.id });
     const result = await engine.reconnectPlayer(roomCode, player.id);
