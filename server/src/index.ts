@@ -11,15 +11,18 @@ const port = process.env.PORT ?? 4000;
 
 async function main() {
   const engine = new GameEngine();
-  await engine.loadActiveSessions();
 
   const app = createApp(engine);
   const httpServer = createServer(app);
 
   bootstrapSocketIO(httpServer, engine);
 
-  httpServer.listen(port, () => {
+  httpServer.listen(Number(port), '0.0.0.0', () => {
     console.log(`Server listening on port ${port}`);
+  });
+
+  await engine.loadActiveSessions().catch((error) => {
+    console.error('Failed to load active sessions:', error);
   });
 }
 
