@@ -635,11 +635,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem 0.5rem;
+  flex-wrap: wrap;
 }
 
 .clueValueInput {
-  width: 5rem;
+  flex: 0 0 auto;
+  width: 4.5rem;
   font-family: var(--font-value);
   font-size: 1rem;
   color: var(--value-gold-light);
