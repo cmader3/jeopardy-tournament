@@ -87,7 +87,10 @@ function BoardGrid({ round, usedClueIds }: BoardGridProps) {
     <div
       className={styles.grid}
       data-testid="board-grid"
-      style={{ gridTemplateColumns: `repeat(${round.categories.length}, 1fr)` }}
+      style={{
+        gridTemplateColumns: `repeat(${round.categories.length}, minmax(0, 1fr))`,
+        gridTemplateRows: `auto repeat(${rows.length}, minmax(0, 1fr))`,
+      }}
     >
       {round.categories.map((category) => (
         <div key={category.id} className={styles.categoryHeader} data-testid="category-header">

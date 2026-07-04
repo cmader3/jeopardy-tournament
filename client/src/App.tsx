@@ -9,10 +9,12 @@ import './theme.css';
 
 function RoleLayout() {
   return (
-    <>
+    <div className="app-shell">
       <RoleNav />
-      <Outlet />
-    </>
+      <div className="app-main">
+        <Outlet />
+      </div>
+    </div>
   );
 }
 
