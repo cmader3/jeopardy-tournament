@@ -224,24 +224,9 @@
   color: var(--text-light);
 }
 
-.confirmDialog {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: rgba(10, 10, 42, 0.97);
-  border-radius: 0.5rem;
-  text-align: center;
-}
-
-/* Viewport-anchored modal variant used only for the editor-level confirmation
-   dialogs (grid resize and category delete). This keeps the dialog on screen
-   even when the long editor page is scrolled, while the shared .confirmDialog
-   inside each board library item remains absolutely positioned over its card. */
+/* Viewport-anchored modal used for all confirmation dialogs (board delete,
+   grid resize, category delete). Fixed positioning keeps it centered on screen
+   and prevents the dialog from overflowing a short card or a scrolled page. */
 .confirmDialogModal {
   position: fixed;
   inset: 0;

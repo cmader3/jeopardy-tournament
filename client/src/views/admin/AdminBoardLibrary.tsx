@@ -276,7 +276,7 @@ export function AdminBoardLibrary({ token, api, onOpenBoard, onImport }: AdminBo
                 </>
               )}
               {deletingId === summary.id && (
-                <div className={styles.confirmDialog} role="alertdialog" aria-modal="true">
+                <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
                   <p>Delete <strong>{summary.name}</strong>?</p>
                   <div className={styles.confirmActions}>
                     <button
