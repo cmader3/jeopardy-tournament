@@ -3,7 +3,7 @@ services:
     name: jeopardy-tournament
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build && npm run prisma:generate -w server
+    buildCommand: npm install && npm run prisma:generate -w server && npm run build
     startCommand: npm run prisma:migrate -w server && node server/dist/index.js
     envVars:
       - key: NODE_ENV
