@@ -277,19 +277,21 @@ export function AdminBoardLibrary({ token, api, onOpenBoard, onImport }: AdminBo
               )}
               {deletingId === summary.id && (
                 <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
-                  <p>Delete <strong>{summary.name}</strong>?</p>
-                  <div className={styles.confirmActions}>
-                    <button
-                      type="button"
-                      className={styles.deleteButton}
-                      onClick={() => void confirmDelete(summary)}
-                      disabled={isBusy}
-                    >
-                      Confirm Delete
-                    </button>
-                    <button type="button" onClick={cancelDelete} disabled={isBusy}>
-                      Cancel
-                    </button>
+                  <div className={styles.confirmCard}>
+                    <p>Delete <strong>{summary.name}</strong>?</p>
+                    <div className={styles.confirmActions}>
+                      <button
+                        type="button"
+                        className={styles.deleteButton}
+                        onClick={() => void confirmDelete(summary)}
+                        disabled={isBusy}
+                      >
+                        Confirm Delete
+                      </button>
+                      <button type="button" onClick={cancelDelete} disabled={isBusy}>
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

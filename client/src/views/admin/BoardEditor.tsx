@@ -484,43 +484,47 @@ export function BoardEditor({ board, token, api, onBack, onImport }: BoardEditor
 
       {pendingResize && (
         <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
-          <p>
-            Shrinking the grid will delete {pendingResize.affectedCells} authored{' '}
-            {pendingResize.affectedCells === 1 ? 'cell' : 'cells'}. Are you sure?
-          </p>
-          <div className={styles.confirmActions}>
-            <button
-              type="button"
-              className={styles.deleteButton}
-              onClick={confirmResize}
-              disabled={isSaving}
-            >
-              Delete & Resize
-            </button>
-            <button type="button" onClick={cancelResize} disabled={isSaving}>
-              Cancel
-            </button>
+          <div className={styles.confirmCard}>
+            <p>
+              Shrinking the grid will delete {pendingResize.affectedCells} authored{' '}
+              {pendingResize.affectedCells === 1 ? 'cell' : 'cells'}. Are you sure?
+            </p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.deleteButton}
+                onClick={confirmResize}
+                disabled={isSaving}
+              >
+                Delete & Resize
+              </button>
+              <button type="button" onClick={cancelResize} disabled={isSaving}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {pendingDelete && (
         <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
-          <p>
-            Delete <strong>{pendingDelete.categoryTitle}</strong> and its clues?
-          </p>
-          <div className={styles.confirmActions}>
-            <button
-              type="button"
-              className={styles.deleteButton}
-              onClick={confirmDeleteCategory}
-              disabled={isSaving}
-            >
-              Delete Category
-            </button>
-            <button type="button" onClick={cancelDeleteCategory} disabled={isSaving}>
-              Cancel
-            </button>
+          <div className={styles.confirmCard}>
+            <p>
+              Delete <strong>{pendingDelete.categoryTitle}</strong> and its clues?
+            </p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.deleteButton}
+                onClick={confirmDeleteCategory}
+                disabled={isSaving}
+              >
+                Delete Category
+              </button>
+              <button type="button" onClick={cancelDeleteCategory} disabled={isSaving}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

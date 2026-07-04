@@ -17,6 +17,43 @@
   --font-display: 'Michroma', sans-serif;
   --font-score: 'Archivo Black', 'Anton', sans-serif;
   --font-body: 'Oswald', 'Helvetica Neue', sans-serif;
+
+  /* Modern UI design tokens (used by admin, landing, and lobby chrome).
+     The core Jeopardy brand colors above are intentionally left unchanged so
+     the gameplay/projector board keeps its on-air look. */
+  --surface-0: #090d24;
+  --surface-1: #141a3d;
+  --surface-2: #1d2557;
+  --surface-hover: #232c66;
+  --surface-border: rgba(255, 255, 255, 0.09);
+  --surface-border-strong: rgba(255, 255, 255, 0.16);
+
+  --brand: #2f6bff;
+  --brand-strong: #1f4fd6;
+  --brand-soft: rgba(47, 107, 255, 0.16);
+  --accent-gold: #ecc25c;
+
+  --success: #2fa84f;
+  --success-strong: #23883e;
+  --danger: #e5484d;
+  --danger-strong: #c23438;
+  --danger-soft: rgba(229, 72, 77, 0.14);
+
+  --text-muted: rgba(238, 241, 255, 0.64);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.38);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --ring: 0 0 0 3px var(--brand-soft);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  --transition: 160ms cubic-bezier(0.2, 0, 0, 1);
+
+  --app-bg: radial-gradient(1100px 620px at 50% -12%, #1b2657 0%, #0d1234 52%, #070a1f 100%);
 }
 
 * {
@@ -27,6 +64,8 @@ body {
   margin: 0;
   font-family: var(--font-body);
   background-color: var(--panel-bg);
+  background-image: var(--app-bg);
+  background-attachment: fixed;
   color: var(--text-light);
 }
 

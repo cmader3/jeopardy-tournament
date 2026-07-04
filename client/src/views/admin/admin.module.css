@@ -20,19 +20,30 @@
 }
 
 .importButton {
-  background: var(--jeopardy-blue);
+  background: var(--surface-2);
   color: var(--text-light);
   font-family: var(--font-body);
   font-size: 0.95rem;
-  border: none;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1rem;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition),
+    background var(--transition);
 }
 
 .importButton:hover:not(:disabled) {
-  background: var(--jeopardy-blue-dark);
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.importButton:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .importButton:disabled {
@@ -50,8 +61,11 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--panel-bg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(9, 13, 36, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .libraryHeader h1,
@@ -76,10 +90,11 @@
 
 .emptyState {
   text-align: center;
-  padding: 3rem 1rem;
-  border: 2px dashed var(--jeopardy-blue);
-  border-radius: 0.75rem;
-  background: rgba(6, 12, 233, 0.1);
+  padding: 3rem 1.5rem;
+  border: 1px dashed var(--surface-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
 }
 
 .emptyState h2 {
@@ -102,20 +117,41 @@
 .confirmActions button {
   font-family: var(--font-body);
   font-size: 0.95rem;
-  border: none;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1rem;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition),
+    background var(--transition), filter var(--transition);
+}
+
+.createButton:hover:not(:disabled),
+.actionButton:hover:not(:disabled),
+.backButton:hover:not(:disabled),
+.deleteButton:hover:not(:disabled),
+.renameForm button:hover:not(:disabled),
+.confirmActions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  filter: brightness(1.07);
+}
+
+.createButton:active:not(:disabled),
+.actionButton:active:not(:disabled),
+.backButton:active:not(:disabled),
+.deleteButton:active:not(:disabled),
+.renameForm button:active:not(:disabled),
+.confirmActions button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .createButton {
-  background: var(--correct-green);
+  background: linear-gradient(180deg, var(--success) 0%, var(--success-strong) 100%);
   color: var(--text-light);
-}
-
-.createButton:hover:not(:disabled) {
-  background: #1b5e20;
 }
 
 .createButton:disabled {
@@ -124,12 +160,13 @@
 }
 
 .backButton {
-  background: var(--jeopardy-blue-dark);
+  background: var(--surface-2);
   color: var(--text-light);
+  border-color: var(--surface-border-strong);
 }
 
-.backButton:hover {
-  background: var(--jeopardy-blue);
+.backButton:hover:not(:disabled) {
+  background: var(--surface-hover);
 }
 
 .boardList {
@@ -147,10 +184,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition),
+    border-color var(--transition);
+}
+
+.boardItem:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--surface-border-strong);
 }
 
 .boardName {
@@ -174,21 +220,13 @@
 }
 
 .actionButton {
-  background: var(--jeopardy-blue);
+  background: linear-gradient(180deg, var(--brand) 0%, var(--brand-strong) 100%);
   color: var(--text-light);
-}
-
-.actionButton:hover:not(:disabled) {
-  background: var(--jeopardy-blue-dark);
 }
 
 .deleteButton {
-  background: var(--incorrect-red);
+  background: linear-gradient(180deg, var(--danger) 0%, var(--danger-strong) 100%);
   color: var(--text-light);
-}
-
-.deleteButton:hover:not(:disabled) {
-  background: #7f0000;
 }
 
 .actionButton:disabled,
@@ -207,21 +245,29 @@
 .renameForm input {
   flex: 1;
   font-size: 1rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--value-gold);
-  background: var(--panel-bg);
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-0);
   color: var(--text-light);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.renameForm input:focus {
+  border-color: var(--brand);
+  box-shadow: var(--ring);
+  outline: none;
 }
 
 .renameForm button:first-of-type {
-  background: var(--correct-green);
+  background: linear-gradient(180deg, var(--success) 0%, var(--success-strong) 100%);
   color: var(--text-light);
 }
 
 .renameForm button:last-of-type {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--surface-2);
   color: var(--text-light);
+  border-color: var(--surface-border-strong);
 }
 
 /* Viewport-anchored modal used for all confirmation dialogs (board delete,
@@ -232,18 +278,42 @@
   inset: 0;
   z-index: 20;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
   padding: 1rem;
-  background: rgba(10, 10, 42, 0.97);
+  background: rgba(5, 7, 20, 0.66);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   text-align: center;
+}
+
+.confirmCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: min(28rem, 100%);
+  padding: 1.75rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.confirmCard p {
+  margin: 0;
+  font-size: 1.1rem;
 }
 
 .confirmActions {
   display: flex;
   gap: 0.75rem;
+}
+
+.confirmActions button:last-child {
+  background: var(--surface-2);
+  color: var(--text-light);
+  border-color: var(--surface-border-strong);
 }
 
 /* Global utility class: JSX files reference this literal className, so it must
@@ -262,9 +332,11 @@
 
 .editorSummary {
   margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 0.5rem;
+  padding: 1.25rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .editorMeta {
@@ -328,17 +400,28 @@
 .saveButton {
   font-family: var(--font-body);
   font-size: 0.95rem;
-  border: none;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1.1rem;
   cursor: pointer;
-  transition: background 0.15s ease;
-  background: var(--correct-green);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition),
+    filter var(--transition);
+  background: linear-gradient(180deg, var(--success) 0%, var(--success-strong) 100%);
   color: var(--text-light);
 }
 
 .saveButton:hover:not(:disabled) {
-  background: #1b5e20;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  filter: brightness(1.07);
+}
+
+.saveButton:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .saveButton:disabled {
@@ -348,9 +431,11 @@
 
 .settingsSection {
   margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 0.5rem;
+  padding: 1.25rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .sectionHeading {
@@ -383,11 +468,19 @@
 .settingField input[type='text'],
 .settingField input[type='number'] {
   font-size: 1rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.375rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: var(--panel-bg);
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-0);
   color: var(--text-light);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.settingField input[type='text']:focus,
+.settingField input[type='number']:focus {
+  border-color: var(--brand);
+  box-shadow: var(--ring);
+  outline: none;
 }
 
 .invalidInput {
@@ -421,14 +514,17 @@
 }
 
 .categoryHeader {
-  padding: 0.5rem;
+  padding: 0.6rem 0.5rem;
   text-align: center;
   font-family: var(--font-board-header);
   font-size: 1rem;
   text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: var(--text-light);
-  background: var(--jeopardy-blue);
-  border-radius: 0.25rem;
+  background: linear-gradient(180deg, var(--jeopardy-blue) 0%, var(--jeopardy-blue-dark) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
   min-height: 2.5rem;
   display: flex;
   flex-direction: column;
@@ -499,19 +595,30 @@
 }
 
 .addCategoryButton {
-  background: var(--correct-green);
+  background: linear-gradient(180deg, var(--success) 0%, var(--success-strong) 100%);
   color: var(--text-light);
-  border: none;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1rem;
   font-family: var(--font-body);
   font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition),
+    filter var(--transition);
 }
 
 .addCategoryButton:hover:not(:disabled) {
-  background: #1b5e20;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  filter: brightness(1.07);
+}
+
+.addCategoryButton:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .editorGrid {
