@@ -856,15 +856,22 @@
 
 .importUpload {
   margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 0.5rem;
+  padding: 1.25rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .importDescription {
   margin: 0 0 1rem;
   color: var(--text-light);
   opacity: 0.9;
+  line-height: 1.5;
+}
+
+.importTemplateActions {
+  margin-bottom: 1.25rem;
 }
 
 .importControls {

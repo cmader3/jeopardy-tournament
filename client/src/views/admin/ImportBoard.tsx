@@ -22,6 +22,31 @@ interface ImportBoardProps {
   onSave?: (board: BoardWithRounds) => void;
 }
 
+const TEMPLATE_FILENAME = 'jeopardy-board-template.csv';
+
+const TEMPLATE_ROWS: string[][] = [
+  ['Round', 'Category', 'Value', 'Clue', 'Answer', 'Daily Double'],
+  ['Jeopardy', 'Sample Category One', '100', 'A clue shown to players, phrased as a statement', 'What is the correct response?', ''],
+  ['Jeopardy', 'Sample Category One', '200', 'Another clue in this category', 'What is ...?', ''],
+  ['Jeopardy', 'Sample Category One', '300', 'A clue that happens to be a Daily Double', 'What is ...?', 'yes'],
+  ['Jeopardy', 'Sample Category Two', '100', 'The first clue in the second category', 'What is ...?', ''],
+  ['Jeopardy', 'Sample Category Two', '200', 'The second clue in the second category', 'What is ...?', ''],
+  ['Double Jeopardy', 'Sample Double Jeopardy Category', '400', 'A Double Jeopardy clue', 'What is ...?', ''],
+  ['Double Jeopardy', 'Sample Double Jeopardy Category', '800', 'Another Double Jeopardy clue', 'What is ...?', ''],
+  ['Final', 'Final Jeopardy Category', '', 'The single Final Jeopardy clue', 'What is ...?', ''],
+];
+
+function escapeCsvField(field: string): string {
+  if (/[",\r\n]/.test(field)) {
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+  return field;
+}
+
+export function buildTemplateCsv(): string {
+  return TEMPLATE_ROWS.map((row) => row.map(escapeCsvField).join(',')).join('\r\n');
+}
+
 interface EditablePreviewProps {
   preview: ImportPreview;
   board: EditableBoard;
@@ -400,6 +425,18 @@ export function ImportBoard({ token, api, onBack, onSave }: ImportBoardProps) {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const blob = new Blob([buildTemplateCsv()], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = TEMPLATE_FILENAME;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleSave = async () => {
     if (!editableBoard) return;
 
@@ -436,6 +473,22 @@ export function ImportBoard({ token, api, onBack, onSave }: ImportBoardProps) {
           Upload a CSV or XLSX spreadsheet to preview it as a Jeopardy board. Nothing is saved
           until you confirm the preview.
         </p>
+        <p className={styles.importDescription}>
+          Each row is one clue, using the columns <strong>Round, Category, Value, Clue, Answer,
+          Daily Double</strong>. Repeat the category on each of its clue rows, leave Value blank
+          for Final Jeopardy, and put <strong>yes</strong> in the Daily Double column to mark one.
+          Download the template to get started.
+        </p>
+
+        <div className={`${styles.importControls} ${styles.importTemplateActions}`}>
+          <button
+            type="button"
+            className={styles.importButton}
+            onClick={handleDownloadTemplate}
+          >
+            Download CSV Template
+          </button>
+        </div>
 
         <div className={styles.importControls}>
           <label htmlFor="import-file" className={styles.importFileLabel}>
