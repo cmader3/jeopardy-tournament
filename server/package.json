@@ -12,6 +12,7 @@
     }
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "tsc -p tsconfig.json",
     "dev": "PORT=4000 tsx watch src/index.ts",
     "test": "vitest run --maxWorkers=4",
