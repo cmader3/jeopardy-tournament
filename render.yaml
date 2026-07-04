@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: jeopardy-tournament
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build && npm run prisma:generate -w server
+    startCommand: npm run prisma:migrate -w server && node server/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST_PASSCODE
+        sync: false
+      - key: TOKEN_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: file:/opt/render/project/src/server/data/jeopardy.db
+      - key: PORT
+        value: 10000
+    disk:
+      name: jeopardy-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
