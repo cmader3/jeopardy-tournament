@@ -3,8 +3,8 @@ services:
     name: jeopardy-tournament
     runtime: node
     plan: free
-    buildCommand: npm install && npm run prisma:generate -w server && npm run build
-    startCommand: npm run prisma:migrate -w server && node server/dist/index.js
+    buildCommand: npm install && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" npm run prisma:generate -w server && npm run build
+    startCommand: npx prisma migrate deploy --schema=server/prisma/schema.prisma && node server/dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
