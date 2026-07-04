@@ -21,6 +21,7 @@
     "prisma:migrate": "prisma migrate deploy"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@jeopardy/shared": "*",
     "@prisma/client": "^6.0.0",
     "@types/multer": "^2.1.0",

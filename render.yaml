@@ -14,5 +14,9 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-4-8
       - key: PORT
         value: 10000

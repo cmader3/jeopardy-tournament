@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { readSpreadsheetBuffer } from '../importer/reader.js';
+import type { SheetData } from '../importer/reader.js';
 import { parseSheets } from '../importer/parser.js';
+import type { ParsedImport } from '../importer/parser.js';
+import { isLlmConfigured, parseSheetsWithLlm } from '../importer/llmParser.js';
 import type { CreateBoardInput } from '../repo/board.js';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -21,6 +24,20 @@ function hasBoardContent(board: CreateBoardInput): boolean {
   );
 }
 
+async function parseImport(sheets: SheetData[], name: string): Promise<ParsedImport> {
+  if (isLlmConfigured()) {
+    try {
+      return await parseSheetsWithLlm(sheets, name);
+    } catch (err) {
+      console.warn(
+        '[import] LLM parse failed; falling back to heuristic parser:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return parseSheets(sheets, name);
+}
+
 function multerErrorResponse(error: unknown): { status: number; message: string } | null {
   if (typeof error !== 'object' || error === null) return null;
   const err = error as { code?: string };
@@ -35,7 +52,7 @@ function multerErrorResponse(error: unknown): { status: number; message: string 
 }
 
 importRouter.post('/', (req, res, next) => {
-  upload.single('file')(req, res, (error) => {
+  upload.single('file')(req, res, async (error) => {
     if (error) {
       const multerError = multerErrorResponse(error);
       if (multerError) {
@@ -62,7 +79,7 @@ importRouter.post('/', (req, res, next) => {
       }
 
       const baseName = file.originalname.replace(/\.[^.]+$/, '') || 'Imported Board';
-      const result = parseSheets(sheets, baseName);
+      const result = await parseImport(sheets, baseName);
 
       if (!hasBoardContent(result.board)) {
         res.status(400).json({ error: 'No usable spreadsheet content was found.' });
