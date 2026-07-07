@@ -714,9 +714,22 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
     <main className={styles.play}>
       <header className={styles.playerBar}>
         <span className={styles.playerBrand}>Jeopardy!</span>
-        <p className={styles.roomCode} data-testid="room-code">
-          Room Code: {roomCode}
-        </p>
+        <div className={styles.playerBarMeta}>
+          <p className={styles.roomCode} data-testid="room-code">
+            Room Code: {roomCode}
+          </p>
+          <button
+            type="button"
+            className={styles.leaveButton}
+            data-testid="leave-game-button"
+            onClick={() => {
+              socket.leaveGame?.();
+              onLeave();
+            }}
+          >
+            Leave Game
+          </button>
+        </div>
       </header>
       {isJoinError && (
         <div className={styles.error} role="alert" data-testid="join-error">
@@ -748,15 +761,26 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           {gameState.phase === 'LOBBY' && (
             <>
               <p>Waiting for the host to start the game.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  socket.leaveGame?.();
-                  onLeave();
-                }}
-              >
-                Leave Game
-              </button>
+              <div className={styles.lobbyPlayers} data-testid="lobby-players">
+                <p className={styles.lobbyPlayersHeading}>Players ({gameState.players.length})</p>
+                <ul className={styles.playerList}>
+                  {gameState.players.map((player) => (
+                    <li
+                      key={player.id}
+                      className={styles.playerListItem}
+                      data-testid={`lobby-player-${player.id}`}
+                    >
+                      <span className={styles.playerListName}>
+                        {player.name}
+                        {player.id === gameState.playerId ? ' (You)' : ''}
+                      </span>
+                      <span className={player.connected ? styles.statusConnected : styles.statusDisconnected}>
+                        {player.connected ? 'connected' : 'disconnected'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </>
           )}
           {gameState.phase === 'ROUND_TRANSITION' && (

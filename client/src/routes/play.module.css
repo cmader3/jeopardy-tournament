@@ -130,6 +130,94 @@
   white-space: nowrap;
 }
 
+.playerBarMeta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.leaveButton {
+  align-self: center;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  color: var(--value-gold);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(236, 194, 92, 0.5);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.leaveButton:hover {
+  background: var(--value-gold);
+  color: var(--jeopardy-blue-dark);
+}
+
+.lobbyPlayers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-0) 100%);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.lobbyPlayersHeading {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.playerList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.playerListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+
+.playerListName {
+  font-family: var(--font-body);
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.statusConnected,
+.statusDisconnected {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.statusConnected {
+  color: #6ee7a8;
+}
+
+.statusDisconnected {
+  color: #f0a3a3;
+}
+
 .playerCard {
   display: flex;
   align-items: center;

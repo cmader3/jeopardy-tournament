@@ -290,6 +290,48 @@ describe('PlayRoute', () => {
     expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
   });
 
+  it('lets a player leave from an in-progress view to start a different game', async () => {
+    const leaveGame = vi.fn();
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(makeContestantState({ phase: 'BOARD_SELECT', round: makeRound() }), null, { leaveGame });
+
+    render(<PlayRoute />);
+
+    await userEvent.click(await screen.findByTestId('leave-game-button'));
+
+    expect(leaveGame).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
+  });
+
+  it('shows the roster of players who have joined in the lobby', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(
+      makeContestantState({
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 0, connected: true },
+          { id: 'p3', name: 'Cara', score: 0, connected: false },
+        ],
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roster = await screen.findByTestId('lobby-players');
+    expect(roster).toHaveTextContent('Players (3)');
+    expect(screen.getByTestId('lobby-player-p1')).toHaveTextContent('Alice (You)');
+    expect(screen.getByTestId('lobby-player-p2')).toHaveTextContent('Bob');
+    expect(screen.getByTestId('lobby-player-p3')).toHaveTextContent('disconnected');
+  });
+
   it('shows the grid and lets the controlling player select a clue', async () => {
     const selectClue = vi.fn();
     useSocket.mockReturnValue({
