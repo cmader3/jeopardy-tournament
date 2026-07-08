@@ -913,7 +913,7 @@ describe('clue selection sockets', { timeout: 15000 }, () => {
     await server.close();
   });
 
-  it('controlling contestant selects a clue and it reveals on all views', async () => {
+  it('controlling contestant picks a clue in player-pick mode and the host reveals it', async () => {
     const server = await createTestServer();
     const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
 
@@ -922,13 +922,22 @@ describe('clue selection sockets', { timeout: 15000 }, () => {
     const controllerId = state.controllingPlayerId;
     const controller = controllerId === tokenA.playerId ? alice : bob;
 
-    const hostUpdate = waitForState(host);
-    const boardUpdate = waitForState(boardClient);
-    const aliceUpdate = waitForState(alice);
-    const bobUpdate = waitForState(bob);
+    host.emit('set_clue_selection_mode', { mode: 'PLAYER' });
+    await waitForState(host, (s) => (s as { clueSelectionMode: string }).clueSelectionMode === 'PLAYER');
 
+    const boardSelected = waitForState(boardClient, (s) => s.phase === 'CLUE_SELECTED');
+    const hostSelected = waitForState(host, (s) => s.phase === 'CLUE_SELECTED');
     controller.emit('select_clue', { clueId: firstClue.id });
-    const [hostState, boardState] = await Promise.all([hostUpdate, boardUpdate, aliceUpdate, bobUpdate]);
+    const [boardSel, hostSel] = await Promise.all([boardSelected, hostSelected]);
+
+    expect((boardSel as { phase: string }).phase).toBe('CLUE_SELECTED');
+    expect((boardSel as { currentClueText: string | null }).currentClueText).toBeNull();
+    expect((hostSel as { pendingClueId: string | null }).pendingClueId).toBe(firstClue.id);
+
+    const boardRevealed = waitForState(boardClient, (s) => s.phase === 'CLUE_REVEALED');
+    const hostRevealed = waitForState(host, (s) => s.phase === 'CLUE_REVEALED');
+    host.emit('reveal_selected_clue');
+    const [boardState, hostState] = await Promise.all([boardRevealed, hostRevealed]);
 
     expect((boardState as { phase: string }).phase).toBe('CLUE_REVEALED');
     expect((boardState as { currentClueText: string }).currentClueText).toBe(firstClue.clueText);
@@ -943,7 +952,7 @@ describe('clue selection sockets', { timeout: 15000 }, () => {
     await server.close();
   });
 
-  it('non-controlling contestant cannot select a clue', async () => {
+  it('non-controlling contestant cannot select a clue in player-pick mode', async () => {
     const server = await createTestServer();
     const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
 
@@ -951,6 +960,9 @@ describe('clue selection sockets', { timeout: 15000 }, () => {
     const firstClue = state.board.rounds[0].clues[0];
     const controllerId = state.controllingPlayerId;
     const nonController = controllerId === tokenA.playerId ? bob : alice;
+
+    host.emit('set_clue_selection_mode', { mode: 'PLAYER' });
+    await waitForState(host, (s) => (s as { clueSelectionMode: string }).clueSelectionMode === 'PLAYER');
 
     const errorPromise = waitForError(nonController);
     nonController.emit('select_clue', { clueId: firstClue.id });

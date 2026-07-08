@@ -5,7 +5,7 @@ import { boardApi, BoardSummary } from '../api/boards.js';
 import { createGame } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
-import type { HostView } from '@jeopardy/shared';
+import type { HostView, ClueSelectionMode } from '@jeopardy/shared';
 import styles from './host.module.css';
 
 export interface HostLobbyProps {
@@ -13,10 +13,50 @@ export interface HostLobbyProps {
   state: HostView | null;
   onStartGame: () => void;
   onCreateNewGame?: () => void;
+  onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
   startError: string | null;
 }
 
-export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, startError }: HostLobbyProps) {
+function ClueSelectionToggle({
+  mode,
+  onSetMode,
+}: {
+  mode: ClueSelectionMode;
+  onSetMode?: (mode: ClueSelectionMode) => void;
+}) {
+  return (
+    <div className={styles.clueModeToggle} data-testid="clue-mode-toggle">
+      <span className={styles.clueModeLabel}>Clue selection</span>
+      <div className={styles.clueModeOptions} role="group" aria-label="Clue selection mode">
+        <button
+          type="button"
+          className={`${styles.clueModeButton} ${mode === 'HOST' ? styles.clueModeActive : ''}`}
+          aria-pressed={mode === 'HOST'}
+          onClick={() => onSetMode?.('HOST')}
+          data-testid="clue-mode-host"
+        >
+          Host picks clues
+        </button>
+        <button
+          type="button"
+          className={`${styles.clueModeButton} ${mode === 'PLAYER' ? styles.clueModeActive : ''}`}
+          aria-pressed={mode === 'PLAYER'}
+          onClick={() => onSetMode?.('PLAYER')}
+          data-testid="clue-mode-player"
+        >
+          Players pick clues
+        </button>
+      </div>
+      <p className={styles.clueModeHint} data-testid="clue-mode-hint">
+        {mode === 'PLAYER'
+          ? 'The controlling player picks a clue, then you reveal it.'
+          : 'Only you can pick clues, and they reveal immediately.'}
+      </p>
+    </div>
+  );
+}
+
+export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
   const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
   const canStart = connectedCount > 0;
@@ -50,6 +90,7 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, start
           ))}
         </ul>
       )}
+      <ClueSelectionToggle mode={state?.clueSelectionMode ?? 'HOST'} onSetMode={onSetClueSelectionMode} />
       <div className={styles.startControls}>
         <button
           type="button"
@@ -78,6 +119,8 @@ export interface HostInProgressProps {
   roomCode: string;
   state: HostView | null;
   onSelectClue?: (clueId: string) => void;
+  onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
+  onRevealSelectedClue?: () => void;
   onRevealClue?: () => void;
   onRevealAnswer?: () => void;
   onArmBuzzers?: () => void;
@@ -581,6 +624,8 @@ export function HostInProgress({
   roomCode,
   state,
   onSelectClue,
+  onSetClueSelectionMode,
+  onRevealSelectedClue,
   onRevealClue,
   onRevealAnswer,
   onArmBuzzers,
@@ -601,6 +646,13 @@ export function HostInProgress({
   const players = state?.players ?? [];
   const currentClue = state?.currentClueId
     ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId)
+    : null;
+  const pendingCategory = state?.pendingClueId
+    ? state?.round?.categories.find((c) => c.clues.some((cl) => cl.id === state.pendingClueId))
+    : null;
+  const pendingClue = pendingCategory?.clues.find((cl) => cl.id === state?.pendingClueId) ?? null;
+  const controllerName = state?.controllingPlayerId
+    ? players.find((p) => p.id === state.controllingPlayerId)?.name ?? null
     : null;
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
   // Enable "undo last ruling" only when there is an actual ruling (correct or
@@ -716,6 +768,28 @@ export function HostInProgress({
       <p className={styles.phase} data-testid="phase-indicator">
         Phase: {state?.phase ?? '—'}
       </p>
+      <ClueSelectionToggle mode={state?.clueSelectionMode ?? 'HOST'} onSetMode={onSetClueSelectionMode} />
+      {state?.phase === 'CLUE_SELECTED' && pendingClue && (
+        <div className={styles.stickyControls}>
+          <div className={styles.currentClue} data-testid="pending-clue">
+            <h3>Clue Selected</h3>
+            <p className={styles.clueText} data-testid="pending-clue-text">
+              {pendingCategory?.title} for ${pendingClue.value}
+              {controllerName ? ` — picked by ${controllerName}` : ''}
+            </p>
+            <div className={styles.actionRow}>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={onRevealSelectedClue}
+                data-testid="reveal-selected-clue-button"
+              >
+                Reveal Clue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showControls && (
         <div className={styles.stickyControls}>
           {state?.answer && !currentClue && <HostAnswerBanner state={state} />}
@@ -1017,6 +1091,15 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleSetClueSelectionMode = useCallback(
+    (mode: ClueSelectionMode) => {
+      hostSocket.setClueSelectionMode?.(mode);
+    },
+    [hostSocket],
+  );
+  const handleRevealSelectedClue = useCallback(() => {
+    hostSocket.revealSelectedClue?.();
+  }, [hostSocket]);
   const handleRevealClue = useCallback(() => {
     hostSocket.revealClue?.();
   }, [hostSocket]);
@@ -1084,6 +1167,7 @@ export function HostContent() {
           state={gameState}
           onStartGame={handleStartGame}
           onCreateNewGame={handleCreateNewGame}
+          onSetClueSelectionMode={handleSetClueSelectionMode}
           startError={hostSocket.error}
         />
       );
@@ -1095,6 +1179,8 @@ export function HostContent() {
         roomCode={roomCode}
         state={gameState}
         onSelectClue={handleSelectClue}
+        onSetClueSelectionMode={handleSetClueSelectionMode}
+        onRevealSelectedClue={handleRevealSelectedClue}
         onRevealClue={handleRevealClue}
         onRevealAnswer={handleRevealAnswer}
         onArmBuzzers={handleArmBuzzers}

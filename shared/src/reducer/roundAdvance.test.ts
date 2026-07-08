@@ -304,7 +304,7 @@ function setupGame(board: Board): GameState {
 }
 
 function resolveClue(state: GameState, clueId: string): GameState {
-  let result = reduce(state, { type: 'SELECT_CLUE', clueId, selectorId: state.controllingPlayerId }, { now: NOW });
+  let result = reduce(state, { type: 'SELECT_CLUE', clueId, hostOverride: true }, { now: NOW });
   if (result.state.phase === 'DAILY_DOUBLE_WAGER') {
     result = reduce(result.state, { type: 'SUBMIT_DD_WAGER', playerId: result.state.controllingPlayerId!, amount: 5 }, { now: NOW });
     result = reduce(result.state, { type: 'REVEAL_CLUE' }, { now: NOW });
@@ -346,7 +346,7 @@ describe('round completion detection', () => {
     state = resolveClue(state, 'cl3');
 
     // The last remaining clue is the Daily Double cl2.
-    let selected = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+    let selected = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW }).state;
     selected = reduce(selected, { type: 'SUBMIT_DD_WAGER', playerId: selected.controllingPlayerId!, amount: 200 }, { now: NOW }).state;
     selected = reduce(selected, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
     const result = reduce(selected, { type: 'RULE_CORRECT' }, { now: NOW + 100 });
@@ -419,7 +419,7 @@ describe('ADVANCE_ROUND', () => {
     let state = setupGame(board);
     state = resolveClue(state, 'cl1');
     // Give Alice a score by having her answer correctly on cl3.
-    let selected = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+    let selected = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', hostOverride: true }, { now: NOW }).state;
     selected = reduce(selected, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
     selected = reduce(selected, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
     selected = reduce(selected, { type: 'RULE_CORRECT' }, { now: NOW + 100 }).state;
@@ -439,7 +439,7 @@ describe('ADVANCE_ROUND', () => {
   it('is rejected outside BOARD_SELECT or ROUND_TRANSITION', () => {
     const board = makeBoardWithDoubleJeopardy();
     let state = setupGame(board);
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
 
     const result = reduce(state, { type: 'ADVANCE_ROUND' }, { now: NOW });
 
@@ -539,7 +539,8 @@ describe('new round grid and control', () => {
     const nonController = advanced.players.find((p) => p.id !== controller)?.id;
     expect(nonController).toBeDefined();
 
-    const result = reduce(advanced, { type: 'SELECT_CLUE', clueId: 'cl4', selectorId: nonController }, { now: NOW });
+    const playerMode = { ...advanced, clueSelectionMode: 'PLAYER' as const };
+    const result = reduce(playerMode, { type: 'SELECT_CLUE', clueId: 'cl4', selectorId: nonController }, { now: NOW });
     expect(result.effects).toContainEqual({
       type: 'INTENT_REJECTED',
       reason: expect.stringContaining('Only the controlling player or host can select a clue'),

@@ -189,7 +189,7 @@ function ContestantGrid({
 
   const maxRow = Math.max(0, ...state.round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
   const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
-  const canSelect = state.isControllingPlayer;
+  const canSelect = state.isControllingPlayer && state.clueSelectionMode === 'PLAYER';
 
   return (
     <div
@@ -821,15 +821,24 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
           {gameState.phase === 'BOARD_SELECT' && gameState.round && (
             <>
               {gameState.answer && <AnswerBanner state={gameState} />}
-              {gameState.isControllingPlayer ? (
+              {gameState.clueSelectionMode === 'PLAYER' && gameState.isControllingPlayer ? (
                 <p className={styles.instruction}>Select a clue from the board.</p>
-              ) : (
+              ) : gameState.clueSelectionMode === 'PLAYER' ? (
                 <p className={styles.instruction}>
                   Waiting for {gameState.players.find((p) => p.id === gameState.controllingPlayerId)?.name ?? 'the controller'} to select a clue.
                 </p>
+              ) : (
+                <p className={styles.instruction}>Waiting for the host to select a clue.</p>
               )}
               <ContestantGrid state={gameState} onSelectClue={socket.selectClue} />
             </>
+          )}
+          {gameState.phase === 'CLUE_SELECTED' && (
+            <p className={styles.instruction} data-testid="contestant-clue-selected">
+              {gameState.isControllingPlayer
+                ? 'Clue selected. Waiting for the host to reveal it.'
+                : 'A clue has been selected. Waiting for the host to reveal it.'}
+            </p>
           )}
           {showClue && (
             <div className={styles.clueBanner} data-testid="contestant-clue-overlay">

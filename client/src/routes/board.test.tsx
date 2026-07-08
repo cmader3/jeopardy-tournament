@@ -122,6 +122,8 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     finalRevealedWagers: {},
     roundComplete: false,
     serverNow: 0,
+    clueSelectionMode: 'HOST',
+    pendingClueId: null,
     ...overrides,
   };
 }
@@ -328,6 +330,27 @@ describe('BoardRoute', () => {
     expect(headers[0]).toHaveTextContent('Science');
     expect(headers[1]).toHaveTextContent('History');
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(3);
+  });
+
+  it('shows a pending banner and highlights the selected cell without revealing the clue', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'CLUE_SELECTED',
+        round: makeRound(),
+        pendingClueId: 'cl1',
+        clueSelectionMode: 'PLAYER',
+      }),
+    );
+
+    renderBoardRoute();
+    await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('board-clue-selected')).toBeInTheDocument();
+    expect(screen.getByTestId('board-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('clue-overlay')).not.toBeInTheDocument();
+    const selectedCell = document.querySelector('[data-clue-id="cl1"]');
+    expect(selectedCell?.className).toMatch(/cellSelected/);
   });
 
   it('shows the round banner at the start of a round', async () => {

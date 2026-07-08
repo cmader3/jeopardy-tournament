@@ -5,9 +5,12 @@ export type GameSessionStatus =
   | 'COMPLETE'
   | 'ABANDONED';
 
+export type ClueSelectionMode = 'HOST' | 'PLAYER';
+
 export type GamePhase =
   | 'LOBBY'
   | 'BOARD_SELECT'
+  | 'CLUE_SELECTED'
   | 'CLUE_REVEALED'
   | 'BUZZERS_ARMED'
   | 'BUZZED'
@@ -84,6 +87,8 @@ export interface GameState {
   players: Player[];
   controllingPlayerId: string | null;
   usedClueIds: string[];
+  clueSelectionMode: ClueSelectionMode;
+  pendingClueId: string | null;
   currentClueId: string | null;
   buzzWinnerId: string | null;
   armedAt: number | null;

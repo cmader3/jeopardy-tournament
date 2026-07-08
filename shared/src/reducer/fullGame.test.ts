@@ -137,7 +137,7 @@ describe('full game end-to-end', () => {
     expect(controllerOf(state)).toBe('p1');
 
     // Jeopardy normal clue: p1 selects, p2 buzzes and is ruled correct.
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-normal', selectorId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-normal', hostOverride: true }, { now: NOW }).state;
     expectPhase(state, 'CLUE_REVEALED');
     expect(state.currentClueId).toBe('cl-normal');
 
@@ -153,7 +153,7 @@ describe('full game end-to-end', () => {
     expect(scoreOf(state, 'p2')).toBe(100);
 
     // Daily Double selected by controlling player p2.
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-dd', selectorId: 'p2' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-dd', hostOverride: true }, { now: NOW }).state;
     expectPhase(state, 'DAILY_DOUBLE_WAGER');
     expect(state.currentClueId).toBe('cl-dd');
 
@@ -204,7 +204,7 @@ describe('full game end-to-end', () => {
     expect(projectBoard(state, NOW).round?.categories[0].clues[0].value).toBe(200);
 
     // Double Jeopardy clue: p1 selects, p3 buzzes and is ruled incorrect, then p1 buzzes and is ruled correct.
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-dj', selectorId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-dj', hostOverride: true }, { now: NOW }).state;
     expectPhase(state, 'CLUE_REVEALED');
 
     state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
@@ -364,7 +364,7 @@ describe('full game end-to-end', () => {
     expect(state.board.rounds[state.roundIndex].type).toBe('JEOPARDY');
 
     // Play the single Jeopardy clue.
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-only', selectorId: 'p1' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl-only', hostOverride: true }, { now: NOW }).state;
     state = resolveToBoardSelect(state, 'p2', 100, 'cl-only');
     expect(state.usedClueIds).toContain('cl-only');
 

@@ -78,7 +78,13 @@ export class GameEngine {
         // Sockets are gone after a restart; mark every player as disconnected
         // so reconnections can cleanly restore their slot and connection status.
         const players = parsed.players.map((player) => ({ ...player, connected: false }));
-        const state = { ...parsed, sessionId: session.id, players };
+        const state = {
+          ...parsed,
+          sessionId: session.id,
+          players,
+          clueSelectionMode: parsed.clueSelectionMode ?? 'HOST',
+          pendingClueId: parsed.pendingClueId ?? null,
+        };
         this.sessions.set(session.roomCode, state);
         this.scheduleTimer(session.roomCode, state);
       } catch {

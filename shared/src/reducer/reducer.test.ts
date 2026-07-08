@@ -341,27 +341,42 @@ describe('SELECT_CLUE', () => {
     return reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
   }
 
-  it('lets the controlling player select an unused clue and reveals it', () => {
+  it('rejects a controlling-player selection in host-pick mode', () => {
     const state = setupGame();
-    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW });
+    const picker = state.controllingPlayerId ?? undefined;
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: picker }, { now: NOW });
+
+    expect(result.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: expect.stringContaining('host'),
+    });
+    expect(result.state.phase).toBe('BOARD_SELECT');
+  });
+
+  it('lets the host select an unused clue and reveals it immediately in host-pick mode', () => {
+    const state = setupGame();
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW });
 
     expect(result.state.phase).toBe('CLUE_REVEALED');
     expect(result.state.currentClueId).toBe('cl1');
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
   });
 
-  it('lets the host override select any unused clue', () => {
-    const state = setupGame();
-    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW });
+  it('lets the controlling player pick a clue in player-pick mode without revealing it', () => {
+    const playerState = { ...setupGame(), clueSelectionMode: 'PLAYER' as const };
+    const picker = playerState.controllingPlayerId ?? undefined;
+    const result = reduce(playerState, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: picker }, { now: NOW });
 
-    expect(result.state.phase).toBe('CLUE_REVEALED');
-    expect(result.state.currentClueId).toBe('cl1');
+    expect(result.state.phase).toBe('CLUE_SELECTED');
+    expect(result.state.pendingClueId).toBe('cl1');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
   });
 
-  it('rejects selection by a non-controlling player', () => {
-    const state = setupGame();
-    const nonController = state.players.find((p) => p.id !== state.controllingPlayerId);
-    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: nonController?.id }, { now: NOW });
+  it('rejects selection by a non-controlling player in player-pick mode', () => {
+    const playerState = { ...setupGame(), clueSelectionMode: 'PLAYER' as const };
+    const nonController = playerState.players.find((p) => p.id !== playerState.controllingPlayerId);
+    const result = reduce(playerState, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: nonController?.id }, { now: NOW });
 
     expect(result.effects).toContainEqual({
       type: 'INTENT_REJECTED',
@@ -372,8 +387,8 @@ describe('SELECT_CLUE', () => {
 
   it('rejects selection outside BOARD_SELECT', () => {
     const state = setupGame();
-    const revealed = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
-    const result = reduce(revealed, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: state.controllingPlayerId }, { now: NOW });
+    const revealed = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
+    const result = reduce(revealed, { type: 'SELECT_CLUE', clueId: 'cl3', hostOverride: true }, { now: NOW });
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
   });
@@ -381,7 +396,7 @@ describe('SELECT_CLUE', () => {
   it('rejects a used clue', () => {
     const state = setupGame();
     const used = { ...state, usedClueIds: ['cl1'] };
-    const result = reduce(used, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW });
+    const result = reduce(used, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW });
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already been used') });
   });
@@ -393,10 +408,67 @@ describe('SELECT_CLUE', () => {
     state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
     state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
 
-    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: state.controllingPlayerId }, { now: NOW });
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW });
 
     expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
     expect(result.state.currentClueId).toBe('cl2');
+  });
+
+  it('rejects revealing a selected clue when none is pending', () => {
+    const state = setupGame();
+    const result = reduce(state, { type: 'REVEAL_SELECTED_CLUE' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: expect.stringContaining('waiting to be revealed'),
+    });
+  });
+
+  it('reveals a player-picked clue when the host initiates it', () => {
+    const playerState = { ...setupGame(), clueSelectionMode: 'PLAYER' as const };
+    const picker = playerState.controllingPlayerId ?? undefined;
+    const selected = reduce(playerState, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: picker }, { now: NOW }).state;
+    const result = reduce(selected, { type: 'REVEAL_SELECTED_CLUE' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('CLUE_REVEALED');
+    expect(result.state.currentClueId).toBe('cl1');
+    expect(result.state.pendingClueId).toBeNull();
+  });
+
+  it('reveals a player-picked Daily Double into the wager phase', () => {
+    const playerState = { ...setupGame(), clueSelectionMode: 'PLAYER' as const };
+    const picker = playerState.controllingPlayerId ?? undefined;
+    const selected = reduce(playerState, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: picker }, { now: NOW }).state;
+    const result = reduce(selected, { type: 'REVEAL_SELECTED_CLUE' }, { now: NOW + 100 });
+
+    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(result.state.currentClueId).toBe('cl2');
+  });
+});
+
+describe('SET_CLUE_SELECTION_MODE', () => {
+  function setupGame(): GameState {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    return reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+  }
+
+  it('defaults new games to host-pick mode', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    expect(state.clueSelectionMode).toBe('HOST');
+  });
+
+  it('switches the mode to player-pick and back', () => {
+    const state = setupGame();
+    const toPlayer = reduce(state, { type: 'SET_CLUE_SELECTION_MODE', mode: 'PLAYER' }, { now: NOW });
+    expect(toPlayer.state.clueSelectionMode).toBe('PLAYER');
+    expect(toPlayer.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+
+    const toHost = reduce(toPlayer.state, { type: 'SET_CLUE_SELECTION_MODE', mode: 'HOST' }, { now: NOW });
+    expect(toHost.state.clueSelectionMode).toBe('HOST');
   });
 });
 
@@ -408,7 +480,7 @@ function setupDailyDoubleWager(score = 0): GameState {
   state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
   state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
   state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
-  return reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+  return reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW }).state;
 }
 
 describe('SUBMIT_DD_WAGER', () => {
@@ -673,7 +745,7 @@ describe('REVEAL_ANSWER', () => {
     const alice = makePlayer({ id: 'p1', name: 'Alice' });
     state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
     state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
 
     const result = reduce(state, { type: 'REVEAL_ANSWER' }, { now: NOW });
 
@@ -725,7 +797,7 @@ function setupClueRevealed(): GameState {
   state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
   state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
   state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
-  return reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+  return reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
 }
 
 describe('ARM_BUZZERS', () => {
@@ -749,7 +821,7 @@ describe('ARM_BUZZERS', () => {
     state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
     state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
     state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', selectorId: state.controllingPlayerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
 
     const result = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW });
 
@@ -1054,7 +1126,7 @@ describe('answer reveal and outcome feedback', () => {
       lastOutcome: { playerId: 'p1', type: 'CORRECT', value: 100 },
     };
 
-    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: state.controllingPlayerId }, { now: NOW });
+    const result = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', hostOverride: true }, { now: NOW });
 
     expect(result.state.revealedAnswer).toBeNull();
     expect(result.state.lastOutcome).toBeNull();
@@ -1241,7 +1313,7 @@ describe('Daily Double wager state reset', () => {
     let state = setupGameWithTwoDailyDoubles();
     const controllerId = state.controllingPlayerId;
 
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
     state = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
     state = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 }).state;
@@ -1255,7 +1327,7 @@ describe('Daily Double wager state reset', () => {
     let state = setupGameWithTwoDailyDoubles();
     const controllerId = state.controllingPlayerId;
 
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
     state = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
     state = reduce(state, { type: 'RULE_INCORRECT', playerId: controllerId! }, { now: NOW + 100 }).state;
@@ -1270,7 +1342,7 @@ describe('Daily Double wager state reset', () => {
     const controllerId = state.controllingPlayerId;
 
     // First Daily Double: wager 200 and rule correct.
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
     state = reduce(state, { type: 'REVEAL_CLUE' }, { now: NOW }).state;
     state = reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 100 }).state;
@@ -1278,7 +1350,7 @@ describe('Daily Double wager state reset', () => {
     expect(state.dailyDoubleWager).toBeNull();
 
     // Second Daily Double: a fresh wager must be accepted.
-    const secondSelect = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', selectorId: controllerId }, { now: NOW + 200 });
+    const secondSelect = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl3', hostOverride: true }, { now: NOW + 200 });
     expect(secondSelect.state.phase).toBe('DAILY_DOUBLE_WAGER');
     expect(secondSelect.state.currentClueId).toBe('cl3');
     expect(secondSelect.state.dailyDoubleWager).toBeNull();
@@ -1297,7 +1369,7 @@ describe('Daily Double wager state reset', () => {
     let state = setupGameWithTwoDailyDoubles();
     const controllerId = state.controllingPlayerId;
 
-    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', selectorId: controllerId }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl2', hostOverride: true }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 200 }, { now: NOW }).state;
 
     const secondSubmit = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: controllerId!, amount: 300 }, { now: NOW + 100 });

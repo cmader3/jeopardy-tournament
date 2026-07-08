@@ -1,4 +1,4 @@
-import { GameState, Clue, AuditRecord } from '../models/index.js';
+import { GameState, Clue, AuditRecord, ClueSelectionMode } from '../models/index.js';
 
 export interface ProjectedPlayer {
   id: string;
@@ -55,6 +55,8 @@ export interface BoardView {
   players: ProjectedPlayer[];
   round: ProjectedRoundPublic | null;
   usedClueIds: string[];
+  clueSelectionMode: ClueSelectionMode;
+  pendingClueId: string | null;
   currentClueId: string | null;
   currentClueText: string | null;
   controllingPlayerId: string | null;
@@ -84,6 +86,8 @@ export interface HostView {
   players: ProjectedPlayer[];
   round: ProjectedRoundHost | null;
   usedClueIds: string[];
+  clueSelectionMode: ClueSelectionMode;
+  pendingClueId: string | null;
   currentClueId: string | null;
   currentClueText: string | null;
   controllingPlayerId: string | null;
@@ -286,6 +290,8 @@ export function projectBoard(state: GameState, now: number): BoardView {
     players: projectPlayers(state),
     round: round ? projectBoardRound(round) : null,
     usedClueIds: state.usedClueIds,
+    clueSelectionMode: state.clueSelectionMode ?? 'HOST',
+    pendingClueId: state.pendingClueId ?? null,
     currentClueId: state.currentClueId,
     currentClueText: showClueText ? currentClue?.clueText ?? null : null,
     controllingPlayerId: state.controllingPlayerId,
@@ -323,6 +329,8 @@ export function projectHost(state: GameState, now: number): HostView {
     players: projectPlayers(state),
     round: round ? projectHostRound(round) : null,
     usedClueIds: state.usedClueIds,
+    clueSelectionMode: state.clueSelectionMode ?? 'HOST',
+    pendingClueId: state.pendingClueId ?? null,
     currentClueId: state.currentClueId,
     currentClueText: showClueText ? currentClue?.clueText ?? null : null,
     controllingPlayerId: state.controllingPlayerId,

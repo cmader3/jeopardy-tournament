@@ -305,6 +305,64 @@
   cursor: not-allowed;
 }
 
+.clueModeToggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-0) 100%);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+
+.clueModeLabel {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.clueModeOptions {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-md);
+  align-self: flex-start;
+}
+
+.clueModeButton {
+  padding: 0.45rem 0.9rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-light);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.clueModeButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.clueModeActive,
+.clueModeActive:hover {
+  background: var(--value-gold);
+  color: var(--jeopardy-blue-dark);
+  font-weight: 600;
+}
+
+.clueModeHint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 .answerBanner {
   padding: 0.75rem 1rem;
   background: rgba(0, 0, 0, 0.3);

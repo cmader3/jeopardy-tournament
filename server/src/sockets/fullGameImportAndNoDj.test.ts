@@ -415,7 +415,7 @@ describe('full game sockets - import and no-DJ coverage', { timeout: 45000 }, ()
         (s) => s.phase === 'CLUE_REVEALED' && s.currentClueId === clue200.id,
         'clue200-revealed',
       );
-      alice.emit('select_clue', { clueId: clue200.id });
+      host.emit('select_clue', { clueId: clue200.id });
       const [, boardClue200, , bobClue200] = await awaitStates;
       expect(boardClue200.answer).toBeNull();
       expect(bobClue200.answer).toBeNull();

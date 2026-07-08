@@ -290,6 +290,31 @@
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
 }
 
+.cellSelected {
+  border-color: var(--value-gold);
+  animation: cellSelectedPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cellSelectedPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0.5rem var(--value-gold), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 1.35rem var(--value-gold), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+.selectedBanner {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2.6vh, 1.75rem);
+  color: var(--value-gold);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.5rem;
+}
+
 .clueStage {
   position: relative;
   width: 100%;

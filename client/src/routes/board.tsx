@@ -77,9 +77,10 @@ function ShareableLink({ roomCode }: ShareableLinkProps) {
 interface BoardGridProps {
   round: NonNullable<BoardView['round']>;
   usedClueIds: string[];
+  pendingClueId?: string | null;
 }
 
-function BoardGrid({ round, usedClueIds }: BoardGridProps) {
+function BoardGrid({ round, usedClueIds, pendingClueId }: BoardGridProps) {
   const maxRow = Math.max(0, ...round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
   const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
 
@@ -102,10 +103,11 @@ function BoardGrid({ round, usedClueIds }: BoardGridProps) {
           const clue = category.clues.find((c) => c.row === row);
           if (!clue) return <div key={`${category.id}-${row}`} className={styles.cell} />;
           const used = usedClueIds.includes(clue.id);
+          const selected = !used && clue.id === pendingClueId;
           return (
             <div
               key={clue.id}
-              className={`${styles.cell} ${used ? styles.cellUsed : ''}`}
+              className={`${styles.cell} ${used ? styles.cellUsed : ''} ${selected ? styles.cellSelected : ''}`}
               data-testid={used ? 'used-cell' : 'clue-cell'}
               data-clue-id={clue.id}
             >
@@ -542,8 +544,13 @@ function renderStage(state: BoardView) {
     return (
       <div className={styles.roundStage}>
         {answerBanner}
+        {state.phase === 'CLUE_SELECTED' && (
+          <p className={styles.selectedBanner} data-testid="board-clue-selected">
+            Clue selected — waiting for the host to reveal it.
+          </p>
+        )}
         {isRoundStart(state) && <RoundBanner roundType={state.round.type} />}
-        <BoardGrid round={state.round} usedClueIds={state.usedClueIds} />
+        <BoardGrid round={state.round} usedClueIds={state.usedClueIds} pendingClueId={state.pendingClueId} />
       </div>
     );
   }

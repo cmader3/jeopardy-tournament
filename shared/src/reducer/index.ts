@@ -1,4 +1,4 @@
-import { AuditRecord, GameState, Player } from '../models/index.js';
+import { AuditRecord, ClueSelectionMode, GameState, Player } from '../models/index.js';
 
 export interface ReducerCtx {
   now: number;
@@ -13,6 +13,8 @@ export type Intent =
   | { type: 'START_GAME' }
   | { type: 'RESTART_GAME' }
   | { type: 'SELECT_CLUE'; clueId: string; selectorId?: string; hostOverride?: boolean }
+  | { type: 'SET_CLUE_SELECTION_MODE'; mode: ClueSelectionMode }
+  | { type: 'REVEAL_SELECTED_CLUE' }
   | { type: 'ARM_BUZZERS' }
   | { type: 'BUZZ'; playerId: string }
   | { type: 'RULE_CORRECT' }
@@ -61,6 +63,8 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     players: [],
     controllingPlayerId: null,
     usedClueIds: [],
+    clueSelectionMode: 'HOST',
+    pendingClueId: null,
     currentClueId: null,
     buzzWinnerId: null,
     armedAt: null,
@@ -98,6 +102,10 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRestartGame(state);
     case 'SELECT_CLUE':
       return handleSelectClue(state, intent);
+    case 'SET_CLUE_SELECTION_MODE':
+      return handleSetClueSelectionMode(state, intent);
+    case 'REVEAL_SELECTED_CLUE':
+      return handleRevealSelectedClue(state);
     case 'ARM_BUZZERS':
       return handleArmBuzzers(state, ctx);
     case 'BUZZ':
@@ -234,7 +242,7 @@ function handleRestartGame(state: GameState): ReducerResult {
   const fresh = createInitialState(state.sessionId, state.roomCode, state.board);
   const players = state.players.map((player) => ({ ...player, score: 0 }));
   return {
-    state: { ...fresh, players },
+    state: { ...fresh, players, clueSelectionMode: state.clueSelectionMode ?? 'HOST' },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }
@@ -268,11 +276,18 @@ function handleSelectClue(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot select a clue right now' }] };
   }
 
-  const canSelect =
-    intent.hostOverride === true ||
-    (intent.selectorId !== undefined && intent.selectorId === state.controllingPlayerId);
+  const mode = state.clueSelectionMode ?? 'HOST';
+  const isHost = intent.hostOverride === true;
+  const isController = intent.selectorId !== undefined && intent.selectorId === state.controllingPlayerId;
 
-  if (!canSelect) {
+  if (mode === 'HOST' && !isHost) {
+    return {
+      state,
+      effects: [{ type: 'INTENT_REJECTED', reason: 'Only the host can select a clue in host-pick mode' }],
+    };
+  }
+
+  if (mode === 'PLAYER' && !isHost && !isController) {
     return {
       state,
       effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling player or host can select a clue' }],
@@ -293,6 +308,26 @@ function handleSelectClue(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clue has already been used' }] };
   }
 
+  if (mode === 'PLAYER') {
+    return {
+      state: {
+        ...state,
+        phase: 'CLUE_SELECTED',
+        pendingClueId: clue.id,
+        currentClueId: null,
+        buzzWinnerId: null,
+        armedAt: null,
+        deadline: null,
+        lockedOutPlayerIds: [],
+        lockoutUntil: {},
+        revealedAnswer: null,
+        lastOutcome: null,
+        dailyDoubleWager: null,
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
   const nextPhase = clue.isDailyDouble ? 'DAILY_DOUBLE_WAGER' : 'CLUE_REVEALED';
 
   return {
@@ -300,6 +335,62 @@ function handleSelectClue(
       ...state,
       phase: nextPhase,
       currentClueId: clue.id,
+      pendingClueId: null,
+      buzzWinnerId: null,
+      armedAt: null,
+      deadline: null,
+      lockedOutPlayerIds: [],
+      lockoutUntil: {},
+      revealedAnswer: null,
+      lastOutcome: null,
+      dailyDoubleWager: null,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleSetClueSelectionMode(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SET_CLUE_SELECTION_MODE' }>,
+): ReducerResult {
+  return {
+    state: { ...state, clueSelectionMode: intent.mode },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRevealSelectedClue(state: GameState): ReducerResult {
+  if (state.phase !== 'CLUE_SELECTED') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No selected clue is waiting to be revealed' }] };
+  }
+
+  const pendingClueId = state.pendingClueId;
+  if (!pendingClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No selected clue' }] };
+  }
+
+  const round = state.board.rounds[state.roundIndex];
+  if (!round) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No active round' }] };
+  }
+
+  const clue = round.clues.find((c) => c.id === pendingClueId);
+  if (!clue) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clue not found' }] };
+  }
+
+  if (state.usedClueIds.includes(clue.id)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clue has already been used' }] };
+  }
+
+  const nextPhase = clue.isDailyDouble ? 'DAILY_DOUBLE_WAGER' : 'CLUE_REVEALED';
+
+  return {
+    state: {
+      ...state,
+      phase: nextPhase,
+      currentClueId: clue.id,
+      pendingClueId: null,
       buzzWinnerId: null,
       armedAt: null,
       deadline: null,

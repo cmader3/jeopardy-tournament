@@ -106,6 +106,8 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     finalAnswerSubmitted: false,
     myFinalAnswer: null,
     roundComplete: false,
+    clueSelectionMode: 'HOST',
+    pendingClueId: null,
     ...overrides,
   };
 }
@@ -342,6 +344,7 @@ describe('PlayRoute', () => {
         round: makeRound(),
         isControllingPlayer: true,
         controllingPlayerId: 'p1',
+        clueSelectionMode: 'PLAYER',
       }),
       startGame: vi.fn(),
       leaveGame: vi.fn(),
@@ -400,6 +403,59 @@ describe('PlayRoute', () => {
     expect(cells[0]).toBeDisabled();
     await userEvent.click(cells[0]);
     expect(selectClue).not.toHaveBeenCalled();
+  });
+
+  it('tells the controlling player to wait for the host in host-pick mode', async () => {
+    const selectClue = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        isControllingPlayer: true,
+        controllingPlayerId: 'p1',
+        clueSelectionMode: 'HOST',
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue,
+    });
+
+    render(<PlayRoute />);
+    await userEvent.type(screen.getByLabelText('Room Code'), 'ABCD');
+    await userEvent.type(screen.getByLabelText('Your Name'), 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    expect(await screen.findByText('Waiting for the host to select a clue.')).toBeInTheDocument();
+    const cells = screen.getAllByTestId('contestant-clue-cell');
+    await userEvent.click(cells[0]);
+    expect(selectClue).not.toHaveBeenCalled();
+  });
+
+  it('shows a waiting state to contestants when a clue is selected but not revealed', async () => {
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_SELECTED',
+        round: makeRound(),
+        clueSelectionMode: 'PLAYER',
+        pendingClueId: 'cl1',
+        isControllingPlayer: true,
+        controllingPlayerId: 'p1',
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+    await userEvent.type(screen.getByLabelText('Room Code'), 'ABCD');
+    await userEvent.type(screen.getByLabelText('Your Name'), 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    expect(await screen.findByTestId('contestant-clue-selected')).toBeInTheDocument();
   });
 
   it('shows the revealed clue on the contestant device', async () => {

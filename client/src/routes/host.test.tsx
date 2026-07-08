@@ -130,6 +130,8 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     finalAnswerSubmissionStatus: {},
     roundComplete: false,
     serverNow: 0,
+    clueSelectionMode: 'HOST',
+    pendingClueId: null,
     ...overrides,
   };
 }
@@ -219,6 +221,83 @@ describe('HostLobby', () => {
 
     expect(screen.getByTestId('start-game-button')).toBeInTheDocument();
     expect(screen.queryByText('Game started!')).not.toBeInTheDocument();
+  });
+
+  it('shows the clue-selection toggle defaulting to Host picks', () => {
+    render(<HostLobby roomCode="ABCD" state={makeHostState()} onStartGame={vi.fn()} startError={null} />);
+
+    expect(screen.getByTestId('clue-mode-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('clue-mode-host')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('clue-mode-player')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('reflects Players-pick mode as active when set', () => {
+    const state = makeHostState({ clueSelectionMode: 'PLAYER' });
+    render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError={null} />);
+
+    expect(screen.getByTestId('clue-mode-player')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('clue-mode-host')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('emits a clue-selection mode change from the lobby toggle', async () => {
+    const onSetClueSelectionMode = vi.fn();
+    render(
+      <HostLobby
+        roomCode="ABCD"
+        state={makeHostState()}
+        onStartGame={vi.fn()}
+        onSetClueSelectionMode={onSetClueSelectionMode}
+        startError={null}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('clue-mode-player'));
+    expect(onSetClueSelectionMode).toHaveBeenCalledWith('PLAYER');
+  });
+});
+
+describe('HostInProgress clue-selection mode', () => {
+  it('shows the toggle and a reveal panel while a clue is pending in player-pick mode', () => {
+    const state = makeHostState({
+      phase: 'CLUE_SELECTED',
+      round: makeRound(),
+      clueSelectionMode: 'PLAYER',
+      pendingClueId: 'cl1',
+      controllingPlayerId: 'p1',
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('clue-mode-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('pending-clue')).toBeInTheDocument();
+    expect(screen.getByTestId('pending-clue-text')).toHaveTextContent('Science for $100');
+    expect(screen.getByTestId('pending-clue-text')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('reveal-selected-clue-button')).toBeInTheDocument();
+  });
+
+  it('emits reveal when the host clicks Reveal Clue', async () => {
+    const onRevealSelectedClue = vi.fn();
+    const state = makeHostState({
+      phase: 'CLUE_SELECTED',
+      round: makeRound(),
+      clueSelectionMode: 'PLAYER',
+      pendingClueId: 'cl1',
+      controllingPlayerId: 'p1',
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onRevealSelectedClue={onRevealSelectedClue} />);
+
+    await userEvent.click(screen.getByTestId('reveal-selected-clue-button'));
+    expect(onRevealSelectedClue).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits a clue-selection mode change from the in-progress toggle', async () => {
+    const onSetClueSelectionMode = vi.fn();
+    const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound() });
+    render(<HostInProgress roomCode="WXYZ" state={state} onSetClueSelectionMode={onSetClueSelectionMode} />);
+
+    await userEvent.click(screen.getByTestId('clue-mode-player'));
+    expect(onSetClueSelectionMode).toHaveBeenCalledWith('PLAYER');
   });
 });
 

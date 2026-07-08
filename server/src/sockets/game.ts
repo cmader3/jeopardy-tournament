@@ -214,6 +214,50 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('set_clue_selection_mode', async (payload: { mode: 'HOST' | 'PLAYER' }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can change the clue selection mode' });
+        return;
+      }
+
+      const mode = payload?.mode === 'PLAYER' ? 'PLAYER' : payload?.mode === 'HOST' ? 'HOST' : null;
+      if (!mode) {
+        socket.emit('error', { message: 'Invalid clue selection mode' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'SET_CLUE_SELECTION_MODE', mode }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Set clue selection mode failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('reveal_selected_clue', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can reveal the selected clue' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'REVEAL_SELECTED_CLUE' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Reveal selected clue failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('reveal_clue', async () => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

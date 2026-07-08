@@ -447,14 +447,17 @@ describe('round advance sockets', { timeout: 15000 }, () => {
     host.emit('override_control', { playerId: bobId });
     await overrideUpdate;
 
+    host.emit('set_clue_selection_mode', { mode: 'PLAYER' });
+    await waitForState(host, (s) => (s as { clueSelectionMode: string }).clueSelectionMode === 'PLAYER');
+
     const aliceError = waitForError(alice);
     alice.emit('select_clue', { clueId: doubleJeopardyClueId });
     const error = await aliceError;
     expect(error.message).toMatch(/Only the controlling player or host can select a clue/i);
 
-    const bobReveal = waitForState(bob, (s) => s.phase === 'CLUE_REVEALED');
+    const bobSelected = waitForState(bob, (s) => s.phase === 'CLUE_SELECTED');
     bob.emit('select_clue', { clueId: doubleJeopardyClueId });
-    await bobReveal;
+    await bobSelected;
 
     host.disconnect();
     boardClient.disconnect();
@@ -499,10 +502,12 @@ describe('round advance sockets', { timeout: 15000 }, () => {
     expect(typedHost.roundIndex).toBe(1);
     expect(typedHost.controllingPlayerId).toBe(bobId);
 
-    // Bob (connected) can select the next round's first clue.
-    const bobReveal = waitForState(bob, (s) => s.phase === 'CLUE_REVEALED');
+    // Bob (connected) can select the next round's first clue in player-pick mode.
+    host.emit('set_clue_selection_mode', { mode: 'PLAYER' });
+    await waitForState(host, (s) => (s as { clueSelectionMode: string }).clueSelectionMode === 'PLAYER');
+    const bobSelected = waitForState(bob, (s) => s.phase === 'CLUE_SELECTED');
     bob.emit('select_clue', { clueId: doubleJeopardyClueId });
-    await bobReveal;
+    await bobSelected;
 
     host.disconnect();
     boardClient.disconnect();
