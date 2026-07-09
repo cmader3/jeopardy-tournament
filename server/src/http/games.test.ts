@@ -146,3 +146,76 @@ describe('POST /api/games', () => {
     expect(response.body.error).toMatch(/no playable clues/i);
   });
 });
+
+async function createGame(): Promise<string> {
+  const board = await boardRepository.create(makeBoardPayload());
+  const response = await authRequest().post('/api/games').send({ boardId: board.id }).expect(201);
+  return response.body.roomCode as string;
+}
+
+describe('GET /api/games', () => {
+  it('rejects a request with no Authorization header', async () => {
+    const response = await request(testServer.server).get('/api/games').expect(401);
+    expect(response.body.error).toBe('Unauthorized');
+  });
+
+  it('lists created games with summary fields', async () => {
+    const roomCode = await createGame();
+
+    const response = await authRequest().get('/api/games').expect(200);
+    const game = (response.body.games as Array<Record<string, unknown>>).find((g) => g.roomCode === roomCode);
+
+    expect(game).toBeDefined();
+    expect(game?.boardName).toBe('Game Test Board');
+    expect(game?.status).toBe('LOBBY');
+    expect(game?.archived).toBe(false);
+    expect(game?.playerCount).toBe(0);
+  });
+});
+
+describe('PATCH /api/games/:roomCode', () => {
+  it('archives and unarchives a game', async () => {
+    const roomCode = await createGame();
+
+    await authRequest().patch(`/api/games/${roomCode}`).send({ archived: true }).expect(200);
+    let response = await authRequest().get('/api/games').expect(200);
+    let game = (response.body.games as Array<Record<string, unknown>>).find((g) => g.roomCode === roomCode);
+    expect(game?.archived).toBe(true);
+
+    await authRequest().patch(`/api/games/${roomCode}`).send({ archived: false }).expect(200);
+    response = await authRequest().get('/api/games').expect(200);
+    game = (response.body.games as Array<Record<string, unknown>>).find((g) => g.roomCode === roomCode);
+    expect(game?.archived).toBe(false);
+  });
+
+  it('returns 400 for an invalid body', async () => {
+    const roomCode = await createGame();
+    const response = await authRequest().patch(`/api/games/${roomCode}`).send({ archived: 'yes' }).expect(400);
+    expect(response.body.error).toBe('Invalid request body');
+  });
+
+  it('returns 404 for an unknown room code', async () => {
+    const response = await authRequest().patch('/api/games/ZZZZ').send({ archived: true }).expect(404);
+    expect(response.body.error).toBe('Game not found');
+  });
+});
+
+describe('DELETE /api/games/:roomCode', () => {
+  it('deletes a game so it no longer appears in the list', async () => {
+    const roomCode = await createGame();
+
+    await authRequest().delete(`/api/games/${roomCode}`).expect(204);
+
+    const response = await authRequest().get('/api/games').expect(200);
+    const game = (response.body.games as Array<Record<string, unknown>>).find((g) => g.roomCode === roomCode);
+    expect(game).toBeUndefined();
+
+    const session = await prisma.gameSession.findUnique({ where: { roomCode } });
+    expect(session).toBeNull();
+  });
+
+  it('returns 404 for an unknown room code', async () => {
+    const response = await authRequest().delete('/api/games/ZZZZ').expect(404);
+    expect(response.body.error).toBe('Game not found');
+  });
+});

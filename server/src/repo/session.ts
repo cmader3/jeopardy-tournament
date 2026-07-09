@@ -30,12 +30,24 @@ export interface GameSessionWithPlayers {
   players: PlayerRecord[];
 }
 
+export interface GameSessionRow {
+  id: string;
+  roomCode: string;
+  boardId: string | null;
+  status: GameSessionStatus;
+  snapshot: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GameSessionRepository {
   create(input: CreateSessionInput): Promise<GameSessionWithPlayers>;
   findByRoomCode(roomCode: string): Promise<GameSessionWithPlayers | null>;
   findActive(): Promise<GameSessionWithPlayers[]>;
+  findAll(): Promise<GameSessionRow[]>;
   updateSnapshot(id: string, snapshot: string): Promise<void>;
   updateStatus(id: string, status: GameSessionStatus): Promise<void>;
+  deleteByRoomCode(roomCode: string): Promise<void>;
 }
 
 const includePlayers = {
@@ -78,6 +90,22 @@ export const gameSessionRepository: GameSessionRepository = {
     return sessions as GameSessionWithPlayers[];
   },
 
+  async findAll() {
+    const sessions = await prisma.gameSession.findMany({
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        roomCode: true,
+        boardId: true,
+        status: true,
+        snapshot: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return sessions as GameSessionRow[];
+  },
+
   async updateSnapshot(id, snapshot) {
     await prisma.gameSession.update({
       where: { id },
@@ -89,6 +117,12 @@ export const gameSessionRepository: GameSessionRepository = {
     await prisma.gameSession.update({
       where: { id },
       data: { status },
+    });
+  },
+
+  async deleteByRoomCode(roomCode) {
+    await prisma.gameSession.delete({
+      where: { roomCode },
     });
   },
 };

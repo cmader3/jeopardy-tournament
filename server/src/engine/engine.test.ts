@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GameEngine, mapBoardToShared } from './game.js';
+import { GameEngine, mapBoardToShared, AUTO_ARCHIVE_AFTER_MS } from './game.js';
 import { prisma } from '../repo/prisma.js';
 import { boardRepository } from '../repo/board.js';
 import { gameSessionRepository } from '../repo/session.js';
@@ -132,6 +132,88 @@ describe('GameEngine', () => {
     await freshEngine.loadActiveSessions();
 
     expect(freshEngine.getState(roomCode)).toBeUndefined();
+  });
+
+  it('lists sessions with summary fields', async () => {
+    const board = await boardRepository.create(makeBoardPayload());
+    const engine = new GameEngine();
+    const { roomCode } = await engine.createSession(board.id);
+
+    const summaries = await engine.listSessions();
+    const summary = summaries.find((s) => s.roomCode === roomCode);
+
+    expect(summary).toBeDefined();
+    expect(summary?.boardName).toBe('Engine Test Board');
+    expect(summary?.status).toBe('LOBBY');
+    expect(summary?.archived).toBe(false);
+    expect(summary?.playerCount).toBe(0);
+  });
+
+  it('auto-archives a game that completed over an hour ago', async () => {
+    const board = await boardRepository.create(makeBoardPayload());
+    const engine = new GameEngine();
+    const { roomCode, state } = await engine.createSession(board.id);
+
+    const now = Date.now();
+    const completed = { ...state, phase: 'COMPLETE', completedAt: now - AUTO_ARCHIVE_AFTER_MS - 1000 };
+    await gameSessionRepository.updateSnapshot(state.sessionId, JSON.stringify(completed));
+
+    const summaries = await engine.listSessions(now);
+    const summary = summaries.find((s) => s.roomCode === roomCode);
+    expect(summary?.status).toBe('COMPLETE');
+    expect(summary?.archived).toBe(true);
+  });
+
+  it('does not auto-archive a game that completed recently', async () => {
+    const board = await boardRepository.create(makeBoardPayload());
+    const engine = new GameEngine();
+    const { roomCode, state } = await engine.createSession(board.id);
+
+    const now = Date.now();
+    const completed = { ...state, phase: 'COMPLETE', completedAt: now - 1000 };
+    await gameSessionRepository.updateSnapshot(state.sessionId, JSON.stringify(completed));
+
+    const summaries = await engine.listSessions(now);
+    expect(summaries.find((s) => s.roomCode === roomCode)?.archived).toBe(false);
+  });
+
+  it('archives then unarchives a session, clearing completion on unarchive', async () => {
+    const board = await boardRepository.create(makeBoardPayload());
+    const engine = new GameEngine();
+    const { roomCode } = await engine.createSession(board.id);
+
+    await engine.setArchived(roomCode, true);
+    let summaries = await engine.listSessions();
+    expect(summaries.find((s) => s.roomCode === roomCode)?.archived).toBe(true);
+
+    await engine.setArchived(roomCode, false);
+    summaries = await engine.listSessions();
+    const summary = summaries.find((s) => s.roomCode === roomCode);
+    expect(summary?.archived).toBe(false);
+    expect(summary?.completedAt).toBeNull();
+  });
+
+  it('deletes a session from memory and storage', async () => {
+    const board = await boardRepository.create(makeBoardPayload());
+    const engine = new GameEngine();
+    const { roomCode } = await engine.createSession(board.id);
+
+    await engine.deleteSession(roomCode);
+
+    expect(engine.getState(roomCode)).toBeUndefined();
+    const summaries = await engine.listSessions();
+    expect(summaries.find((s) => s.roomCode === roomCode)).toBeUndefined();
+  });
+
+  it('loads a session on demand into a fresh engine', async () => {
+    const board = await boardRepository.create(makeBoardPayload());
+    const engine = new GameEngine();
+    const { roomCode } = await engine.createSession(board.id);
+
+    const freshEngine = new GameEngine();
+    expect(freshEngine.getState(roomCode)).toBeUndefined();
+    await freshEngine.ensureSessionLoaded(roomCode);
+    expect(freshEngine.getState(roomCode)).toBeDefined();
   });
 
   it('rejects a board with no playable clues', async () => {

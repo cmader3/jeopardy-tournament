@@ -4,6 +4,7 @@ import {
   Category,
   Clue,
   createInitialState,
+  GamePhase,
   GameState,
   Intent,
   isBoardPlayable,
@@ -12,7 +13,7 @@ import {
   ReducerResult,
   Round,
 } from '@jeopardy/shared';
-import { gameSessionRepository, GameSessionRepository } from '../repo/session.js';
+import { gameSessionRepository, GameSessionRepository, GameSessionRow } from '../repo/session.js';
 import { boardRepository } from '../repo/board.js';
 import type { BoardWithRounds } from '../repo/board.js';
 import { generateRoomCode, normalizeRoomCode } from '../utils/roomCode.js';
@@ -26,6 +27,30 @@ export interface CreateSessionResult {
   sessionId: string;
   roomCode: string;
   state: GameState;
+}
+
+export type GameSessionSummaryStatus = 'LOBBY' | 'IN_PROGRESS' | 'FINAL' | 'COMPLETE';
+
+export interface GameSessionSummary {
+  roomCode: string;
+  boardName: string;
+  status: GameSessionSummaryStatus;
+  phase: GamePhase;
+  playerCount: number;
+  connectedCount: number;
+  archived: boolean;
+  completedAt: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const AUTO_ARCHIVE_AFTER_MS = 60 * 60 * 1000;
+
+function deriveSummaryStatus(phase: GamePhase): GameSessionSummaryStatus {
+  if (phase === 'LOBBY') return 'LOBBY';
+  if (phase === 'COMPLETE') return 'COMPLETE';
+  if (phase.startsWith('FINAL')) return 'FINAL';
+  return 'IN_PROGRESS';
 }
 
 export class GameEngine {
@@ -70,27 +95,45 @@ export class GameEngine {
     return { sessionId: session.id, roomCode, state };
   }
 
+  private hydrate(session: { id: string; roomCode: string; snapshot: string }): GameState | null {
+    try {
+      const parsed = JSON.parse(session.snapshot) as GameState;
+      // Sockets are gone after a restart; mark every player as disconnected
+      // so reconnections can cleanly restore their slot and connection status.
+      const players = parsed.players.map((player) => ({ ...player, connected: false }));
+      return {
+        ...parsed,
+        sessionId: session.id,
+        players,
+        clueSelectionMode: parsed.clueSelectionMode ?? 'HOST',
+        pendingClueId: parsed.pendingClueId ?? null,
+        archived: parsed.archived ?? false,
+        completedAt: parsed.completedAt ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async loadActiveSessions(): Promise<void> {
     const activeSessions = await this.sessionRepo.findActive();
     for (const session of activeSessions) {
-      try {
-        const parsed = JSON.parse(session.snapshot) as GameState;
-        // Sockets are gone after a restart; mark every player as disconnected
-        // so reconnections can cleanly restore their slot and connection status.
-        const players = parsed.players.map((player) => ({ ...player, connected: false }));
-        const state = {
-          ...parsed,
-          sessionId: session.id,
-          players,
-          clueSelectionMode: parsed.clueSelectionMode ?? 'HOST',
-          pendingClueId: parsed.pendingClueId ?? null,
-        };
-        this.sessions.set(session.roomCode, state);
-        this.scheduleTimer(session.roomCode, state);
-      } catch {
-        // Ignore corrupted snapshots; the session will be abandoned.
-      }
+      const state = this.hydrate(session);
+      if (!state) continue;
+      this.sessions.set(session.roomCode, state);
+      this.scheduleTimer(session.roomCode, state);
     }
+  }
+
+  async ensureSessionLoaded(roomCode: string): Promise<void> {
+    const normalized = normalizeRoomCode(roomCode);
+    if (this.sessions.has(normalized)) return;
+    const session = await this.sessionRepo.findByRoomCode(normalized);
+    if (!session) return;
+    const state = this.hydrate(session);
+    if (!state) return;
+    this.sessions.set(normalized, state);
+    this.scheduleTimer(normalized, state);
   }
 
   getState(roomCode: string): GameState | undefined {
@@ -106,6 +149,9 @@ export class GameEngine {
 
     const result = reduce(state, intent, ctx);
     if (result.effects.some((e) => e.type === 'BROADCAST_STATE')) {
+      if (result.state.phase === 'COMPLETE' && result.state.completedAt == null) {
+        result.state = { ...result.state, completedAt: ctx.now };
+      }
       this.sessions.set(normalized, result.state);
       await this.persistSnapshot(result.state);
       this.broadcast(normalized, result.state);
@@ -175,6 +221,93 @@ export class GameEngine {
 
   async persistSnapshot(state: GameState): Promise<void> {
     await this.sessionRepo.updateSnapshot(state.sessionId, JSON.stringify(state));
+  }
+
+  async listSessions(now: number = Date.now()): Promise<GameSessionSummary[]> {
+    const rows = await this.sessionRepo.findAll();
+    const summaries: GameSessionSummary[] = [];
+    for (const row of rows) {
+      const summary = await this.summarizeRow(row, now);
+      if (summary) summaries.push(summary);
+    }
+    return summaries;
+  }
+
+  private async summarizeRow(row: GameSessionRow, now: number): Promise<GameSessionSummary | null> {
+    let parsed: GameState;
+    try {
+      parsed = JSON.parse(row.snapshot) as GameState;
+    } catch {
+      return null;
+    }
+
+    let archived = parsed.archived ?? false;
+    let completedAt = parsed.completedAt ?? null;
+    let changed = false;
+
+    if (parsed.phase === 'COMPLETE' && completedAt == null) {
+      completedAt = now;
+      changed = true;
+    }
+    if (!archived && completedAt != null && now - completedAt >= AUTO_ARCHIVE_AFTER_MS) {
+      archived = true;
+      changed = true;
+    }
+
+    if (changed) {
+      const normalized = normalizeRoomCode(row.roomCode);
+      const loaded = this.sessions.get(normalized);
+      if (loaded) {
+        this.sessions.set(normalized, { ...loaded, archived, completedAt });
+      }
+      await this.sessionRepo
+        .updateSnapshot(row.id, JSON.stringify({ ...parsed, archived, completedAt }))
+        .catch(() => {});
+    }
+
+    return {
+      roomCode: parsed.roomCode ?? row.roomCode,
+      boardName: parsed.board?.name ?? 'Unknown board',
+      status: deriveSummaryStatus(parsed.phase),
+      phase: parsed.phase,
+      playerCount: parsed.players?.length ?? 0,
+      connectedCount: parsed.players?.filter((p) => p.connected).length ?? 0,
+      archived,
+      completedAt,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  async setArchived(roomCode: string, archived: boolean): Promise<void> {
+    const normalized = normalizeRoomCode(roomCode);
+    await this.ensureSessionLoaded(normalized);
+    const state = this.sessions.get(normalized);
+    if (!state) {
+      throw new SessionNotFoundError();
+    }
+    const nextState: GameState = {
+      ...state,
+      archived,
+      completedAt: archived ? state.completedAt : null,
+    };
+    this.sessions.set(normalized, nextState);
+    await this.persistSnapshot(nextState);
+  }
+
+  async deleteSession(roomCode: string): Promise<void> {
+    const normalized = normalizeRoomCode(roomCode);
+    const session = await this.sessionRepo.findByRoomCode(normalized);
+    if (!session) {
+      throw new SessionNotFoundError();
+    }
+    const timer = this.timers.get(normalized);
+    if (timer) {
+      clearTimeout(timer);
+      this.timers.delete(normalized);
+    }
+    this.sessions.delete(normalized);
+    await this.sessionRepo.deleteByRoomCode(normalized);
   }
 }
 

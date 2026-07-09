@@ -104,7 +104,11 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
 
         const data = result.data;
         const roomCode = normalizeRoomCode(data.roomCode);
-        const state = engine.getState(roomCode);
+        let state = engine.getState(roomCode);
+        if (!state) {
+          await engine.ensureSessionLoaded(roomCode);
+          state = engine.getState(roomCode);
+        }
         if (!state) {
           socket.emit('error', { message: 'Unknown room code' });
           return;

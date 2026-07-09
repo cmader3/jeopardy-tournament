@@ -89,6 +89,8 @@ export interface GameState {
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
   pendingClueId: string | null;
+  archived: boolean;
+  completedAt: number | null;
   currentClueId: string | null;
   buzzWinnerId: string | null;
   armedAt: number | null;

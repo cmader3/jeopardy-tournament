@@ -11,6 +11,9 @@ vi.mock('../api/boards.js', () => ({
 }));
 vi.mock('../api/games.js', () => ({
   createGame: vi.fn(),
+  listGames: vi.fn(),
+  setGameArchived: vi.fn(),
+  deleteGame: vi.fn(),
   __esModule: true,
 }));
 vi.mock('../socket/useSocket.js', () => ({
@@ -20,8 +23,14 @@ vi.mock('../socket/useSocket.js', () => ({
 
 import { useHostAuth } from '../auth/useHostAuth.js';
 import { boardApi } from '../api/boards.js';
-import { createGame } from '../api/games.js';
+import { createGame, listGames, setGameArchived, deleteGame } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
+
+beforeEach(() => {
+  vi.mocked(listGames).mockReset().mockResolvedValue([]);
+  vi.mocked(setGameArchived).mockReset().mockResolvedValue(undefined);
+  vi.mocked(deleteGame).mockReset().mockResolvedValue(undefined);
+});
 
 function mockUseSocket(overrides: Record<string, unknown> = {}) {
   useSocket.mockReturnValue({
@@ -142,6 +151,22 @@ describe('HostLobby', () => {
 
     expect(screen.getByTestId('room-code')).toHaveTextContent('Room Code: ABCD');
     expect(screen.getByText('Waiting for players...')).toBeInTheDocument();
+  });
+
+  it('renders a back-to-menu link that returns to the games list', async () => {
+    const onCreateNewGame = vi.fn();
+    render(
+      <HostLobby
+        roomCode="ABCD"
+        state={makeHostState()}
+        onStartGame={vi.fn()}
+        onCreateNewGame={onCreateNewGame}
+        startError={null}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('lobby-menu-button'));
+    expect(onCreateNewGame).toHaveBeenCalledTimes(1);
   });
 
   it('disables the start button when no players are in the lobby', () => {
@@ -1191,5 +1216,109 @@ describe('HostInProgress score tools', () => {
     const valueSpan = cells[0].querySelector('span');
     expect(valueSpan).toBeTruthy();
     expect(valueSpan?.className).toMatch(/value/);
+  });
+});
+
+describe('HostContent games manager', () => {
+  const token = 'host-token';
+
+  function authAndRender() {
+    useHostAuth.mockReturnValue({
+      token,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    boardApi.getBoards.mockResolvedValue([{ id: 'b1', name: 'Board One', isComplete: true }]);
+    mockUseSocket();
+    return render(<HostContent />);
+  }
+
+  function makeGameSummary(overrides = {}) {
+    return {
+      roomCode: 'AAAA',
+      boardName: 'History 101',
+      status: 'LOBBY',
+      phase: 'LOBBY',
+      playerCount: 0,
+      connectedCount: 0,
+      archived: false,
+      completedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  it('lists active games and enters host mode when one is clicked', async () => {
+    vi.mocked(listGames).mockResolvedValue([makeGameSummary({ roomCode: 'AAAA', boardName: 'History 101' })]);
+    authAndRender();
+
+    const card = await screen.findByTestId('game-card-AAAA');
+    expect(card).toHaveTextContent('AAAA');
+    expect(card).toHaveTextContent('History 101');
+
+    await userEvent.click(screen.getByTestId('enter-game-AAAA'));
+
+    expect(await screen.findByTestId('room-code')).toHaveTextContent('Room Code: AAAA');
+    expect(localStorage.getItem('jeopardy-host-room')).toBe('AAAA');
+  });
+
+  it('shows an empty state when there are no active games', async () => {
+    vi.mocked(listGames).mockResolvedValue([]);
+    authAndRender();
+
+    expect(await screen.findByTestId('active-games-empty')).toBeInTheDocument();
+  });
+
+  it('archives an active game and moves it to the archived section', async () => {
+    vi.mocked(listGames)
+      .mockResolvedValueOnce([makeGameSummary({ roomCode: 'AAAA' })])
+      .mockResolvedValueOnce([makeGameSummary({ roomCode: 'AAAA', archived: true })]);
+    authAndRender();
+
+    await userEvent.click(await screen.findByTestId('archive-game-AAAA'));
+
+    expect(setGameArchived).toHaveBeenCalledWith('AAAA', true, token);
+    expect(await screen.findByTestId('archived-games-section')).toBeInTheDocument();
+    expect(screen.getByTestId('active-games-empty')).toBeInTheDocument();
+  });
+
+  it('keeps archived games collapsed until expanded, then unarchives', async () => {
+    vi.mocked(listGames).mockResolvedValue([makeGameSummary({ roomCode: 'ZZZZ', archived: true })]);
+    authAndRender();
+
+    expect(await screen.findByTestId('archived-games-section')).toBeInTheDocument();
+    expect(screen.queryByTestId('archived-games-list')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('archived-games-toggle'));
+
+    expect(screen.getByTestId('archived-games-list')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('unarchive-game-ZZZZ'));
+    expect(setGameArchived).toHaveBeenCalledWith('ZZZZ', false, token);
+  });
+
+  it('deletes a game only after confirmation', async () => {
+    vi.mocked(listGames).mockResolvedValue([makeGameSummary({ roomCode: 'AAAA' })]);
+    authAndRender();
+
+    await userEvent.click(await screen.findByTestId('delete-game-AAAA'));
+    expect(deleteGame).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId('confirm-delete-game-button'));
+    expect(deleteGame).toHaveBeenCalledWith('AAAA', token);
+  });
+
+  it('does not delete when the confirmation is cancelled', async () => {
+    vi.mocked(listGames).mockResolvedValue([makeGameSummary({ roomCode: 'AAAA' })]);
+    authAndRender();
+
+    await userEvent.click(await screen.findByTestId('delete-game-AAAA'));
+    await userEvent.click(screen.getByTestId('cancel-delete-game-button'));
+
+    expect(deleteGame).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 });

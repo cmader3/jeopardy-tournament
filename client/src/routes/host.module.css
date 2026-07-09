@@ -740,3 +740,186 @@
   padding: 0.15rem 0.35rem;
 }
 
+.backToMenuLink {
+  align-self: flex-start;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--value-gold);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(236, 194, 92, 0.5);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.backToMenuLink:hover {
+  background: var(--value-gold);
+  color: var(--jeopardy-blue-dark);
+}
+
+.gamesManager {
+  margin-top: 2rem;
+  max-width: 720px;
+}
+
+.gamesManager h2 {
+  font-family: var(--font-display);
+  color: var(--value-gold);
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.gamesEmpty {
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  margin: 0 0 1rem;
+}
+
+.gameList {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.gameCard {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-0) 100%);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.gameEnter {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-light);
+  font-family: var(--font-body);
+  transition: background var(--transition);
+}
+
+.gameEnter:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.gameCode {
+  font-family: var(--font-display);
+  color: var(--value-gold);
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+}
+
+.gameBoard {
+  font-weight: 600;
+  flex: 1 1 auto;
+}
+
+.gameMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.gameStatus {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--surface-border-strong);
+  color: var(--text-light);
+}
+
+.gameStatus[data-status='LOBBY'] {
+  color: #9ecbff;
+  border-color: rgba(158, 203, 255, 0.4);
+}
+
+.gameStatus[data-status='IN_PROGRESS'] {
+  color: #ffd479;
+  border-color: rgba(255, 212, 121, 0.4);
+}
+
+.gameStatus[data-status='FINAL'] {
+  color: #f0a3ff;
+  border-color: rgba(240, 163, 255, 0.4);
+}
+
+.gameStatus[data-status='COMPLETE'] {
+  color: #6ee7a8;
+  border-color: rgba(110, 231, 168, 0.4);
+}
+
+.gameActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  flex-shrink: 0;
+}
+
+.gameActionButton,
+.gameDeleteButton {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--surface-border-strong);
+  color: var(--text-light);
+  transition: background var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+
+.gameActionButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.gameDeleteButton {
+  color: #ff8a80;
+  border-color: rgba(229, 72, 77, 0.5);
+}
+
+.gameDeleteButton:hover {
+  background: var(--incorrect-red);
+  color: #fff;
+}
+
+.archivedSection {
+  margin-top: 0.5rem;
+}
+
+.archivedToggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.35rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.archivedToggle:hover {
+  color: var(--value-gold);
+}
+

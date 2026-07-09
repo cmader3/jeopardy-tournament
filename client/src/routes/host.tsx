@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PasscodeGate } from '../components/PasscodeGate.js';
 import { useHostAuth } from '../auth/useHostAuth.js';
 import { boardApi, BoardSummary } from '../api/boards.js';
-import { createGame } from '../api/games.js';
+import { createGame, listGames, setGameArchived, deleteGame, GameSummary } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
 import type { HostView, ClueSelectionMode } from '@jeopardy/shared';
@@ -65,6 +65,16 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
 
   return (
     <main className={styles.hostLobby}>
+      {onCreateNewGame && (
+        <button
+          type="button"
+          className={styles.backToMenuLink}
+          onClick={onCreateNewGame}
+          data-testid="lobby-menu-button"
+        >
+          ← All Games
+        </button>
+      )}
       <h1>Host Lobby</h1>
       <p className={styles.roomCode} data-testid="room-code">
         Room Code: {roomCode}
@@ -113,11 +123,6 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
         >
           Start Game
         </button>
-        {onCreateNewGame && (
-          <button type="button" className={styles.actionButton} onClick={onCreateNewGame}>
-            New Game
-          </button>
-        )}
         {connectedCount === 0 && (
           <p className={styles.minimumPlayers}>At least one connected contestant is required to start.</p>
         )}
@@ -1078,6 +1083,179 @@ export function HostGameControls({
 
 const HOST_ROOM_KEY = 'jeopardy-host-room';
 
+function gameStatusLabel(status: GameSummary['status']): string {
+  switch (status) {
+    case 'LOBBY':
+      return 'Lobby';
+    case 'IN_PROGRESS':
+      return 'In progress';
+    case 'FINAL':
+      return 'Final';
+    case 'COMPLETE':
+      return 'Complete';
+    default:
+      return status;
+  }
+}
+
+function GameRow({
+  game,
+  onEnter,
+  onArchiveToggle,
+  onDelete,
+}: {
+  game: GameSummary;
+  onEnter: (roomCode: string) => void;
+  onArchiveToggle: (game: GameSummary) => void;
+  onDelete: (game: GameSummary) => void;
+}) {
+  return (
+    <li className={styles.gameCard} data-testid={`game-card-${game.roomCode}`}>
+      <button
+        type="button"
+        className={styles.gameEnter}
+        onClick={() => onEnter(game.roomCode)}
+        data-testid={`enter-game-${game.roomCode}`}
+      >
+        <span className={styles.gameCode}>{game.roomCode}</span>
+        <span className={styles.gameBoard}>{game.boardName}</span>
+        <span className={styles.gameMeta}>
+          <span className={styles.gameStatus} data-status={game.status}>
+            {gameStatusLabel(game.status)}
+          </span>
+          <span className={styles.gamePlayers}>
+            {game.playerCount} player{game.playerCount === 1 ? '' : 's'}
+          </span>
+        </span>
+      </button>
+      <div className={styles.gameActions}>
+        <button
+          type="button"
+          className={styles.gameActionButton}
+          onClick={() => onArchiveToggle(game)}
+          data-testid={`${game.archived ? 'unarchive' : 'archive'}-game-${game.roomCode}`}
+        >
+          {game.archived ? 'Unarchive' : 'Archive'}
+        </button>
+        <button
+          type="button"
+          className={styles.gameDeleteButton}
+          onClick={() => onDelete(game)}
+          data-testid={`delete-game-${game.roomCode}`}
+        >
+          Delete
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function GamesManager({
+  games,
+  loading,
+  error,
+  onEnter,
+  onArchive,
+  onDelete,
+}: {
+  games: GameSummary[];
+  loading: boolean;
+  error?: string | null;
+  onEnter: (roomCode: string) => void;
+  onArchive: (roomCode: string, archived: boolean) => void;
+  onDelete: (roomCode: string) => void;
+}) {
+  const [showArchived, setShowArchived] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<GameSummary | null>(null);
+
+  const active = games.filter((g) => !g.archived);
+  const archived = games.filter((g) => g.archived);
+
+  return (
+    <section className={styles.gamesManager} data-testid="games-manager">
+      <h2>Active Games</h2>
+      {error && (
+        <p className="error" role="alert" data-testid="games-error">
+          {error}
+        </p>
+      )}
+      {loading ? (
+        <p>Loading games...</p>
+      ) : active.length === 0 ? (
+        <p className={styles.gamesEmpty} data-testid="active-games-empty">
+          No active games yet. Create one from a board above.
+        </p>
+      ) : (
+        <ul className={styles.gameList} data-testid="active-games-list">
+          {active.map((game) => (
+            <GameRow
+              key={game.roomCode}
+              game={game}
+              onEnter={onEnter}
+              onArchiveToggle={(g) => onArchive(g.roomCode, true)}
+              onDelete={setPendingDelete}
+            />
+          ))}
+        </ul>
+      )}
+
+      {archived.length > 0 && (
+        <div className={styles.archivedSection} data-testid="archived-games-section">
+          <button
+            type="button"
+            className={styles.archivedToggle}
+            onClick={() => setShowArchived((v) => !v)}
+            aria-expanded={showArchived}
+            data-testid="archived-games-toggle"
+          >
+            {showArchived ? '▾' : '▸'} Archived Games ({archived.length})
+          </button>
+          {showArchived && (
+            <ul className={styles.gameList} data-testid="archived-games-list">
+              {archived.map((game) => (
+                <GameRow
+                  key={game.roomCode}
+                  game={game}
+                  onEnter={onEnter}
+                  onArchiveToggle={(g) => onArchive(g.roomCode, false)}
+                  onDelete={setPendingDelete}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
+          <div className={styles.confirmCard}>
+            <p>
+              Delete game {pendingDelete.roomCode} ({pendingDelete.boardName})? This permanently removes the game and its
+              scores.
+            </p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.gameDeleteButton}
+                onClick={() => {
+                  onDelete(pendingDelete.roomCode);
+                  setPendingDelete(null);
+                }}
+                data-testid="confirm-delete-game-button"
+              >
+                Delete
+              </button>
+              <button type="button" onClick={() => setPendingDelete(null)} data-testid="cancel-delete-game-button">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function HostContent() {
   const { token } = useHostAuth();
   const [boards, setBoards] = useState<BoardSummary[]>([]);
@@ -1085,6 +1263,22 @@ export function HostContent() {
   const [roomCode, setRoomCode] = useState<string | null>(() => localStorage.getItem(HOST_ROOM_KEY));
   const [loadingBoards, setLoadingBoards] = useState(() => Boolean(token && !roomCode));
   const [gameState, setGameState] = useState<HostView | null>(null);
+  const [games, setGames] = useState<GameSummary[]>([]);
+  const [loadingGames, setLoadingGames] = useState(() => Boolean(token && !roomCode));
+  const [gamesError, setGamesError] = useState<string | null>(null);
+
+  const refreshGames = useCallback(async () => {
+    if (!token) return;
+    setLoadingGames(true);
+    try {
+      setGames(await listGames(token));
+      setGamesError(null);
+    } catch (e) {
+      setGamesError(e instanceof Error ? e.message : 'Failed to load games');
+    } finally {
+      setLoadingGames(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!token || roomCode) return;
@@ -1093,7 +1287,8 @@ export function HostContent() {
       .then(setBoards)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load boards'))
       .finally(() => setLoadingBoards(false));
-  }, [token, roomCode]);
+    refreshGames();
+  }, [token, roomCode, refreshGames]);
 
   const handleCreate = useCallback(
     async (boardId: string) => {
@@ -1115,6 +1310,38 @@ export function HostContent() {
     setGameState(null);
     setLoadingBoards(true);
   }, [setRoomCode, setGameState, setLoadingBoards]);
+
+  const handleEnterGame = useCallback((code: string) => {
+    localStorage.setItem(HOST_ROOM_KEY, code);
+    setRoomCode(code);
+    setGameState(null);
+  }, []);
+
+  const handleArchiveGame = useCallback(
+    async (code: string, archived: boolean) => {
+      if (!token) return;
+      try {
+        await setGameArchived(code, archived, token);
+        await refreshGames();
+      } catch (e) {
+        setGamesError(e instanceof Error ? e.message : 'Failed to update game');
+      }
+    },
+    [token, refreshGames],
+  );
+
+  const handleDeleteGame = useCallback(
+    async (code: string) => {
+      if (!token) return;
+      try {
+        await deleteGame(code, token);
+        await refreshGames();
+      } catch (e) {
+        setGamesError(e instanceof Error ? e.message : 'Failed to delete game');
+      }
+    },
+    [token, refreshGames],
+  );
 
   const hostSocket = useSocket<HostView>('host', roomCode ?? '', setGameState, undefined, undefined, token ?? '');
   const handleStartGame = useCallback(() => {
@@ -1279,6 +1506,14 @@ export function HostContent() {
           ))}
         </ul>
       )}
+      <GamesManager
+        games={games}
+        loading={loadingGames}
+        error={gamesError}
+        onEnter={handleEnterGame}
+        onArchive={handleArchiveGame}
+        onDelete={handleDeleteGame}
+      />
     </main>
   );
 }

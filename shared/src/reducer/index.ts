@@ -66,6 +66,8 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     usedClueIds: [],
     clueSelectionMode: 'HOST',
     pendingClueId: null,
+    archived: false,
+    completedAt: null,
     currentClueId: null,
     buzzWinnerId: null,
     armedAt: null,
