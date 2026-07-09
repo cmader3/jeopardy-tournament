@@ -1771,7 +1771,7 @@ describe('PlayRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
 
     const overlay = await screen.findByTestId('contestant-clue-overlay');
-    expect(overlay.className).toMatch(/clueBanner/);
+    expect(overlay.className).toMatch(/clueBox/);
   });
 
   it('keeps the buzzer reachable and tappable while the clue is displayed in CLUE_REVEALED', async () => {
@@ -1798,7 +1798,7 @@ describe('PlayRoute', () => {
 
     const clue = await screen.findByTestId('contestant-clue-overlay');
     expect(clue.className).not.toMatch(/clueOverlay|fullScreen/);
-    expect(clue.className).toMatch(/clueBanner/);
+    expect(clue.className).toMatch(/clueBox/);
 
     const buzzer = await screen.findByTestId('contestant-buzzer');
     expect(buzzer).toBeEnabled();
@@ -1830,7 +1830,7 @@ describe('PlayRoute', () => {
 
     const clue = await screen.findByTestId('contestant-clue-overlay');
     expect(clue.className).not.toMatch(/clueOverlay|fullScreen/);
-    expect(clue.className).toMatch(/clueBanner/);
+    expect(clue.className).toMatch(/clueBox/);
 
     const buzzer = await screen.findByTestId('contestant-buzzer');
     expect(buzzer).toBeEnabled();
@@ -1866,7 +1866,7 @@ describe('PlayRoute', () => {
 
     const clue = await screen.findByTestId('contestant-clue-overlay');
     expect(clue.className).not.toMatch(/clueOverlay|fullScreen/);
-    expect(clue.className).toMatch(/clueBanner/);
+    expect(clue.className).toMatch(/clueBox/);
 
     const buzzer = await screen.findByTestId('contestant-buzzer');
     expect(buzzer).toBeInTheDocument();

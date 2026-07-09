@@ -137,6 +137,17 @@ function Buzzer({
     }
   }, [state.phase, isServerLocked, displayLockout, isWinner, isLoser, onBuzz, state.playerId, clientTime]);
 
+  let stateClass = styles.buzzerWait;
+  if (state.phase === 'BUZZERS_ARMED' && canBuzz) {
+    stateClass = styles.buzzerArmed;
+  } else if (state.phase === 'BUZZED' && isWinner) {
+    stateClass = styles.buzzerWinner;
+  } else if (showTooEarly) {
+    stateClass = styles.buzzerTooEarly;
+  } else if (isServerLocked || isLoser) {
+    stateClass = styles.buzzerLocked;
+  }
+
   return (
     <button
       type="button"
@@ -145,7 +156,7 @@ function Buzzer({
       aria-label={label}
       disabled={!canBuzz}
       onClick={handlePress}
-      className={styles.buzzer}
+      className={`${styles.buzzer} ${stateClass}`}
     >
       {label}
     </button>
@@ -840,17 +851,21 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 : 'A clue has been selected. Waiting for the host to reveal it.'}
             </p>
           )}
-          {showClue && (
+          {showBuzzer ? (
+            <div className={styles.clueBox} data-testid="contestant-clue-overlay">
+              <div className={styles.clueBoxText}>
+                <p className={styles.clueText} data-testid="contestant-clue-text">{gameState.currentClueText}</p>
+              </div>
+              <div className={styles.buzzerZone}>
+                <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
+                <Buzzer key={gameState.currentClueId} state={gameState} onBuzz={socket.buzz} />
+              </div>
+            </div>
+          ) : showClue ? (
             <div className={styles.clueBanner} data-testid="contestant-clue-overlay">
               <p className={styles.clueText} data-testid="contestant-clue-text">{gameState.currentClueText}</p>
             </div>
-          )}
-          {showBuzzer && (
-            <>
-              <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
-              <Buzzer key={gameState.currentClueId} state={gameState} onBuzz={socket.buzz} />
-            </>
-          )}
+          ) : null}
           {gameState.phase === 'FINAL_CLUE' && (
             <>
               <Countdown deadline={gameState.deadline} serverNow={gameState.serverNow} />
