@@ -171,6 +171,24 @@
   color: var(--incorrect-red);
 }
 
+.removePlayerButton {
+  margin-left: auto;
+  padding: 0.3rem 0.7rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--incorrect-red);
+  background: transparent;
+  border: 1px solid var(--incorrect-red);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.removePlayerButton:hover {
+  background: var(--incorrect-red);
+  color: #fff;
+}
+
 .controllingRosterItem {
   background: rgba(214, 159, 40, 0.15);
   border: 2px solid var(--value-gold);

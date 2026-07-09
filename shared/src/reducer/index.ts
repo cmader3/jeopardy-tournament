@@ -8,6 +8,7 @@ export interface ReducerCtx {
 export type Intent =
   | { type: 'JOIN'; player: Player }
   | { type: 'LEAVE'; playerId: string }
+  | { type: 'REMOVE_PLAYER'; playerId: string }
   | { type: 'DISCONNECT'; playerId: string }
   | { type: 'RECONNECT'; playerId: string }
   | { type: 'START_GAME' }
@@ -92,6 +93,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleJoin(state, intent.player);
     case 'LEAVE':
       return handleLeave(state, intent.playerId);
+    case 'REMOVE_PLAYER':
+      return handleRemovePlayer(state, intent.playerId);
     case 'DISCONNECT':
       return handleDisconnect(state, intent.playerId);
     case 'RECONNECT':
@@ -204,6 +207,23 @@ function handleLeave(state: GameState, playerId: string): ReducerResult {
   const updated = state.players.map((p) => (p.id === playerId ? { ...p, connected: false } : p));
   return {
     state: { ...state, players: updated },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleRemovePlayer(state: GameState, playerId: string): ReducerResult {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+
+  if (state.phase !== 'LOBBY') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Players can only be removed in the lobby' }] };
+  }
+
+  const remaining = state.players.filter((p) => p.id !== playerId);
+  return {
+    state: { ...state, players: remaining },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

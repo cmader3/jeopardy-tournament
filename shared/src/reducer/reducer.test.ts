@@ -330,6 +330,53 @@ describe('LOBBY intents', () => {
   });
 });
 
+describe('REMOVE_PLAYER', () => {
+  it('removes a player from the lobby and frees the seat', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+
+    let result = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
+    result = reduce(result.state, { type: 'JOIN', player: bob }, { now: NOW });
+    result = reduce(result.state, { type: 'REMOVE_PLAYER', playerId: alice.id }, { now: NOW });
+
+    expect(result.state.players).toHaveLength(1);
+    expect(result.state.players[0].id).toBe(bob.id);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('rejects removing an unknown player', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const joined = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
+
+    const result = reduce(joined.state, { type: 'REMOVE_PLAYER', playerId: 'nope' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: 'Player not found' });
+    expect(result.state.players).toHaveLength(1);
+  });
+
+  it('rejects removing a player once the game is underway', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+
+    let result = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
+    result = reduce(result.state, { type: 'JOIN', player: bob }, { now: NOW });
+    result = reduce(result.state, { type: 'START_GAME' }, { now: NOW });
+    result = reduce(result.state, { type: 'REMOVE_PLAYER', playerId: alice.id }, { now: NOW });
+
+    expect(result.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: expect.stringContaining('lobby'),
+    });
+    expect(result.state.players).toHaveLength(2);
+  });
+});
+
 describe('SELECT_CLUE', () => {
   function setupGame(): GameState {
     const board = makeBoard();

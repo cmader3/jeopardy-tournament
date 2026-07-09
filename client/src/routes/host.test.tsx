@@ -254,6 +254,63 @@ describe('HostLobby', () => {
     await userEvent.click(screen.getByTestId('clue-mode-player'));
     expect(onSetClueSelectionMode).toHaveBeenCalledWith('PLAYER');
   });
+
+  it('shows a remove button for each player in the lobby', () => {
+    const state = makeHostState({
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true },
+        { id: 'p2', name: 'Bob', score: 0, connected: false },
+      ],
+    });
+    render(<HostLobby roomCode="ABCD" state={state} onStartGame={vi.fn()} startError={null} />);
+
+    expect(screen.getByTestId('remove-player-p1')).toBeInTheDocument();
+    expect(screen.getByTestId('remove-player-p2')).toBeInTheDocument();
+  });
+
+  it('removes a player only after confirming', async () => {
+    const onRemovePlayer = vi.fn();
+    const state = makeHostState({
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    render(
+      <HostLobby
+        roomCode="ABCD"
+        state={state}
+        onStartGame={vi.fn()}
+        onRemovePlayer={onRemovePlayer}
+        startError={null}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('remove-player-p1'));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(onRemovePlayer).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId('confirm-remove-player-button'));
+    expect(onRemovePlayer).toHaveBeenCalledWith('p1');
+  });
+
+  it('does not remove a player when the confirmation is cancelled', async () => {
+    const onRemovePlayer = vi.fn();
+    const state = makeHostState({
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    render(
+      <HostLobby
+        roomCode="ABCD"
+        state={state}
+        onStartGame={vi.fn()}
+        onRemovePlayer={onRemovePlayer}
+        startError={null}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('remove-player-p1'));
+    await userEvent.click(screen.getByTestId('cancel-remove-player-button'));
+    expect(onRemovePlayer).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
 });
 
 describe('HostInProgress clue-selection mode', () => {

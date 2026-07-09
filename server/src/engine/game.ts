@@ -147,6 +147,10 @@ export class GameEngine {
     return this.applyIntent(roomCode, { type: 'LEAVE', playerId }, { now: Date.now() });
   }
 
+  async kickPlayer(roomCode: string, playerId: string): Promise<ReducerResult> {
+    return this.applyIntent(roomCode, { type: 'REMOVE_PLAYER', playerId }, { now: Date.now() });
+  }
+
   async disconnectPlayer(roomCode: string, playerId: string): Promise<ReducerResult> {
     return this.applyIntent(roomCode, { type: 'DISCONNECT', playerId }, { now: Date.now() });
   }

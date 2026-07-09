@@ -14,6 +14,7 @@ export interface HostLobbyProps {
   onStartGame: () => void;
   onCreateNewGame?: () => void;
   onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
+  onRemovePlayer?: (playerId: string) => void;
   startError: string | null;
 }
 
@@ -56,10 +57,11 @@ function ClueSelectionToggle({
   );
 }
 
-export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, startError }: HostLobbyProps) {
+export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onRemovePlayer, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
   const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
   const canStart = connectedCount > 0;
+  const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <main className={styles.hostLobby}>
@@ -86,6 +88,15 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
               >
                 {player.connected ? 'connected' : 'disconnected'}
               </span>
+              <button
+                type="button"
+                className={styles.removePlayerButton}
+                onClick={() => setPendingRemoval({ id: player.id, name: player.name })}
+                data-testid={`remove-player-${player.id}`}
+                aria-label={`Remove ${player.name}`}
+              >
+                Remove
+              </button>
             </li>
           ))}
         </ul>
@@ -111,6 +122,33 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
           <p className={styles.minimumPlayers}>At least one connected contestant is required to start.</p>
         )}
       </div>
+      {pendingRemoval && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
+          <div className={styles.confirmCard}>
+            <p>Remove {pendingRemoval.name} from the game? They will be removed from the lobby.</p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => {
+                  onRemovePlayer?.(pendingRemoval.id);
+                  setPendingRemoval(null);
+                }}
+                data-testid="confirm-remove-player-button"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingRemoval(null)}
+                data-testid="cancel-remove-player-button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -1085,6 +1123,12 @@ export function HostContent() {
   const handleRestartGame = useCallback(() => {
     hostSocket.restartGame?.();
   }, [hostSocket]);
+  const handleRemovePlayer = useCallback(
+    (playerId: string) => {
+      hostSocket.removePlayer?.(playerId);
+    },
+    [hostSocket],
+  );
   const handleSelectClue = useCallback(
     (clueId: string) => {
       hostSocket.selectClue?.(clueId);
@@ -1168,6 +1212,7 @@ export function HostContent() {
           onStartGame={handleStartGame}
           onCreateNewGame={handleCreateNewGame}
           onSetClueSelectionMode={handleSetClueSelectionMode}
+          onRemovePlayer={handleRemovePlayer}
           startError={hostSocket.error}
         />
       );

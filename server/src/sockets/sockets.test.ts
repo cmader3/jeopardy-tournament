@@ -390,6 +390,53 @@ describe('game sockets', { timeout: 15000 }, () => {
     await server.close();
   });
 
+  it('lets the host remove a contestant from the lobby', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const token = await tokenPromise;
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    const joinedState = (await waitForState(host)) as { players: { id: string }[] };
+    expect(joinedState.players).toHaveLength(1);
+
+    const removedState = waitForState(host, (s) => (s.players as unknown[]).length === 0);
+    host.emit('remove_player', { playerId: token.playerId });
+    const afterRemoval = (await removedState) as { players: { id: string }[] };
+    expect(afterRemoval.players).toHaveLength(0);
+
+    alice.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('rejects remove_player from a non-host', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const token = await tokenPromise;
+
+    const errorPromise = waitForError(alice);
+    alice.emit('remove_player', { playerId: token.playerId });
+    const error = await errorPromise;
+    expect(error.message).toMatch(/host/i);
+
+    alice.disconnect();
+    await server.close();
+  });
+
   it('accepts a room code with different case and surrounding whitespace', async () => {
     const server = await createTestServer();
     const board = await boardRepository.create(makeBoardPayload());
