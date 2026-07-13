@@ -125,11 +125,15 @@ function BoardGrid({ round, usedClueIds, pendingClueId }: BoardGridProps) {
 interface ClueOverlayProps {
   clueText: string;
   isDailyDouble?: boolean;
+  reserveStatusSpace?: boolean;
 }
 
-function ClueOverlay({ clueText, isDailyDouble }: ClueOverlayProps) {
+function ClueOverlay({ clueText, isDailyDouble, reserveStatusSpace }: ClueOverlayProps) {
   return (
-    <div className={`${styles.clueOverlay} ${styles.fullScreen}`} data-testid="clue-overlay">
+    <div
+      className={`${styles.clueOverlay} ${styles.fullScreen}${reserveStatusSpace ? ` ${styles.reserveStatusSpace}` : ''}`}
+      data-testid="clue-overlay"
+    >
       {isDailyDouble ? (
         <div className={styles.dailyDoubleSplash} data-testid="daily-double-splash">
           DAILY DOUBLE
@@ -513,9 +517,14 @@ function renderStage(state: BoardView) {
     return <CompleteScreen state={state} />;
   }
 
+  const hasStatusBand =
+    state.phase === 'BUZZERS_ARMED' ||
+    state.phase === 'FINAL_CLUE' ||
+    (state.phase === 'BUZZED' && Boolean(state.buzzWinnerId));
+
   const clueOverlay =
     state.currentClueId && state.currentClueText ? (
-      <ClueOverlay clueText={state.currentClueText} />
+      <ClueOverlay clueText={state.currentClueText} reserveStatusSpace={hasStatusBand} />
     ) : state.phase === 'DAILY_DOUBLE_WAGER' ? (
       <ClueOverlay clueText="" isDailyDouble />
     ) : null;
@@ -523,9 +532,11 @@ function renderStage(state: BoardView) {
   if (clueOverlay) {
     return (
       <div className={styles.clueStage}>
-        <GameStatusBanner state={state} />
         <IncorrectFeedback state={state} />
         {clueOverlay}
+        <div className={styles.clueStatusBand} data-testid="clue-status-band">
+          <GameStatusBanner state={state} />
+        </div>
       </div>
     );
   }
