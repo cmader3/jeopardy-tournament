@@ -466,10 +466,13 @@
 }
 
 .cell:disabled {
+  cursor: not-allowed;
+}
+
+.cell.used {
   background: rgba(6, 10, 40, 0.4);
   border-color: rgba(255, 255, 255, 0.06);
   color: transparent;
-  cursor: not-allowed;
   box-shadow: none;
 }
 

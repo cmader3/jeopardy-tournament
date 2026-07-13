@@ -222,7 +222,7 @@ function ContestantGrid({
             <button
               key={clue.id}
               type="button"
-              className={styles.cell}
+              className={`${styles.cell}${used ? ` ${styles.used}` : ''}`}
               data-testid={used ? 'contestant-used-cell' : 'contestant-clue-cell'}
               data-clue-id={clue.id}
               disabled={used || !canSelect}
