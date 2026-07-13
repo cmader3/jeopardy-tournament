@@ -206,6 +206,10 @@
   color: var(--text-light);
 }
 
+.contestantName {
+  text-transform: uppercase;
+}
+
 .statusConnected,
 .statusDisconnected {
   font-size: 0.75rem;

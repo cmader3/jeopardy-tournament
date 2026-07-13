@@ -598,7 +598,9 @@ function FinalReveal({ state }: { state: ContestantView }) {
       <h2 className={styles.finalHeading} data-testid="contestant-final-reveal-heading">Final Jeopardy Reveal</h2>
       {currentPlayer && (
         <div data-testid="contestant-final-reveal-current">
-          <p data-testid="contestant-final-reveal-player-name">{currentPlayer.name}</p>
+          <p data-testid="contestant-final-reveal-player-name" className={styles.contestantName}>
+            {currentPlayer.name}
+          </p>
           <p data-testid="contestant-final-reveal-player-score">Score: {currentPlayer.score}</p>
           {currentAnswer !== undefined && (
             <p data-testid="contestant-final-reveal-answer">Answer: {currentAnswer}</p>
@@ -623,7 +625,7 @@ function FinalReveal({ state }: { state: ContestantView }) {
               if (!player) return null;
               return (
                 <li key={playerId} data-testid="contestant-final-revealed-player">
-                  <span>{player.name}</span>
+                  <span className={styles.contestantName}>{player.name}</span>
                   <span> {player.score}</span>
                   <span data-testid={`contestant-final-revealed-answer-${playerId}`}>
                     {state.finalRevealedAnswers[playerId]}
@@ -664,7 +666,9 @@ function FinalStandings({ state }: { state: ContestantView }) {
       <ul data-testid="contestant-final-standings-list">
         {sorted.map((player) => (
           <li key={player.id} data-testid="contestant-final-standing">
-            <span data-testid={`contestant-final-standing-name-${player.id}`}>{player.name}</span>
+            <span data-testid={`contestant-final-standing-name-${player.id}`} className={styles.contestantName}>
+              {player.name}
+            </span>
             <span
               data-testid={`contestant-final-standing-score-${player.id}`}
               className={player.score < 0 ? styles.negativeScore : styles.scoreDisplay}
@@ -758,7 +762,9 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
       {gameState && (
         <div className={styles.state}>
           <div className={styles.playerCard}>
-            <p className={styles.playerName}>Welcome, {me?.name ?? 'Contestant'}</p>
+            <p className={styles.playerName} data-testid="contestant-welcome">
+              Welcome, <span className={styles.contestantName}>{me?.name ?? 'Contestant'}</span>
+            </p>
             <div className={styles.scoreBlock} aria-live="polite" aria-atomic="true">
               <span className={styles.scoreLabel}>Score:</span>
               <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
@@ -782,7 +788,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                       data-testid={`lobby-player-${player.id}`}
                     >
                       <span className={styles.playerListName}>
-                        {player.name}
+                        <span className={styles.contestantName}>{player.name}</span>
                         {player.id === gameState.playerId ? ' (You)' : ''}
                       </span>
                       <span className={player.connected ? styles.statusConnected : styles.statusDisconnected}>
@@ -801,7 +807,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               <ul data-testid="contestant-transition-scores">
                 {gameState.players.map((player) => (
                   <li key={player.id} data-testid="contestant-transition-score">
-                    <span>{player.name}</span>
+                    <span className={styles.contestantName}>{player.name}</span>
                     <span>{player.score}</span>
                   </li>
                 ))}

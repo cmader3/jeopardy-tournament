@@ -505,7 +505,8 @@ function HostFinalReveal({
       {currentPlayer && (
         <div className={styles.hostFinalRevealCurrent} data-testid="host-final-reveal-current">
           <p data-testid="host-final-reveal-player-name">
-            {currentPlayer.name} — <span data-testid="host-final-reveal-player-score">${currentPlayer.score}</span>
+            <span className={styles.nameCaps}>{currentPlayer.name}</span> —{' '}
+            <span data-testid="host-final-reveal-player-score">${currentPlayer.score}</span>
           </p>
           {state.finalRevealStep === 'ANSWER' && (
             <button
@@ -928,7 +929,7 @@ export function HostInProgress({
                 {state?.phase === 'BUZZED' && buzzedPlayer && (
                   <div className={styles.buzzedPanel} data-testid="buzzed-player">
                     <p>
-                      Buzzed in: <strong>{buzzedPlayer.name}</strong>
+                      Buzzed in: <strong className={styles.nameCaps}>{buzzedPlayer.name}</strong>
                     </p>
                     <div className={styles.actionRow}>
                       <button

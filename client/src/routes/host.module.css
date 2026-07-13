@@ -151,6 +151,11 @@
 
 .playerName {
   font-weight: 500;
+  text-transform: uppercase;
+}
+
+.nameCaps {
+  text-transform: uppercase;
 }
 
 .playerScore {

@@ -202,7 +202,7 @@ describe('PlayRoute', () => {
     await userEvent.type(nameInput, 'Alice');
     await userEvent.click(button);
 
-    expect(await screen.findByText('Welcome, Alice')).toBeInTheDocument();
+    expect(await screen.findByTestId('contestant-welcome')).toHaveTextContent('Welcome, Alice');
     expect(screen.getByText('Waiting for the host to start the game.')).toBeInTheDocument();
     expect(screen.getByTestId('room-code')).toHaveTextContent('ABCD');
   });
@@ -255,7 +255,7 @@ describe('PlayRoute', () => {
 
     render(<PlayRoute />);
 
-    expect(await screen.findByText('Welcome, Alice')).toBeInTheDocument();
+    expect(await screen.findByTestId('contestant-welcome')).toHaveTextContent('Welcome, Alice');
     expect(screen.getByText('Waiting for the host to start the game.')).toBeInTheDocument();
     expect(screen.getByTestId('room-code')).toHaveTextContent('ABCD');
     expect(useSocket).toHaveBeenCalledWith(
@@ -284,7 +284,7 @@ describe('PlayRoute', () => {
 
     render(<PlayRoute />);
 
-    expect(await screen.findByText('Welcome, Alice')).toBeInTheDocument();
+    expect(await screen.findByTestId('contestant-welcome')).toHaveTextContent('Welcome, Alice');
     await userEvent.click(screen.getByRole('button', { name: /leave game/i }));
 
     expect(leaveGame).toHaveBeenCalledTimes(1);
@@ -2102,7 +2102,7 @@ describe('Buzzer mobile and accessibility', () => {
     await userEvent.type(nameInput, 'Alice');
     await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
 
-    await screen.findByText('Welcome, Alice');
+    await screen.findByTestId('contestant-welcome');
     const score = screen.getByText('Score:', { exact: false });
     expect(score.parentElement).toHaveAttribute('aria-live', 'polite');
     const announcer = screen.getByText('Score 0. Waiting for the host to start.');
