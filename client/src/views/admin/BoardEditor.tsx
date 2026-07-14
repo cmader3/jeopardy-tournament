@@ -78,11 +78,12 @@ export function BoardEditor({ board, token, api, onBack, onImport }: BoardEditor
   const doubleRound = getPlayRound(draft, 'DOUBLE_JEOPARDY');
   const finalRound = getFinalRound(draft);
 
-  const clueCount = draft.rounds.reduce(
-    (total, round) =>
-      total + round.categories.reduce((catTotal, category) => catTotal + category.clues.length, 0),
-    0,
-  );
+  const clueCount = draft.rounds.reduce((total, round) => {
+    if (round.type === 'DOUBLE_JEOPARDY' && !draft.includeDoubleJeopardy) {
+      return total;
+    }
+    return total + round.categories.reduce((catTotal, category) => catTotal + category.clues.length, 0);
+  }, 0);
 
   const updateDraft = (updater: (board: BoardWithRounds) => BoardWithRounds) => {
     const updated = updater(draft);

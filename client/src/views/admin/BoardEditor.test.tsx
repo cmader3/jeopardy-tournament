@@ -161,6 +161,21 @@ describe('BoardEditor', () => {
     expect(screen.getByTestId('summary-rows')).toHaveTextContent(/1\s*row/i);
   });
 
+  it('excludes the Double Jeopardy round from the clue count when it is disabled', () => {
+    const withDouble = makeBoardWithDouble();
+    renderEditor({ board: { ...withDouble, includeDoubleJeopardy: false } });
+
+    // Jeopardy (2) + Final (1); the Double Jeopardy round's clues are not counted.
+    expect(screen.getByTestId('summary-clues')).toHaveTextContent(/3\s*clues/i);
+  });
+
+  it('includes the Double Jeopardy round in the clue count when it is enabled', () => {
+    renderEditor({ board: makeBoardWithDouble() });
+
+    // Jeopardy (2) + Double Jeopardy (1) + Final (1)
+    expect(screen.getByTestId('summary-clues')).toHaveTextContent(/4\s*clues/i);
+  });
+
   it('calls onBack when the back button is activated', async () => {
     const { onBack } = renderEditor();
 
