@@ -126,12 +126,20 @@ interface ClueOverlayProps {
   clueText: string;
   isDailyDouble?: boolean;
   reserveStatusSpace?: boolean;
+  reserveTopSpace?: boolean;
 }
 
-function ClueOverlay({ clueText, isDailyDouble, reserveStatusSpace }: ClueOverlayProps) {
+function ClueOverlay({ clueText, isDailyDouble, reserveStatusSpace, reserveTopSpace }: ClueOverlayProps) {
   return (
     <div
-      className={`${styles.clueOverlay} ${styles.fullScreen}${reserveStatusSpace ? ` ${styles.reserveStatusSpace}` : ''}`}
+      className={[
+        styles.clueOverlay,
+        styles.fullScreen,
+        reserveStatusSpace ? styles.reserveStatusSpace : '',
+        reserveTopSpace ? styles.reserveTopSpace : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       data-testid="clue-overlay"
     >
       {isDailyDouble ? (
@@ -522,9 +530,17 @@ function renderStage(state: BoardView) {
     state.phase === 'FINAL_CLUE' ||
     (state.phase === 'BUZZED' && Boolean(state.buzzWinnerId));
 
+  const hasIncorrectFlash = Boolean(
+    state.lastOutcome && state.lastOutcome.type === 'INCORRECT' && !state.answer,
+  );
+
   const clueOverlay =
     state.currentClueId && state.currentClueText ? (
-      <ClueOverlay clueText={state.currentClueText} reserveStatusSpace={hasStatusBand} />
+      <ClueOverlay
+        clueText={state.currentClueText}
+        reserveStatusSpace={hasStatusBand}
+        reserveTopSpace={hasIncorrectFlash}
+      />
     ) : state.phase === 'DAILY_DOUBLE_WAGER' ? (
       <ClueOverlay clueText="" isDailyDouble />
     ) : null;
@@ -532,8 +548,12 @@ function renderStage(state: BoardView) {
   if (clueOverlay) {
     return (
       <div className={styles.clueStage}>
-        <IncorrectFeedback state={state} />
         {clueOverlay}
+        {hasIncorrectFlash && (
+          <div className={styles.clueStatusBandTop} data-testid="clue-status-band-top">
+            <IncorrectFeedback state={state} />
+          </div>
+        )}
         <div className={styles.clueStatusBand} data-testid="clue-status-band">
           <GameStatusBanner state={state} />
         </div>

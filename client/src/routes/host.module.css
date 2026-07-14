@@ -799,7 +799,6 @@
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  overflow: hidden;
 }
 
 .gameEnter {
@@ -811,6 +810,7 @@
   padding: 0.85rem 1rem;
   background: transparent;
   border: none;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
   cursor: pointer;
   text-align: left;
   color: var(--text-light);

@@ -329,23 +329,60 @@ export function BoardEditor({ board, token, api, onBack, onImport }: BoardEditor
         </div>
       )}
 
-      <section className={styles.editorSummary}>
-        <p className={styles.editorMeta}>
-          {currentCategoryCount} {currentCategoryCount === 1 ? 'category' : 'categories'} × {currentRowCount}{' '}
-          {currentRowCount === 1 ? 'row' : 'rows'} · {clueCount} {clueCount === 1 ? 'clue' : 'clues'}
-          {!boardComplete && (
-            <span className={styles.incompleteBadge}> · Incomplete</span>
+      <section className={styles.editorSummary} aria-label="Board summary">
+        <h2 className={styles.sectionHeading}>Summary</h2>
+
+        <div className={styles.summaryStats}>
+          <div className={styles.summaryStat} data-testid="summary-categories">
+            <span className={styles.summaryStatValue}>{currentCategoryCount}</span>
+            <span className={styles.summaryStatLabel}>
+              {currentCategoryCount === 1 ? 'Category' : 'Categories'}
+            </span>
+          </div>
+          <div className={styles.summaryStat} data-testid="summary-rows">
+            <span className={styles.summaryStatValue}>{currentRowCount}</span>
+            <span className={styles.summaryStatLabel}>{currentRowCount === 1 ? 'Row' : 'Rows'}</span>
+          </div>
+          <div className={styles.summaryStat} data-testid="summary-clues">
+            <span className={styles.summaryStatValue}>{clueCount}</span>
+            <span className={styles.summaryStatLabel}>{clueCount === 1 ? 'Clue' : 'Clues'}</span>
+          </div>
+        </div>
+
+        <dl className={styles.summaryDetails}>
+          <div className={styles.summaryRow}>
+            <dt className={styles.summaryLabel}>Double Jeopardy</dt>
+            <dd className={styles.summaryValue}>
+              {draft.includeDoubleJeopardy ? 'Enabled' : 'Disabled'}
+            </dd>
+          </div>
+          <div className={styles.summaryRow}>
+            <dt className={styles.summaryLabel}>Clue timer</dt>
+            <dd className={styles.summaryValue}>{settings.defaultTimer}s</dd>
+          </div>
+          <div className={styles.summaryRow}>
+            <dt className={styles.summaryLabel}>Final timer</dt>
+            <dd className={styles.summaryValue}>{settings.finalTimer}s</dd>
+          </div>
+          {finalRound && finalRound.categories.length > 0 && (
+            <div className={styles.summaryRow}>
+              <dt className={styles.summaryLabel}>Final category</dt>
+              <dd className={styles.summaryValue}>
+                {finalRound.categories[0].title.trim() || 'Final Category'}
+              </dd>
+            </div>
           )}
-        </p>
-        <p className={styles.editorMeta}>
-          {draft.includeDoubleJeopardy ? 'Double Jeopardy enabled' : 'Double Jeopardy disabled'} ·{' '}
-          {settings.defaultTimer}s per clue · {settings.finalTimer}s Final
-        </p>
-        {finalRound && finalRound.categories.length > 0 && (
-          <p className={styles.editorMeta}>
-            Final category: {finalRound.categories[0].title.trim() || 'Final Category'}
-          </p>
-        )}
+          <div className={styles.summaryRow}>
+            <dt className={styles.summaryLabel}>Status</dt>
+            <dd className={styles.summaryValue}>
+              {boardComplete ? (
+                <span className={styles.completeBadge}>Complete</span>
+              ) : (
+                <span className={styles.incompleteBadge}>Incomplete</span>
+              )}
+            </dd>
+          </div>
+        </dl>
       </section>
 
       <section className={styles.settingsSection}>

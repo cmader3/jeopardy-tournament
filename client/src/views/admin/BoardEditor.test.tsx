@@ -156,8 +156,9 @@ describe('BoardEditor', () => {
     renderEditor();
 
     expect(screen.getByRole('heading', { name: 'Science Trivia' })).toBeInTheDocument();
-    expect(screen.getByText(/2 categories/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 row/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Summary' })).toBeInTheDocument();
+    expect(screen.getByTestId('summary-categories')).toHaveTextContent(/2\s*categories/i);
+    expect(screen.getByTestId('summary-rows')).toHaveTextContent(/1\s*row/i);
   });
 
   it('calls onBack when the back button is activated', async () => {
