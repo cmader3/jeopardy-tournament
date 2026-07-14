@@ -9,6 +9,7 @@ export type Intent =
   | { type: 'JOIN'; player: Player }
   | { type: 'LEAVE'; playerId: string }
   | { type: 'REMOVE_PLAYER'; playerId: string }
+  | { type: 'ADMIT_PLAYER'; playerId: string }
   | { type: 'DISCONNECT'; playerId: string }
   | { type: 'RECONNECT'; playerId: string }
   | { type: 'START_GAME' }
@@ -67,6 +68,7 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     usedClueIds: [],
     clueSelectionMode: 'HOST',
     pendingClueId: null,
+    removedPlayers: [],
     archived: false,
     completedAt: null,
     currentClueId: null,
@@ -98,6 +100,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleLeave(state, intent.playerId);
     case 'REMOVE_PLAYER':
       return handleRemovePlayer(state, intent.playerId);
+    case 'ADMIT_PLAYER':
+      return handleAdmitPlayer(state, intent.playerId);
     case 'DISCONNECT':
       return handleDisconnect(state, intent.playerId);
     case 'RECONNECT':
@@ -182,6 +186,14 @@ function handleJoin(state: GameState, player: Player): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Name is required' }] };
   }
 
+  const removedByHost = state.removedPlayers.some((p) => p.name.trim().toLowerCase() === normalizedName);
+  if (removedByHost) {
+    return {
+      state,
+      effects: [{ type: 'INTENT_REJECTED', reason: 'The host removed you from this game. Ask the host to let you back in.' }],
+    };
+  }
+
   const duplicateName = state.players.find((p) => p.name.trim().toLowerCase() === normalizedName);
   if (duplicateName) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A contestant with that name already joined' }] };
@@ -227,10 +239,16 @@ function handleRemovePlayer(state: GameState, playerId: string): ReducerResult {
     Object.fromEntries(Object.entries(record).filter(([id]) => id !== playerId));
   const finalRevealOrder = state.finalRevealOrder.filter((id) => id !== playerId);
 
+  const normalizedName = player.name.trim().toLowerCase();
+  const removedPlayers = state.removedPlayers.some((p) => p.name.trim().toLowerCase() === normalizedName)
+    ? state.removedPlayers
+    : [...state.removedPlayers, { id: player.id, name: player.name }];
+
   return {
     state: {
       ...state,
       players: remaining,
+      removedPlayers,
       controllingPlayerId: state.controllingPlayerId === playerId ? null : state.controllingPlayerId,
       buzzWinnerId: state.buzzWinnerId === playerId ? null : state.buzzWinnerId,
       lockedOutPlayerIds: state.lockedOutPlayerIds.filter((id) => id !== playerId),
@@ -242,6 +260,18 @@ function handleRemovePlayer(state: GameState, playerId: string): ReducerResult {
       finalRevealIndex: Math.min(state.finalRevealIndex, Math.max(0, finalRevealOrder.length - 1)),
       lastOutcome: state.lastOutcome?.playerId === playerId ? null : state.lastOutcome,
     },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleAdmitPlayer(state: GameState, playerId: string): ReducerResult {
+  const removedPlayer = state.removedPlayers.find((p) => p.id === playerId);
+  if (!removedPlayer) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player was not removed' }] };
+  }
+
+  return {
+    state: { ...state, removedPlayers: state.removedPlayers.filter((p) => p.id !== playerId) },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

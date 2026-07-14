@@ -986,6 +986,9 @@ export function PlayRoute() {
 
   if (form.submitted) {
     const handleTryAgain = () => {
+      // A stale/invalid reconnect token keeps forcing the server onto the
+      // failing reconnect branch, so clear it and retry as a clean fresh join.
+      clearStoredContestantToken();
       setForm({ roomCode: form.roomCode, name: '', submitted: false });
     };
     const handleLeave = () => {

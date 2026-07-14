@@ -107,6 +107,7 @@ export class GameEngine {
         players,
         clueSelectionMode: parsed.clueSelectionMode ?? 'HOST',
         pendingClueId: parsed.pendingClueId ?? null,
+        removedPlayers: parsed.removedPlayers ?? [],
         archived: parsed.archived ?? false,
         completedAt: parsed.completedAt ?? null,
       };
@@ -195,6 +196,10 @@ export class GameEngine {
 
   async kickPlayer(roomCode: string, playerId: string): Promise<ReducerResult> {
     return this.applyIntent(roomCode, { type: 'REMOVE_PLAYER', playerId }, { now: Date.now() });
+  }
+
+  async admitPlayer(roomCode: string, playerId: string): Promise<ReducerResult> {
+    return this.applyIntent(roomCode, { type: 'ADMIT_PLAYER', playerId }, { now: Date.now() });
   }
 
   async disconnectPlayer(roomCode: string, playerId: string): Promise<ReducerResult> {

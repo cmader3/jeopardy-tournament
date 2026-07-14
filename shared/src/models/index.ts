@@ -32,6 +32,11 @@ export interface Player {
   reconnectToken: string;
 }
 
+export interface RemovedPlayer {
+  id: string;
+  name: string;
+}
+
 export interface Category {
   id: string;
   title: string;
@@ -89,6 +94,7 @@ export interface GameState {
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
   pendingClueId: string | null;
+  removedPlayers: RemovedPlayer[];
   archived: boolean;
   completedAt: number | null;
   currentClueId: string | null;

@@ -20,6 +20,7 @@ export interface SocketState<T> {
   restartGame?: () => void;
   leaveGame?: () => void;
   removePlayer?: (playerId: string) => void;
+  admitPlayer?: (playerId: string) => void;
   selectClue?: (clueId: string) => void;
   reopenClue?: (clueId: string, revertScores: boolean) => void;
   setClueSelectionMode?: (mode: 'HOST' | 'PLAYER') => void;
@@ -137,7 +138,15 @@ export function useSocket<T>(
     });
 
     socket.on('error', (err: { message?: string }) => {
-      setError(err.message ?? 'Socket error');
+      const message = err.message ?? 'Socket error';
+      // A rejected reconnect token would otherwise be re-sent on every retry
+      // (including automatic reconnection), trapping the contestant on the
+      // failing reconnect branch. Drop it so the next attempt is a fresh join.
+      if (role === 'contestant' && /reconnect token/i.test(message)) {
+        clearStoredContestantToken();
+        reconnectTokenRef.current = undefined;
+      }
+      setError(message);
     });
 
     socket.on('token', (token: { reconnectToken: string; playerId: string }) => {
@@ -195,6 +204,10 @@ export function useSocket<T>(
 
   const removePlayer = useCallback((playerId: string) => {
     socketRef.current?.emit('remove_player', { playerId });
+  }, []);
+
+  const admitPlayer = useCallback((playerId: string) => {
+    socketRef.current?.emit('admit_player', { playerId });
   }, []);
 
   const selectClue = useCallback((clueId: string) => {
@@ -301,7 +314,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
+  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, admitPlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
 }
 
 export function getStoredContestantToken(): {

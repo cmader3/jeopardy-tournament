@@ -311,6 +311,31 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('admit_player', async (payload: { playerId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can admit a player' });
+        return;
+      }
+
+      const validation = rulePayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid player' });
+        return;
+      }
+
+      try {
+        const result = await engine.admitPlayer(meta.roomCode, validation.data.playerId);
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Admit player failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('set_clue_selection_mode', async (payload: { mode: 'HOST' | 'PLAYER' }) => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

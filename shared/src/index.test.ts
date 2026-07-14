@@ -44,6 +44,7 @@ describe('shared package index', () => {
       roundIndex: 0,
       players: [player],
       controllingPlayerId: null,
+      removedPlayers: [],
       usedClueIds: [],
       currentClueId: null,
       buzzWinnerId: null,

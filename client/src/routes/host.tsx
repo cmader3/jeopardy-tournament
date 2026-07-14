@@ -16,6 +16,7 @@ export interface HostLobbyProps {
   onCreateNewGame?: () => void;
   onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
   onRemovePlayer?: (playerId: string) => void;
+  onAdmitPlayer?: (playerId: string) => void;
   startError: string | null;
 }
 
@@ -58,8 +59,9 @@ function ClueSelectionToggle({
   );
 }
 
-export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onRemovePlayer, startError }: HostLobbyProps) {
+export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onRemovePlayer, onAdmitPlayer, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
+  const removedPlayers = state?.removedPlayers ?? [];
   const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
   const canStart = connectedCount > 0;
   const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
@@ -111,6 +113,30 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
             </li>
           ))}
         </ul>
+      )}
+      {removedPlayers.length > 0 && (
+        <div className={styles.removedPlayers} data-testid="removed-players">
+          <h2>Removed players</h2>
+          <p className={styles.removedPlayersHint}>
+            These players cannot rejoin until you allow them back.
+          </p>
+          <ul className={styles.playerList}>
+            {removedPlayers.map((player) => (
+              <li key={player.id} data-testid={`removed-player-${player.id}`}>
+                <span className={styles.playerName}>{player.name}</span>{' '}
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={() => onAdmitPlayer?.(player.id)}
+                  data-testid={`admit-player-${player.id}`}
+                  aria-label={`Allow ${player.name} back`}
+                >
+                  Allow back
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <ClueSelectionToggle mode={state?.clueSelectionMode ?? 'HOST'} onSetMode={onSetClueSelectionMode} />
       <div className={styles.startControls}>
@@ -1557,6 +1583,12 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleAdmitPlayer = useCallback(
+    (playerId: string) => {
+      hostSocket.admitPlayer?.(playerId);
+    },
+    [hostSocket],
+  );
   const handleSelectClue = useCallback(
     (clueId: string) => {
       hostSocket.selectClue?.(clueId);
@@ -1649,6 +1681,7 @@ export function HostContent() {
             onCreateNewGame={handleCreateNewGame}
             onSetClueSelectionMode={handleSetClueSelectionMode}
             onRemovePlayer={handleRemovePlayer}
+            onAdmitPlayer={handleAdmitPlayer}
             startError={hostSocket.error}
           />
         </>

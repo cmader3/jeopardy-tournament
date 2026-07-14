@@ -318,6 +318,16 @@
   margin: 0;
 }
 
+.removedPlayers {
+  margin: 1rem 0;
+}
+
+.removedPlayersHint {
+  font-size: 0.9rem;
+  color: var(--incorrect-red);
+  margin: 0 0 0.5rem;
+}
+
 .stickyControls {
   position: sticky;
   top: 0;

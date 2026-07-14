@@ -400,6 +400,70 @@ describe('REMOVE_PLAYER', () => {
   });
 });
 
+describe('host removal ban', () => {
+  it('records a removed player and blocks them from rejoining under the same name', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'REMOVE_PLAYER', playerId: alice.id }, { now: NOW }).state;
+
+    expect(state.removedPlayers).toEqual([{ id: 'p1', name: 'Alice' }]);
+
+    const rejoin = reduce(
+      state,
+      { type: 'JOIN', player: makePlayer({ id: 'p1b', name: 'alice', reconnectToken: 'token-2' }) },
+      { now: NOW },
+    );
+
+    expect(rejoin.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: 'The host removed you from this game. Ask the host to let you back in.',
+    });
+    expect(rejoin.state.players).toHaveLength(0);
+  });
+
+  it('lets the host admit a removed player so they can rejoin', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'REMOVE_PLAYER', playerId: alice.id }, { now: NOW }).state;
+
+    const admit = reduce(state, { type: 'ADMIT_PLAYER', playerId: 'p1' }, { now: NOW });
+    expect(admit.state.removedPlayers).toHaveLength(0);
+    expect(admit.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+
+    const rejoin = reduce(
+      admit.state,
+      { type: 'JOIN', player: makePlayer({ id: 'p1c', name: 'Alice', reconnectToken: 'token-3' }) },
+      { now: NOW },
+    );
+    expect(rejoin.state.players.some((p) => p.name === 'Alice')).toBe(true);
+  });
+
+  it('rejects admitting a player who was not removed', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+    const result = reduce(state, { type: 'ADMIT_PLAYER', playerId: 'ghost' }, { now: NOW });
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: 'Player was not removed' });
+  });
+
+  it('clears removed players when the game restarts', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+    state = reduce(state, { type: 'REMOVE_PLAYER', playerId: alice.id }, { now: NOW }).state;
+    expect(state.removedPlayers).toHaveLength(1);
+
+    const restarted = reduce(state, { type: 'RESTART_GAME' }, { now: NOW });
+    expect(restarted.state.removedPlayers).toHaveLength(0);
+  });
+});
+
 describe('REOPEN_CLUE', () => {
   function playClueCorrect(): GameState {
     const board = makeBoard();

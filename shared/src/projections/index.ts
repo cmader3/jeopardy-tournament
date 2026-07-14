@@ -1,4 +1,4 @@
-import { GameState, Clue, AuditRecord, ClueSelectionMode } from '../models/index.js';
+import { GameState, Clue, AuditRecord, ClueSelectionMode, RemovedPlayer } from '../models/index.js';
 
 export interface ProjectedPlayer {
   id: string;
@@ -110,6 +110,7 @@ export interface HostView {
   finalRevealedWagers: Record<string, number>;
   roundComplete: boolean;
   nextRoundTarget: 'DOUBLE_JEOPARDY' | 'FINAL';
+  removedPlayers: RemovedPlayer[];
   serverNow: number;
 }
 
@@ -365,6 +366,7 @@ export function projectHost(state: GameState, now: number): HostView {
     finalRevealedWagers: getFinalRevealedWagers(state),
     roundComplete: isRoundComplete(state),
     nextRoundTarget: getNextRoundTarget(state),
+    removedPlayers: state.removedPlayers,
     serverNow: now,
   };
 }

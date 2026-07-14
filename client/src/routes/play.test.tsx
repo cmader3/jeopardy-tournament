@@ -18,6 +18,7 @@ import { useSocket, clearStoredContestantToken } from '../socket/useSocket.js';
 beforeEach(() => {
   localStorage.clear();
   (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue(null);
+  (clearStoredContestantToken as ReturnType<typeof vi.fn>).mockClear();
 });
 
 afterEach(() => {
@@ -243,6 +244,7 @@ describe('PlayRoute', () => {
     expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
     expect(screen.getByLabelText('Room Code')).toHaveValue('ABCD');
     expect(screen.getByLabelText('Your Name')).toHaveValue('');
+    expect(clearStoredContestantToken).toHaveBeenCalled();
   });
 
   it('restores the lobby from a stored contestant token without re-entering a name', async () => {

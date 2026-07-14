@@ -139,6 +139,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     finalAnswerSubmissionStatus: {},
     roundComplete: false,
     nextRoundTarget: 'FINAL',
+    removedPlayers: [],
     serverNow: 0,
     clueSelectionMode: 'HOST',
     pendingClueId: null,
@@ -336,6 +337,31 @@ describe('HostLobby', () => {
     await userEvent.click(screen.getByTestId('cancel-remove-player-button'));
     expect(onRemovePlayer).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('does not show the removed players section when nobody is removed', () => {
+    render(<HostLobby roomCode="ABCD" state={makeHostState()} onStartGame={vi.fn()} startError={null} />);
+    expect(screen.queryByTestId('removed-players')).not.toBeInTheDocument();
+  });
+
+  it('lists removed players and allows the host to let them back in', async () => {
+    const onAdmitPlayer = vi.fn();
+    const state = makeHostState({
+      removedPlayers: [{ id: 'p1', name: 'Alice' }],
+    });
+    render(
+      <HostLobby
+        roomCode="ABCD"
+        state={state}
+        onStartGame={vi.fn()}
+        onAdmitPlayer={onAdmitPlayer}
+        startError={null}
+      />,
+    );
+
+    expect(screen.getByTestId('removed-players')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('admit-player-p1'));
+    expect(onAdmitPlayer).toHaveBeenCalledWith('p1');
   });
 });
 
