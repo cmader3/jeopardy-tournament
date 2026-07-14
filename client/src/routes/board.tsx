@@ -410,23 +410,30 @@ function FinalStandings({ state }: CompleteScreenProps) {
     <div className={styles.finalStandings} data-testid="final-standings">
       <h2 className={styles.finalStandingsHeading} data-testid="final-standings-heading">Final Standings</h2>
       <div className={styles.finalStandingsList} data-testid="final-standings-list">
-        {sorted.map((player) => (
-          <div
-            key={player.id}
-            className={`${styles.finalStanding} ${coWinners.includes(player.id) ? styles.finalStandingWinner : ''}`}
-            data-testid="final-standing"
-          >
-            <span className={`${styles.name} ${styles.truncated}`} data-testid={`final-standing-name-${player.id}`}>
-              {player.name}
-            </span>
-            <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${player.id}`}>
-              {player.score}
-            </span>
-            {coWinners.includes(player.id) && (
-              <span className={styles.finalWinnerBadge} data-testid={`final-winner-${player.id}`}>Winner</span>
-            )}
-          </div>
-        ))}
+        {sorted.map((player) => {
+          const isWinner = coWinners.includes(player.id);
+          return (
+            <div
+              key={player.id}
+              className={`${styles.finalStanding} ${isWinner ? styles.finalStandingWinner : ''}`}
+              data-testid="final-standing"
+            >
+              <span className={styles.finalStandingBadge}>
+                {isWinner && (
+                  <span className={styles.finalWinnerBadge} data-testid={`final-winner-${player.id}`}>
+                    Winner
+                  </span>
+                )}
+              </span>
+              <span className={`${styles.name} ${styles.truncated}`} data-testid={`final-standing-name-${player.id}`}>
+                {player.name}
+              </span>
+              <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${player.id}`}>
+                {player.score}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -740,7 +747,9 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
         <p className={styles.shareLabel}>Share this board display:</p>
         <ShareableLink roomCode={roomCode} />
       </div>
-      <Scoreboard players={state.players} controllingPlayerId={state.controllingPlayerId} />
+      {state.phase !== 'COMPLETE' && (
+        <Scoreboard players={state.players} controllingPlayerId={state.controllingPlayerId} />
+      )}
     </main>
   );
 }

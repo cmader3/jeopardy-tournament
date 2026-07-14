@@ -986,9 +986,10 @@
 }
 
 .finalStanding {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  gap: 1rem;
   padding: 1rem 1.5rem;
   background: var(--jeopardy-blue);
   border: 2px solid var(--value-gold);
@@ -996,23 +997,35 @@
   font-size: clamp(1.25rem, 3vw, 2rem);
 }
 
-.finalStandingWinner {
-  border-color: var(--value-gold);
-  background: rgba(214, 159, 40, 0.15);
+.finalStandingBadge {
+  justify-self: start;
+  display: flex;
+  align-items: center;
 }
 
-.finalStandingWinner .name {
-  color: var(--value-gold);
+.finalStanding .name {
+  justify-self: center;
+  text-align: center;
+  width: auto;
+  min-width: 0;
+}
+
+.finalStanding .score {
+  justify-self: end;
+}
+
+.finalStandingWinner {
+  border-color: var(--correct-green);
+  background: rgba(46, 125, 50, 0.3);
 }
 
 .finalWinnerBadge {
   font-family: var(--font-display);
-  font-size: 0.75rem;
+  font-size: clamp(0.75rem, 1.5vw, 1rem);
   text-transform: uppercase;
   color: var(--value-gold);
   border: 1px solid var(--value-gold);
   border-radius: 0.25rem;
-  padding: 0.15rem 0.35rem;
-  margin-left: 0.5rem;
+  padding: 0.2rem 0.5rem;
 }
 

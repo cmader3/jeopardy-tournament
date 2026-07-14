@@ -843,7 +843,11 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 {gameState.players.map((player) => (
                   <li key={player.id} data-testid="contestant-transition-score">
                     <span className={styles.contestantName}>{player.name}</span>
-                    <span>{player.score}</span>
+                    <span
+                      className={`${styles.transitionScore} ${styles.scoreDisplay} ${player.score < 0 ? styles.negativeScore : ''}`}
+                    >
+                      {player.score}
+                    </span>
                   </li>
                 ))}
               </ul>

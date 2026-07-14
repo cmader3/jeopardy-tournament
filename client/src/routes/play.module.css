@@ -338,6 +338,10 @@
   color: #ff8a80;
 }
 
+.transitionScore {
+  margin-left: 0.5rem;
+}
+
 .buzzer {
   flex: 0 0 auto;
   width: clamp(9rem, 44vw, 13rem);
