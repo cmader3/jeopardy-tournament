@@ -7,7 +7,12 @@ interface CountdownProps {
   showBar?: boolean;
 }
 
-export function Countdown({ deadline, serverNow, showBar }: CountdownProps) {
+export interface CountdownValue {
+  seconds: number;
+  widthPercent: number;
+}
+
+export function useCountdown(deadline: number | null, serverNow: number): CountdownValue | null {
   const now = useServerTime(serverNow);
 
   if (deadline == null) return null;
@@ -18,6 +23,16 @@ export function Countdown({ deadline, serverNow, showBar }: CountdownProps) {
   // The total duration is the server-projected window from the latest projection.
   const totalDuration = Math.max(0, deadline - serverNow);
   const widthPercent = totalDuration > 0 ? Math.round((remaining / totalDuration) * 100) : 0;
+
+  return { seconds, widthPercent };
+}
+
+export function Countdown({ deadline, serverNow, showBar }: CountdownProps) {
+  const value = useCountdown(deadline, serverNow);
+
+  if (value == null) return null;
+
+  const { seconds, widthPercent } = value;
 
   return (
     <div className={styles.countdown} data-testid="countdown">

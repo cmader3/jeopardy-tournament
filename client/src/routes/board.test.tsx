@@ -944,8 +944,7 @@ describe('BoardRoute', () => {
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
     const overlay = await screen.findByTestId('clue-overlay');
-    expect(overlay.className).toMatch(/clueOverlay/);
-    expect(overlay.className).toMatch(/fullScreen/);
+    expect(overlay.className).toMatch(/clueScreen/);
   });
 
   it('shows lit armed indicator lights only when buzzers are armed', async () => {

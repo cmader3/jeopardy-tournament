@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useSocket } from '../socket/useSocket.js';
-import { Countdown } from '../components/Countdown.js';
+import { Countdown, useCountdown } from '../components/Countdown.js';
 import { FitText } from '../components/FitText.js';
 import { RoundBanner } from '../components/RoundBanner.js';
 import { AudioToggle } from '../components/AudioToggle.js';
@@ -122,36 +122,23 @@ function BoardGrid({ round, usedClueIds, pendingClueId }: BoardGridProps) {
   );
 }
 
-interface ClueOverlayProps {
+interface ClueContentProps {
   clueText: string;
   isDailyDouble?: boolean;
-  reserveStatusSpace?: boolean;
-  reserveTopSpace?: boolean;
 }
 
-function ClueOverlay({ clueText, isDailyDouble, reserveStatusSpace, reserveTopSpace }: ClueOverlayProps) {
+function ClueContent({ clueText, isDailyDouble }: ClueContentProps) {
+  if (isDailyDouble) {
+    return (
+      <div className={styles.dailyDoubleSplash} data-testid="daily-double-splash">
+        DAILY DOUBLE
+      </div>
+    );
+  }
   return (
-    <div
-      className={[
-        styles.clueOverlay,
-        styles.fullScreen,
-        reserveStatusSpace ? styles.reserveStatusSpace : '',
-        reserveTopSpace ? styles.reserveTopSpace : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      data-testid="clue-overlay"
-    >
-      {isDailyDouble ? (
-        <div className={styles.dailyDoubleSplash} data-testid="daily-double-splash">
-          DAILY DOUBLE
-        </div>
-      ) : (
-        <FitText className={styles.clueText} data-testid="clue-text" maxFontSize={96} minFontSize={12}>
-          {clueText}
-        </FitText>
-      )}
-    </div>
+    <FitText className={styles.clueText} data-testid="clue-text" maxFontSize={96} minFontSize={12}>
+      {clueText}
+    </FitText>
   );
 }
 
@@ -167,21 +154,45 @@ function ArmedLights() {
   );
 }
 
+interface BuzzerStatusBarProps {
+  deadline: number | null;
+  serverNow: number;
+}
+
+function BuzzerStatusBar({ deadline, serverNow }: BuzzerStatusBarProps) {
+  const countdown = useCountdown(deadline, serverNow);
+  return (
+    <div className={styles.statusGroup} role="status" aria-live="polite" aria-atomic="true">
+      <div className={styles.buzzerBar} data-testid="armed-indicator">
+        <div className={styles.buzzerBarHeader}>
+          <ArmedLights />
+          <span className={styles.buzzerLabel}>BUZZERS ARMED</span>
+          <span className={styles.buzzerCount} data-testid="countdown">
+            {countdown?.seconds ?? ''}
+          </span>
+        </div>
+        {countdown && (
+          <div className={styles.buzzerBarTrack} data-testid="countdown-bar-track">
+            <div
+              className={styles.buzzerBarFill}
+              data-testid="countdown-bar"
+              data-width-percent={countdown.widthPercent}
+              style={{ width: `${countdown.widthPercent}%` }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface GameStatusBannerProps {
   state: BoardView;
 }
 
 function GameStatusBanner({ state }: GameStatusBannerProps) {
   if (state.phase === 'BUZZERS_ARMED') {
-    return (
-      <div className={styles.statusGroup} role="status" aria-live="polite" aria-atomic="true">
-        <div className={styles.armedIndicator} data-testid="armed-indicator">
-          <ArmedLights />
-          BUZZERS ARMED
-        </div>
-        <Countdown deadline={state.deadline} serverNow={state.serverNow} showBar />
-      </div>
-    );
+    return <BuzzerStatusBar deadline={state.deadline} serverNow={state.serverNow} />;
   }
 
   if (state.phase === 'FINAL_CLUE') {
@@ -525,37 +536,28 @@ function renderStage(state: BoardView) {
     return <CompleteScreen state={state} />;
   }
 
-  const hasStatusBand =
-    state.phase === 'BUZZERS_ARMED' ||
-    state.phase === 'FINAL_CLUE' ||
-    (state.phase === 'BUZZED' && Boolean(state.buzzWinnerId));
-
   const hasIncorrectFlash = Boolean(
     state.lastOutcome && state.lastOutcome.type === 'INCORRECT' && !state.answer,
   );
 
-  const clueOverlay =
+  const clueContent =
     state.currentClueId && state.currentClueText ? (
-      <ClueOverlay
-        clueText={state.currentClueText}
-        reserveStatusSpace={hasStatusBand}
-        reserveTopSpace={hasIncorrectFlash}
-      />
+      <ClueContent clueText={state.currentClueText} />
     ) : state.phase === 'DAILY_DOUBLE_WAGER' ? (
-      <ClueOverlay clueText="" isDailyDouble />
+      <ClueContent clueText="" isDailyDouble />
     ) : null;
 
-  if (clueOverlay) {
+  if (clueContent) {
     return (
       <div className={styles.clueStage}>
-        {clueOverlay}
-        {hasIncorrectFlash && (
-          <div className={styles.clueStatusBandTop} data-testid="clue-status-band-top">
-            <IncorrectFeedback state={state} />
+        <div className={styles.clueScreen} data-testid="clue-overlay">
+          <div className={styles.clueTopZone} data-testid="clue-status-band-top">
+            {hasIncorrectFlash && <IncorrectFeedback state={state} />}
           </div>
-        )}
-        <div className={styles.clueStatusBand} data-testid="clue-status-band">
-          <GameStatusBanner state={state} />
+          <div className={styles.clueMainZone}>{clueContent}</div>
+          <div className={styles.clueBottomZone} data-testid="clue-status-band">
+            <GameStatusBanner state={state} />
+          </div>
         </div>
       </div>
     );
