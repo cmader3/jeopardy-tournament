@@ -22,6 +22,11 @@ const selectCluePayloadSchema = z.object({
   clueId: z.string().min(1),
 });
 
+const reopenCluePayloadSchema = z.object({
+  clueId: z.string().min(1),
+  revertScores: z.boolean(),
+});
+
 const buzzPayloadSchema = z.object({
   playerId: z.string().min(1),
 });
@@ -214,6 +219,35 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Select clue failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('reopen_clue', async (payload: { clueId: string; revertScores: boolean }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can re-do a clue' });
+        return;
+      }
+
+      const validation = reopenCluePayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid clue' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'REOPEN_CLUE', clueId: validation.data.clueId, revertScores: validation.data.revertScores },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Re-do clue failed';
         socket.emit('error', { message });
       }
     });

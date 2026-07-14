@@ -14,6 +14,7 @@ export type Intent =
   | { type: 'START_GAME' }
   | { type: 'RESTART_GAME' }
   | { type: 'SELECT_CLUE'; clueId: string; selectorId?: string; hostOverride?: boolean }
+  | { type: 'REOPEN_CLUE'; clueId: string; revertScores: boolean }
   | { type: 'SET_CLUE_SELECTION_MODE'; mode: ClueSelectionMode }
   | { type: 'REVEAL_SELECTED_CLUE' }
   | { type: 'ARM_BUZZERS' }
@@ -107,6 +108,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRestartGame(state);
     case 'SELECT_CLUE':
       return handleSelectClue(state, intent);
+    case 'REOPEN_CLUE':
+      return handleReopenClue(state, intent.clueId, intent.revertScores);
     case 'SET_CLUE_SELECTION_MODE':
       return handleSetClueSelectionMode(state, intent);
     case 'REVEAL_SELECTED_CLUE':
@@ -219,13 +222,71 @@ function handleRemovePlayer(state: GameState, playerId: string): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
   }
 
-  if (state.phase !== 'LOBBY') {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Players can only be removed in the lobby' }] };
+  const remaining = state.players.filter((p) => p.id !== playerId);
+  const omit = <T,>(record: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([id]) => id !== playerId));
+  const finalRevealOrder = state.finalRevealOrder.filter((id) => id !== playerId);
+
+  return {
+    state: {
+      ...state,
+      players: remaining,
+      controllingPlayerId: state.controllingPlayerId === playerId ? null : state.controllingPlayerId,
+      buzzWinnerId: state.buzzWinnerId === playerId ? null : state.buzzWinnerId,
+      lockedOutPlayerIds: state.lockedOutPlayerIds.filter((id) => id !== playerId),
+      lockoutUntil: omit(state.lockoutUntil),
+      finalWagers: omit(state.finalWagers),
+      finalAnswers: omit(state.finalAnswers),
+      finalAnswerDrafts: omit(state.finalAnswerDrafts),
+      finalRevealOrder,
+      finalRevealIndex: Math.min(state.finalRevealIndex, Math.max(0, finalRevealOrder.length - 1)),
+      lastOutcome: state.lastOutcome?.playerId === playerId ? null : state.lastOutcome,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleReopenClue(state: GameState, clueId: string, revertScores: boolean): ReducerResult {
+  if (state.phase !== 'BOARD_SELECT') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clues can only be re-done between clues' }] };
   }
 
-  const remaining = state.players.filter((p) => p.id !== playerId);
+  if (!state.usedClueIds.includes(clueId)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'That clue has not been played yet' }] };
+  }
+
+  const usedClueIds = state.usedClueIds.filter((id) => id !== clueId);
+
+  if (!revertScores) {
+    return {
+      state: { ...state, usedClueIds },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  const players = state.players.map((p) => ({ ...p }));
+  const remainingAudit: AuditRecord[] = [];
+  for (const record of state.auditLog) {
+    const isClueRuling =
+      record.clueId === clueId && (record.type === 'CORRECT' || record.type === 'INCORRECT');
+    if (!isClueRuling) {
+      remainingAudit.push(record);
+      continue;
+    }
+    const target = players.find((p) => p.id === record.playerId);
+    if (target) {
+      target.score -= record.scoreAfter - record.scoreBefore;
+    }
+  }
+
   return {
-    state: { ...state, players: remaining },
+    state: {
+      ...state,
+      usedClueIds,
+      players,
+      auditLog: remainingAudit,
+      lastOutcome: null,
+    },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }
@@ -720,6 +781,7 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
     scoreAfter,
     state.controllingPlayerId,
     ctx.now,
+    clue.id,
   );
 
   const remainingEligible = updatedPlayers.filter(

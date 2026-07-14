@@ -15,6 +15,7 @@ export interface SocketState<T> {
   leaveGame?: () => void;
   removePlayer?: (playerId: string) => void;
   selectClue?: (clueId: string) => void;
+  reopenClue?: (clueId: string, revertScores: boolean) => void;
   setClueSelectionMode?: (mode: 'HOST' | 'PLAYER') => void;
   revealSelectedClue?: () => void;
   revealClue?: () => void;
@@ -132,6 +133,10 @@ export function useSocket<T>(
     socketRef.current?.emit('select_clue', { clueId });
   }, []);
 
+  const reopenClue = useCallback((clueId: string, revertScores: boolean) => {
+    socketRef.current?.emit('reopen_clue', { clueId, revertScores });
+  }, []);
+
   const setClueSelectionMode = useCallback((mode: 'HOST' | 'PLAYER') => {
     socketRef.current?.emit('set_clue_selection_mode', { mode });
   }, []);
@@ -228,7 +233,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, restartGame, leaveGame, removePlayer, selectClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
+  return { connected, error, data, startGame, restartGame, leaveGame, removePlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
 }
 
 export function getStoredContestantToken(): {

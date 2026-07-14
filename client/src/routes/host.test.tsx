@@ -804,6 +804,132 @@ describe('HostInProgress grid and selection', () => {
   });
 });
 
+describe('HostInProgress in-game removal and re-do', () => {
+  it('shows a roster Remove button only when onRemovePlayer is provided', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [{ id: 'p1', name: 'Alice', score: 100, connected: true }],
+    });
+
+    const { rerender } = render(<HostInProgress roomCode="WXYZ" state={state} />);
+    expect(screen.queryByTestId('remove-player-p1')).not.toBeInTheDocument();
+
+    rerender(<HostInProgress roomCode="WXYZ" state={state} onRemovePlayer={vi.fn()} />);
+    expect(screen.getByTestId('remove-player-p1')).toBeInTheDocument();
+  });
+
+  it('confirms before removing a player mid-game and calls onRemovePlayer', async () => {
+    const onRemovePlayer = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [{ id: 'p1', name: 'Alice', score: 100, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onRemovePlayer={onRemovePlayer} />);
+
+    await userEvent.click(screen.getByTestId('remove-player-p1'));
+    expect(screen.getByTestId('confirm-remove-player-button')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('confirm-remove-player-button'));
+
+    expect(onRemovePlayer).toHaveBeenCalledWith('p1');
+  });
+
+  it('does not remove a player when the removal is cancelled', async () => {
+    const onRemovePlayer = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      players: [{ id: 'p1', name: 'Alice', score: 100, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onRemovePlayer={onRemovePlayer} />);
+
+    await userEvent.click(screen.getByTestId('remove-player-p1'));
+    await userEvent.click(screen.getByTestId('cancel-remove-player-button'));
+
+    expect(onRemovePlayer).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('confirm-remove-player-button')).not.toBeInTheDocument();
+  });
+
+  it('shows a Re-do button on used cells only between clues (BOARD_SELECT)', () => {
+    const boardSelect = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+      usedClueIds: ['cl1'],
+    });
+    const { rerender } = render(
+      <HostInProgress roomCode="WXYZ" state={boardSelect} onReopenClue={vi.fn()} />,
+    );
+    expect(screen.getByTestId('redo-clue-cl1')).toBeInTheDocument();
+
+    const midClue = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      usedClueIds: ['cl1'],
+      currentClueId: 'cl3',
+      currentClueText: 'First US president',
+    });
+    rerender(<HostInProgress roomCode="WXYZ" state={midClue} onReopenClue={vi.fn()} />);
+    expect(screen.getByTestId('host-used-cell')).toBeInTheDocument();
+    expect(screen.queryByTestId('redo-clue-cl1')).not.toBeInTheDocument();
+  });
+
+  it('does not show the Re-do button when onReopenClue is not provided', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+      usedClueIds: ['cl1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('host-used-cell')).toBeInTheDocument();
+    expect(screen.queryByTestId('redo-clue-cl1')).not.toBeInTheDocument();
+  });
+
+  it('re-does a clue and reverts scores when confirmed', async () => {
+    const onReopenClue = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+      usedClueIds: ['cl1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onReopenClue={onReopenClue} />);
+
+    await userEvent.click(screen.getByTestId('redo-clue-cl1'));
+    await userEvent.click(screen.getByTestId('confirm-reopen-revert-button'));
+
+    expect(onReopenClue).toHaveBeenCalledWith('cl1', true);
+  });
+
+  it('re-does a clue and keeps scores when chosen', async () => {
+    const onReopenClue = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+      usedClueIds: ['cl1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onReopenClue={onReopenClue} />);
+
+    await userEvent.click(screen.getByTestId('redo-clue-cl1'));
+    await userEvent.click(screen.getByTestId('confirm-reopen-keep-button'));
+
+    expect(onReopenClue).toHaveBeenCalledWith('cl1', false);
+  });
+
+  it('does not re-do a clue when the re-do is cancelled', async () => {
+    const onReopenClue = vi.fn();
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+      usedClueIds: ['cl1'],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onReopenClue={onReopenClue} />);
+
+    await userEvent.click(screen.getByTestId('redo-clue-cl1'));
+    await userEvent.click(screen.getByTestId('cancel-reopen-button'));
+
+    expect(onReopenClue).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('confirm-reopen-revert-button')).not.toBeInTheDocument();
+  });
+});
+
 describe('HostInProgress score tools', () => {
   it('shows a score input and apply button for each contestant', () => {
     const state = makeHostState({

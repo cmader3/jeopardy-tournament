@@ -437,6 +437,26 @@ describe('game sockets', { timeout: 15000 }, () => {
     await server.close();
   });
 
+  it('rejects reopen_clue from a non-host', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    await tokenPromise;
+
+    const errorPromise = waitForError(alice);
+    alice.emit('reopen_clue', { clueId: 'cl1', revertScores: false });
+    const error = await errorPromise;
+    expect(error.message).toMatch(/host/i);
+
+    alice.disconnect();
+    await server.close();
+  });
+
   it('accepts a room code with different case and surrounding whitespace', async () => {
     const server = await createTestServer();
     const board = await boardRepository.create(makeBoardPayload());

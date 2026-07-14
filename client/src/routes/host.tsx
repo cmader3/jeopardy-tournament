@@ -162,6 +162,8 @@ export interface HostInProgressProps {
   roomCode: string;
   state: HostView | null;
   onSelectClue?: (clueId: string) => void;
+  onReopenClue?: (clueId: string, revertScores: boolean) => void;
+  onRemovePlayer?: (playerId: string) => void;
   onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
   onRevealSelectedClue?: () => void;
   onRevealClue?: () => void;
@@ -185,48 +187,117 @@ export interface HostInProgressProps {
 function HostGrid({
   state,
   onSelectClue,
+  onReopenClue,
 }: {
   state: HostView;
   onSelectClue?: (clueId: string) => void;
+  onReopenClue?: (clueId: string, revertScores: boolean) => void;
 }) {
+  const [pendingReopen, setPendingReopen] = useState<{ id: string; value: number | null } | null>(null);
+
   if (!state.round) return <p>No active round.</p>;
 
   const maxRow = Math.max(0, ...state.round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
   const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
+  const canReopen = state.phase === 'BOARD_SELECT';
 
   return (
-    <div
-      className={styles.hostGrid}
-      data-testid="host-grid"
-      style={{ gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)` }}
-    >
-      {state.round.categories.map((category) => (
-        <div key={category.id} className={styles.hostCategoryHeader} data-testid="host-category-header">
-          {category.title}
-          {category.clues.some((c) => c.isDailyDouble) && <span data-testid="dd-marker"> (DD)</span>}
+    <>
+      <div
+        className={styles.hostGrid}
+        data-testid="host-grid"
+        style={{ gridTemplateColumns: `repeat(${state.round.categories.length}, 1fr)` }}
+      >
+        {state.round.categories.map((category) => (
+          <div key={category.id} className={styles.hostCategoryHeader} data-testid="host-category-header">
+            {category.title}
+            {category.clues.some((c) => c.isDailyDouble) && <span data-testid="dd-marker"> (DD)</span>}
+          </div>
+        ))}
+        {rows.map((row) =>
+          state.round!.categories.map((category) => {
+            const clue = category.clues.find((c) => c.row === row);
+            if (!clue) return <div key={`${category.id}-${row}`} className={styles.hostCell} />;
+            const used = state.usedClueIds.includes(clue.id);
+            if (used) {
+              return (
+                <div
+                  key={clue.id}
+                  className={`${styles.hostCell} ${styles.hostCellUsed}`}
+                  data-testid="host-used-cell"
+                  data-clue-id={clue.id}
+                >
+                  <span className={styles.value}>${clue.value}</span>
+                  {canReopen && onReopenClue && (
+                    <button
+                      type="button"
+                      className={styles.redoButton}
+                      onClick={() => setPendingReopen({ id: clue.id, value: clue.value })}
+                      data-testid={`redo-clue-${clue.id}`}
+                    >
+                      Re-do
+                    </button>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <button
+                key={clue.id}
+                type="button"
+                className={styles.hostCell}
+                data-testid="host-clue-cell"
+                data-clue-id={clue.id}
+                onClick={() => onSelectClue?.(clue.id)}
+              >
+                <span className={styles.value}>${clue.value}</span>
+              </button>
+            );
+          }),
+        )}
+      </div>
+      {pendingReopen && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
+          <div className={styles.confirmCard}>
+            <p>
+              Re-do the ${pendingReopen.value} clue? It will return to the board so it can be played again. Do you want
+              to revert the points it awarded or deducted?
+            </p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => {
+                  onReopenClue?.(pendingReopen.id, true);
+                  setPendingReopen(null);
+                }}
+                data-testid="confirm-reopen-revert-button"
+              >
+                Re-do &amp; revert scores
+              </button>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => {
+                  onReopenClue?.(pendingReopen.id, false);
+                  setPendingReopen(null);
+                }}
+                data-testid="confirm-reopen-keep-button"
+              >
+                Re-do &amp; keep scores
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingReopen(null)}
+                data-testid="cancel-reopen-button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
-      ))}
-      {rows.map((row) =>
-        state.round!.categories.map((category) => {
-          const clue = category.clues.find((c) => c.row === row);
-          if (!clue) return <div key={`${category.id}-${row}`} className={styles.hostCell} />;
-          const used = state.usedClueIds.includes(clue.id);
-          return (
-            <button
-              key={clue.id}
-              type="button"
-              className={styles.hostCell}
-              data-testid={used ? 'host-used-cell' : 'host-clue-cell'}
-              data-clue-id={clue.id}
-              disabled={used}
-              onClick={() => onSelectClue?.(clue.id)}
-            >
-              {used ? '' : <span className={styles.value}>${clue.value}</span>}
-            </button>
-          );
-        }),
       )}
-    </div>
+    </>
   );
 }
 
@@ -235,10 +306,11 @@ interface RosterItemProps {
   isController: boolean;
   onAdjustScore?: (playerId: string, score: number) => void;
   onOverrideControl?: (playerId: string) => void;
+  onRequestRemove?: (player: { id: string; name: string }) => void;
   canAssignControl?: boolean;
 }
 
-function RosterItem({ player, isController, onAdjustScore, onOverrideControl, canAssignControl }: RosterItemProps) {
+function RosterItem({ player, isController, onAdjustScore, onOverrideControl, onRequestRemove, canAssignControl }: RosterItemProps) {
   const [draft, setDraft] = useState(String(player.score));
 
   const handleApply = () => {
@@ -299,6 +371,17 @@ function RosterItem({ player, isController, onAdjustScore, onOverrideControl, ca
       >
         {player.connected ? 'connected' : 'disconnected'}
       </span>
+      {onRequestRemove && (
+        <button
+          type="button"
+          className={styles.removePlayerButton}
+          onClick={() => onRequestRemove({ id: player.id, name: player.name })}
+          data-testid={`remove-player-${player.id}`}
+          aria-label={`Remove ${player.name}`}
+        >
+          Remove
+        </button>
+      )}
     </li>
   );
 }
@@ -668,6 +751,8 @@ export function HostInProgress({
   roomCode,
   state,
   onSelectClue,
+  onReopenClue,
+  onRemovePlayer,
   onSetClueSelectionMode,
   onRevealSelectedClue,
   onRevealClue,
@@ -687,6 +772,7 @@ export function HostInProgress({
   onRuleFinalIncorrect,
   onRevealFinalWager,
 }: HostInProgressProps) {
+  const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
   const players = state?.players ?? [];
   const currentClue = state?.currentClueId
     ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId)
@@ -992,13 +1078,43 @@ export function HostInProgress({
               isController={player.id === state?.controllingPlayerId}
               onAdjustScore={onAdjustScore}
               onOverrideControl={onOverrideControl}
+              onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
               canAssignControl={state?.phase === 'BOARD_SELECT'}
             />
           ))}
         </ul>
       )}
       <h2>Board</h2>
-      {state && <HostGrid state={state} onSelectClue={onSelectClue} />}
+      {state && <HostGrid state={state} onSelectClue={onSelectClue} onReopenClue={onReopenClue} />}
+      {pendingRemoval && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
+          <div className={styles.confirmCard}>
+            <p>
+              Remove {pendingRemoval.name} from the game? They will be removed from the roster and forfeit their score.
+            </p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.removePlayerButton}
+                onClick={() => {
+                  onRemovePlayer?.(pendingRemoval.id);
+                  setPendingRemoval(null);
+                }}
+                data-testid="confirm-remove-player-button"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingRemoval(null)}
+                data-testid="cancel-remove-player-button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -1363,6 +1479,12 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleReopenClue = useCallback(
+    (clueId: string, revertScores: boolean) => {
+      hostSocket.reopenClue?.(clueId, revertScores);
+    },
+    [hostSocket],
+  );
   const handleSetClueSelectionMode = useCallback(
     (mode: ClueSelectionMode) => {
       hostSocket.setClueSelectionMode?.(mode);
@@ -1452,6 +1574,8 @@ export function HostContent() {
         roomCode={roomCode}
         state={gameState}
         onSelectClue={handleSelectClue}
+        onReopenClue={handleReopenClue}
+        onRemovePlayer={handleRemovePlayer}
         onSetClueSelectionMode={handleSetClueSelectionMode}
         onRevealSelectedClue={handleRevealSelectedClue}
         onRevealClue={handleRevealClue}

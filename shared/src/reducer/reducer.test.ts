@@ -358,7 +358,7 @@ describe('REMOVE_PLAYER', () => {
     expect(result.state.players).toHaveLength(1);
   });
 
-  it('rejects removing a player once the game is underway', () => {
+  it('removes a player once the game is underway and clears their control', () => {
     const board = makeBoard();
     const state = createInitialState('session-1', 'ABCD', board);
     const alice = makePlayer({ id: 'p1', name: 'Alice' });
@@ -367,13 +367,119 @@ describe('REMOVE_PLAYER', () => {
     let result = reduce(state, { type: 'JOIN', player: alice }, { now: NOW });
     result = reduce(result.state, { type: 'JOIN', player: bob }, { now: NOW });
     result = reduce(result.state, { type: 'START_GAME' }, { now: NOW });
-    result = reduce(result.state, { type: 'REMOVE_PLAYER', playerId: alice.id }, { now: NOW });
+
+    const controllerId = result.state.controllingPlayerId;
+    expect(controllerId).not.toBeNull();
+
+    result = reduce(result.state, { type: 'REMOVE_PLAYER', playerId: controllerId! }, { now: NOW });
+
+    expect(result.state.players).toHaveLength(1);
+    expect(result.state.players.some((p) => p.id === controllerId)).toBe(false);
+    expect(result.state.controllingPlayerId).toBeNull();
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('clears buzz and lockout references when removing a buzzed-in player mid-game', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    expect(state.buzzWinnerId).toBe('p1');
+
+    const result = reduce(state, { type: 'REMOVE_PLAYER', playerId: 'p1' }, { now: NOW + 20 });
+
+    expect(result.state.players.some((p) => p.id === 'p1')).toBe(false);
+    expect(result.state.buzzWinnerId).toBeNull();
+    expect(result.state.lockedOutPlayerIds).not.toContain('p1');
+  });
+});
+
+describe('REOPEN_CLUE', () => {
+  function playClueCorrect(): GameState {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    const bob = makePlayer({ id: 'p2', name: 'Bob', reconnectToken: 'token-bob' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'JOIN', player: bob }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    return reduce(state, { type: 'RULE_CORRECT' }, { now: NOW + 20 }).state;
+  }
+
+  it('reopens a used clue without changing scores', () => {
+    const state = playClueCorrect();
+    expect(state.usedClueIds).toContain('cl1');
+    const scoreBefore = state.players.find((p) => p.id === 'p1')!.score;
+    expect(scoreBefore).toBeGreaterThan(0);
+
+    const result = reduce(state, { type: 'REOPEN_CLUE', clueId: 'cl1', revertScores: false }, { now: NOW + 30 });
+
+    expect(result.state.usedClueIds).not.toContain('cl1');
+    expect(result.state.players.find((p) => p.id === 'p1')!.score).toBe(scoreBefore);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('reopens a used clue and reverts the points it awarded', () => {
+    const state = playClueCorrect();
+    const result = reduce(state, { type: 'REOPEN_CLUE', clueId: 'cl1', revertScores: true }, { now: NOW + 30 });
+
+    expect(result.state.usedClueIds).not.toContain('cl1');
+    expect(result.state.players.find((p) => p.id === 'p1')!.score).toBe(0);
+    expect(result.state.auditLog.some((r) => r.clueId === 'cl1')).toBe(false);
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('reverts a deducted incorrect ruling when reopening with revert', () => {
+    const board = makeBoard();
+    let state = createInitialState('session-1', 'ABCD', board);
+    const alice = makePlayer({ id: 'p1', name: 'Alice' });
+    state = reduce(state, { type: 'JOIN', player: alice }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SELECT_CLUE', clueId: 'cl1', hostOverride: true }, { now: NOW }).state;
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+    state = reduce(state, { type: 'RULE_INCORRECT', playerId: 'p1' }, { now: NOW + 20 }).state;
+    expect(state.phase).toBe('BOARD_SELECT');
+    expect(state.usedClueIds).toContain('cl1');
+    expect(state.players.find((p) => p.id === 'p1')!.score).toBeLessThan(0);
+
+    const result = reduce(state, { type: 'REOPEN_CLUE', clueId: 'cl1', revertScores: true }, { now: NOW + 30 });
+
+    expect(result.state.players.find((p) => p.id === 'p1')!.score).toBe(0);
+    expect(result.state.usedClueIds).not.toContain('cl1');
+  });
+
+  it('rejects reopening a clue while another clue is open', () => {
+    let state = setupClueRevealed();
+    state = { ...state, usedClueIds: ['cl2'] };
+
+    const result = reduce(state, { type: 'REOPEN_CLUE', clueId: 'cl2', revertScores: false }, { now: NOW });
 
     expect(result.effects).toContainEqual({
       type: 'INTENT_REJECTED',
-      reason: expect.stringContaining('lobby'),
+      reason: expect.stringContaining('between clues'),
     });
-    expect(result.state.players).toHaveLength(2);
+    expect(result.state.usedClueIds).toContain('cl2');
+  });
+
+  it('rejects reopening a clue that has not been played', () => {
+    const state = playClueCorrect();
+
+    const result = reduce(state, { type: 'REOPEN_CLUE', clueId: 'cl2', revertScores: false }, { now: NOW + 30 });
+
+    expect(result.effects).toContainEqual({
+      type: 'INTENT_REJECTED',
+      reason: expect.stringContaining('not been played'),
+    });
   });
 });
 

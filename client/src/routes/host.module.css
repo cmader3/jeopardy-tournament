@@ -328,6 +328,37 @@
   cursor: not-allowed;
 }
 
+.hostCellUsed {
+  flex-direction: column;
+  gap: 0.35rem;
+  cursor: default;
+  background: rgba(6, 12, 233, 0.22);
+  border-color: rgba(214, 159, 40, 0.35);
+}
+
+.hostCellUsed .value {
+  opacity: 0.4;
+}
+
+.redoButton {
+  font-family: var(--font-body);
+  font-size: clamp(0.6rem, 1.2vw, 0.85rem);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--value-gold);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--value-gold);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.redoButton:hover {
+  background: var(--value-gold);
+  color: var(--jeopardy-blue-dark);
+}
+
 .clueModeToggle {
   display: flex;
   flex-direction: column;
