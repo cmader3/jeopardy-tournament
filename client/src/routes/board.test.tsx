@@ -27,6 +27,7 @@ vi.mock('../hooks/useServerTime.js', () => ({
 }));
 
 const recordedCues: string[] = [];
+const recordedThinkMusic: boolean[] = [];
 const mockAudioMuted = { current: false };
 
 function MockUseBoardAudio() {
@@ -34,6 +35,10 @@ function MockUseBoardAudio() {
 
   const playCue = useCallback((cue: string) => {
     recordedCues.push(cue);
+  }, []);
+
+  const setThinkMusic = useCallback((active: boolean) => {
+    recordedThinkMusic.push(active);
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -44,7 +49,7 @@ function MockUseBoardAudio() {
     });
   }, []);
 
-  return { muted, toggleMute, playCue };
+  return { muted, toggleMute, playCue, setThinkMusic };
 }
 
 vi.mock('../hooks/useBoardAudio.js', () => ({
@@ -61,6 +66,7 @@ function mockServerTime(now: number) {
 function mockBoardAudioReset() {
   mockAudioMuted.current = false;
   recordedCues.length = 0;
+  recordedThinkMusic.length = 0;
 }
 
 beforeEach(() => {
@@ -1102,6 +1108,35 @@ describe('Board audio cues', () => {
     expect(recordedCues).toContain('armed');
   });
 
+  it('starts the think music on BUZZERS_ARMED and stops it when the phase ends', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BUZZERS_ARMED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        deadline: 5_000,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('armed-indicator');
+    expect(recordedThinkMusic).toContain(true);
+
+    mockUseSocket(makeBoardState({ phase: 'BOARD_SELECT', round: makeRound() }));
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    expect(recordedThinkMusic[recordedThinkMusic.length - 1]).toBe(false);
+  });
+
   it('fires timeUp exactly once at the deadline during BUZZERS_ARMED', async () => {
     mockUseSocket(
       makeBoardState({
@@ -1155,7 +1190,7 @@ describe('Board audio cues', () => {
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
     await screen.findByTestId('clue-text');
-    expect(recordedCues).toContain('finalThink');
+    expect(recordedThinkMusic).toContain(true);
     expect(recordedCues).not.toContain('timeUp');
 
     act(() => {
@@ -1355,7 +1390,7 @@ describe('Board audio cues', () => {
     await userEvent.type(input, 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
     await screen.findByTestId('clue-text');
-    expect(recordedCues).toContain('finalThink');
+    expect(recordedThinkMusic).toContain(true);
     expect(recordedCues).not.toContain('timeUp');
 
     // Simulate the server broadcasting the expiry transition (FINAL_CLUE -> FINAL_REVEAL).

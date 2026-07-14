@@ -6,6 +6,51 @@ export interface UseBoardAudioResult {
   muted: boolean;
   toggleMute: () => void;
   playCue: (cue: CueType) => void;
+  setThinkMusic: (active: boolean) => void;
+}
+
+// An original, looping "think" motif synthesized with the Web Audio API.
+// This is not the copyrighted Jeopardy theme; it is a generic game-show-style
+// countdown loop. To swap in a licensed track later, replace the scheduler in
+// useBoardAudio with an HTMLAudioElement pointed at a file in client/public.
+const THINK_STEP_SECONDS = 0.3;
+const THINK_SCHEDULE_AHEAD_SECONDS = 0.2;
+const THINK_SCHEDULER_INTERVAL_MS = 40;
+
+const THINK_MELODY_HZ: number[] = [
+  293.66, 440.0, 587.33, 440.0,
+  349.23, 440.0, 587.33, 659.25,
+  349.23, 523.25, 698.46, 523.25,
+  329.63, 392.0, 493.88, 587.33,
+];
+
+const THINK_BASS_HZ: Array<number | null> = [
+  73.42, null, null, null,
+  73.42, null, null, null,
+  87.31, null, null, null,
+  82.41, null, null, null,
+];
+
+function scheduleThinkNote(
+  ctx: AudioContext,
+  freq: number,
+  startTime: number,
+  duration: number,
+  type: OscillatorType,
+  peak: number,
+): void {
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.exponentialRampToValueAtTime(peak, startTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+  const osc = ctx.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, startTime);
+  osc.connect(gain);
+  osc.start(startTime);
+  osc.stop(startTime + duration + 0.05);
 }
 
 const MUTE_KEY = 'jeopardy-board-muted';
@@ -112,6 +157,11 @@ export function useBoardAudio(): UseBoardAudioResult {
   const ctxRef = useRef<AudioContext | null>(null);
   const pendingRef = useRef<CueType[]>([]);
 
+  const thinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const thinkStepRef = useRef(0);
+  const thinkNextNoteTimeRef = useRef(0);
+  const thinkActiveRef = useRef(false);
+
   const ensureContext = useCallback((): AudioContext | null => {
     if (!isAudioContextSupported()) return null;
     if (!ctxRef.current) {
@@ -143,6 +193,59 @@ export function useBoardAudio(): UseBoardAudioResult {
     },
     [muted, ensureContext],
   );
+
+  const thinkTick = useCallback(() => {
+    if (!thinkActiveRef.current || mutedRef.current) return;
+    const ctx = ctxRef.current;
+    if (!ctx || ctx.state !== 'running') return;
+
+    if (thinkNextNoteTimeRef.current < ctx.currentTime) {
+      thinkNextNoteTimeRef.current = ctx.currentTime + 0.05;
+    }
+
+    while (thinkNextNoteTimeRef.current < ctx.currentTime + THINK_SCHEDULE_AHEAD_SECONDS) {
+      const step = thinkStepRef.current;
+      const t = thinkNextNoteTimeRef.current;
+      const melody = THINK_MELODY_HZ[step];
+      if (melody) scheduleThinkNote(ctx, melody, t, THINK_STEP_SECONDS * 0.9, 'triangle', 0.13);
+      const bass = THINK_BASS_HZ[step];
+      if (bass) scheduleThinkNote(ctx, bass, t, THINK_STEP_SECONDS * 3.6, 'sine', 0.16);
+      thinkNextNoteTimeRef.current = t + THINK_STEP_SECONDS;
+      thinkStepRef.current = (step + 1) % THINK_MELODY_HZ.length;
+    }
+  }, []);
+
+  const setThinkMusic = useCallback(
+    (active: boolean) => {
+      thinkActiveRef.current = active;
+      if (active) {
+        const ctx = ensureContext();
+        if (!ctx) return;
+        if (ctx.state !== 'running') {
+          void ctx.resume().catch(() => {});
+        }
+        if (thinkIntervalRef.current == null) {
+          thinkStepRef.current = 0;
+          thinkNextNoteTimeRef.current = 0;
+          thinkIntervalRef.current = setInterval(thinkTick, THINK_SCHEDULER_INTERVAL_MS);
+        }
+        thinkTick();
+      } else if (thinkIntervalRef.current != null) {
+        clearInterval(thinkIntervalRef.current);
+        thinkIntervalRef.current = null;
+      }
+    },
+    [ensureContext, thinkTick],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (thinkIntervalRef.current != null) {
+        clearInterval(thinkIntervalRef.current);
+        thinkIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !muted;
@@ -179,5 +282,5 @@ export function useBoardAudio(): UseBoardAudioResult {
     };
   }, [muted, ensureContext, flushPending]);
 
-  return { muted, toggleMute, playCue };
+  return { muted, toggleMute, playCue, setThinkMusic };
 }

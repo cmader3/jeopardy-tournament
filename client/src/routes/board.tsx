@@ -609,7 +609,7 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const [gameState, setGameState] = useState<BoardView | null>(null);
   const socket = useSocket<BoardView>('board', roomCode, setGameState);
   const state = gameState ?? socket.data;
-  const { muted, toggleMute, playCue } = useBoardAudio();
+  const { muted, toggleMute, playCue, setThinkMusic } = useBoardAudio();
 
   const prevPhaseRef = useRef<BoardView['phase'] | null>(null);
   const prevDeadlineRef = useRef<number | null>(null);
@@ -630,10 +630,6 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
 
     if (prevPhase !== 'BUZZERS_ARMED' && phase === 'BUZZERS_ARMED') {
       playCue('armed');
-    }
-
-    if (prevPhase !== 'FINAL_CLUE' && phase === 'FINAL_CLUE') {
-      playCue('finalThink');
     }
 
     // Transition detection: fire timeUp when leaving a timed phase due to
@@ -677,6 +673,13 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
     prevDeadlineRef.current = state.deadline;
     prevPhaseRef.current = phase;
   }, [state, playCue]);
+
+  // Loop the "think" music while a clue or Final countdown is running, and stop
+  // it as soon as the phase ends (buzz-in, time-up, or reveal).
+  useEffect(() => {
+    const phase = state?.phase;
+    setThinkMusic(phase === 'BUZZERS_ARMED' || phase === 'FINAL_CLUE');
+  }, [state?.phase, setThinkMusic]);
 
   // Dedicated deadline-based effect for the timeUp cue. Serves as a backup
   // for the no-broadcast case (e.g., server doesn't broadcast the transition).

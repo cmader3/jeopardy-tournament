@@ -210,6 +210,39 @@ describe('useBoardAudio', () => {
     expect(audioContextMock!.createOscillator).toHaveBeenCalled();
   });
 
+  it('schedules think-music notes while active and stops scheduling when inactive', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.setThinkMusic(true);
+    });
+
+    expect(audioContextMock!.createOscillator).toHaveBeenCalled();
+    expect(audioContextMock!.oscillators.length).toBeGreaterThan(0);
+
+    act(() => {
+      result.current.setThinkMusic(false);
+    });
+  });
+
+  it('does not schedule think-music notes when muted', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.toggleMute();
+    });
+
+    act(() => {
+      result.current.setThinkMusic(true);
+    });
+
+    expect(audioContextMock!.createOscillator).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setThinkMusic(false);
+    });
+  });
+
   it('degrades gracefully when AudioContext is unavailable', () => {
     Object.defineProperty(globalThis, 'AudioContext', {
       value: undefined,
