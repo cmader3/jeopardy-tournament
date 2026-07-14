@@ -326,14 +326,16 @@ function RosterItem({ player, isController, onAdjustScore, onOverrideControl, on
       data-testid={`roster-item-${player.id}`}
       className={isController ? styles.controllingRosterItem : undefined}
     >
-      <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
-        {player.name}
-      </span>
-      {isController && (
-        <span className={styles.controllerBadge} data-testid={`controller-badge-${player.id}`}>
-          Controller
+      <div className={styles.rosterIdentity}>
+        <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
+          {player.name}
         </span>
-      )}
+        {isController && (
+          <span className={styles.controllerBadge} data-testid={`controller-badge-${player.id}`}>
+            Controller
+          </span>
+        )}
+      </div>
       <span
         className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
         data-testid={`roster-score-${player.id}`}

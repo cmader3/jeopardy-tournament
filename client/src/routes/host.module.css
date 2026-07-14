@@ -219,6 +219,44 @@
   border-radius: 0.25rem;
 }
 
+/* In-progress roster: fixed-width columns so the score, input and Set button
+   line up across every player row regardless of name length, score width, or
+   whether an Assign Control button is present. */
+.roster .rosterIdentity {
+  flex: 0 0 13rem;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.roster .rosterIdentity .playerName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster .playerScore {
+  margin-left: 0;
+  flex: 0 0 4.5rem;
+  text-align: right;
+}
+
+.roster .scoreInput {
+  flex: 0 0 5rem;
+}
+
+.roster .statusConnected,
+.roster .statusDisconnected {
+  margin-left: auto;
+}
+
+.roster .removePlayerButton {
+  margin-left: 0;
+}
+
 .minimumPlayers {
   font-size: 0.9rem;
   color: var(--incorrect-red);
