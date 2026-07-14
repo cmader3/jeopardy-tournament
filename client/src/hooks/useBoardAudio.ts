@@ -9,49 +9,11 @@ export interface UseBoardAudioResult {
   setThinkMusic: (active: boolean) => void;
 }
 
-// An original, looping "think" motif synthesized with the Web Audio API.
-// This is not the copyrighted Jeopardy theme; it is a generic game-show-style
-// countdown loop. To swap in a licensed track later, replace the scheduler in
-// useBoardAudio with an HTMLAudioElement pointed at a file in client/public.
-const THINK_STEP_SECONDS = 0.3;
-const THINK_SCHEDULE_AHEAD_SECONDS = 0.2;
-const THINK_SCHEDULER_INTERVAL_MS = 40;
-
-const THINK_MELODY_HZ: number[] = [
-  293.66, 440.0, 587.33, 440.0,
-  349.23, 440.0, 587.33, 659.25,
-  349.23, 523.25, 698.46, 523.25,
-  329.63, 392.0, 493.88, 587.33,
-];
-
-const THINK_BASS_HZ: Array<number | null> = [
-  73.42, null, null, null,
-  73.42, null, null, null,
-  87.31, null, null, null,
-  82.41, null, null, null,
-];
-
-function scheduleThinkNote(
-  ctx: AudioContext,
-  freq: number,
-  startTime: number,
-  duration: number,
-  type: OscillatorType,
-  peak: number,
-): void {
-  const gain = ctx.createGain();
-  gain.connect(ctx.destination);
-  gain.gain.setValueAtTime(0.0001, startTime);
-  gain.gain.exponentialRampToValueAtTime(peak, startTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-  const osc = ctx.createOscillator();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, startTime);
-  osc.connect(gain);
-  osc.start(startTime);
-  osc.stop(startTime + duration + 0.05);
-}
+// Looping "think" music played from a file in client/public during the clue
+// and Final countdowns. Drop an MP3 at client/public/think-music.mp3 to use
+// your own track; if the file is absent, playback simply stays silent.
+const THINK_MUSIC_SRC = '/think-music.mp3';
+const THINK_MUSIC_VOLUME = 0.5;
 
 const MUTE_KEY = 'jeopardy-board-muted';
 
@@ -73,6 +35,10 @@ function writeMutedPreference(muted: boolean): void {
 
 function isAudioContextSupported(): boolean {
   return typeof AudioContext !== 'undefined';
+}
+
+function isAudioElementSupported(): boolean {
+  return typeof Audio !== 'undefined';
 }
 
 function playArmedCue(ctx: AudioContext): void {
@@ -157,9 +123,7 @@ export function useBoardAudio(): UseBoardAudioResult {
   const ctxRef = useRef<AudioContext | null>(null);
   const pendingRef = useRef<CueType[]>([]);
 
-  const thinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const thinkStepRef = useRef(0);
-  const thinkNextNoteTimeRef = useRef(0);
+  const thinkAudioRef = useRef<HTMLAudioElement | null>(null);
   const thinkActiveRef = useRef(false);
 
   const ensureContext = useCallback((): AudioContext | null => {
@@ -194,63 +158,76 @@ export function useBoardAudio(): UseBoardAudioResult {
     [muted, ensureContext],
   );
 
-  const thinkTick = useCallback(() => {
-    if (!thinkActiveRef.current || mutedRef.current) return;
-    const ctx = ctxRef.current;
-    if (!ctx || ctx.state !== 'running') return;
-
-    if (thinkNextNoteTimeRef.current < ctx.currentTime) {
-      thinkNextNoteTimeRef.current = ctx.currentTime + 0.05;
+  const ensureThinkAudio = useCallback((): HTMLAudioElement | null => {
+    if (!isAudioElementSupported()) return null;
+    if (!thinkAudioRef.current) {
+      const audio = new Audio(THINK_MUSIC_SRC);
+      audio.loop = true;
+      audio.volume = THINK_MUSIC_VOLUME;
+      audio.preload = 'auto';
+      thinkAudioRef.current = audio;
     }
+    return thinkAudioRef.current;
+  }, []);
 
-    while (thinkNextNoteTimeRef.current < ctx.currentTime + THINK_SCHEDULE_AHEAD_SECONDS) {
-      const step = thinkStepRef.current;
-      const t = thinkNextNoteTimeRef.current;
-      const melody = THINK_MELODY_HZ[step];
-      if (melody) scheduleThinkNote(ctx, melody, t, THINK_STEP_SECONDS * 0.9, 'triangle', 0.13);
-      const bass = THINK_BASS_HZ[step];
-      if (bass) scheduleThinkNote(ctx, bass, t, THINK_STEP_SECONDS * 3.6, 'sine', 0.16);
-      thinkNextNoteTimeRef.current = t + THINK_STEP_SECONDS;
-      thinkStepRef.current = (step + 1) % THINK_MELODY_HZ.length;
+  const playThinkAudio = useCallback((audio: HTMLAudioElement) => {
+    try {
+      const result = audio.play();
+      if (result && typeof result.catch === 'function') {
+        result.catch(() => {});
+      }
+    } catch {
+      // Autoplay blocked before a user gesture, or unsupported (e.g., jsdom).
+    }
+  }, []);
+
+  const stopThinkAudio = useCallback((audio: HTMLAudioElement, reset: boolean) => {
+    try {
+      audio.pause();
+      if (reset) audio.currentTime = 0;
+    } catch {
+      // ignore playback control failures
     }
   }, []);
 
   const setThinkMusic = useCallback(
     (active: boolean) => {
       thinkActiveRef.current = active;
-      if (active) {
-        const ctx = ensureContext();
-        if (!ctx) return;
-        if (ctx.state !== 'running') {
-          void ctx.resume().catch(() => {});
-        }
-        if (thinkIntervalRef.current == null) {
-          thinkStepRef.current = 0;
-          thinkNextNoteTimeRef.current = 0;
-          thinkIntervalRef.current = setInterval(thinkTick, THINK_SCHEDULER_INTERVAL_MS);
-        }
-        thinkTick();
-      } else if (thinkIntervalRef.current != null) {
-        clearInterval(thinkIntervalRef.current);
-        thinkIntervalRef.current = null;
+      const audio = ensureThinkAudio();
+      if (!audio) return;
+      if (active && !mutedRef.current) {
+        playThinkAudio(audio);
+      } else {
+        stopThinkAudio(audio, !active);
       }
     },
-    [ensureContext, thinkTick],
+    [ensureThinkAudio, playThinkAudio, stopThinkAudio],
   );
 
   useEffect(() => {
     return () => {
-      if (thinkIntervalRef.current != null) {
-        clearInterval(thinkIntervalRef.current);
-        thinkIntervalRef.current = null;
+      const audio = thinkAudioRef.current;
+      if (audio) {
+        stopThinkAudio(audio, true);
+        thinkAudioRef.current = null;
       }
     };
-  }, []);
+  }, [stopThinkAudio]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !muted;
     setMuted(nextMuted);
     writeMutedPreference(nextMuted);
+
+    const thinkAudio = thinkAudioRef.current;
+    if (thinkAudio) {
+      if (nextMuted) {
+        stopThinkAudio(thinkAudio, false);
+      } else if (thinkActiveRef.current) {
+        playThinkAudio(thinkAudio);
+      }
+    }
+
     const ctx = ensureContext();
     if (ctx && ctx.state !== 'closed') {
       void ctx.resume().then(() => {
@@ -259,7 +236,7 @@ export function useBoardAudio(): UseBoardAudioResult {
         }
       });
     }
-  }, [muted, ensureContext, flushPending]);
+  }, [muted, ensureContext, flushPending, playThinkAudio, stopThinkAudio]);
 
   // When the AudioContext becomes available/running, flush any cues that were queued before
   // a user gesture (e.g., the initial armed event before the board was interacted with).

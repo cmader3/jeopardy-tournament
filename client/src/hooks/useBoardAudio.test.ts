@@ -83,14 +83,50 @@ function createMockAudioContext() {
   return { ctx, MockAudioContext, oscillators, gainNodes, createOscillator, createGain };
 }
 
+interface MockAudio {
+  src: string;
+  loop: boolean;
+  volume: number;
+  preload: string;
+  currentTime: number;
+  play: ReturnType<typeof vi.fn>;
+  pause: ReturnType<typeof vi.fn>;
+}
+
+function createMockAudio() {
+  const instances: MockAudio[] = [];
+  function MockAudioFn(src?: string) {
+    const audio: MockAudio = {
+      src: src ?? '',
+      loop: false,
+      volume: 1,
+      preload: '',
+      currentTime: 0,
+      play: vi.fn(() => Promise.resolve()),
+      pause: vi.fn(),
+    };
+    instances.push(audio);
+    return audio;
+  }
+  const MockAudio = vi.fn(MockAudioFn);
+  return { MockAudio, instances };
+}
+
 describe('useBoardAudio', () => {
   let audioContextMock: ReturnType<typeof createMockAudioContext> | null = null;
+  let audioMock: ReturnType<typeof createMockAudio> | null = null;
 
   beforeEach(() => {
     localStorage.clear();
     audioContextMock = createMockAudioContext();
+    audioMock = createMockAudio();
     Object.defineProperty(globalThis, 'AudioContext', {
       value: audioContextMock!.MockAudioContext,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, 'Audio', {
+      value: audioMock!.MockAudio,
       writable: true,
       configurable: true,
     });
@@ -98,6 +134,11 @@ describe('useBoardAudio', () => {
 
   afterEach(() => {
     Object.defineProperty(globalThis, 'AudioContext', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, 'Audio', {
       value: undefined,
       writable: true,
       configurable: true,
@@ -210,22 +251,28 @@ describe('useBoardAudio', () => {
     expect(audioContextMock!.createOscillator).toHaveBeenCalled();
   });
 
-  it('schedules think-music notes while active and stops scheduling when inactive', () => {
+  it('plays looping think music while active and pauses it when inactive', () => {
     const { result } = renderHook(() => useBoardAudio());
 
     act(() => {
       result.current.setThinkMusic(true);
     });
 
-    expect(audioContextMock!.createOscillator).toHaveBeenCalled();
-    expect(audioContextMock!.oscillators.length).toBeGreaterThan(0);
+    expect(audioMock!.instances.length).toBe(1);
+    const audio = audioMock!.instances[0];
+    expect(audio.src).toContain('think-music.mp3');
+    expect(audio.loop).toBe(true);
+    expect(audio.play).toHaveBeenCalledTimes(1);
 
     act(() => {
       result.current.setThinkMusic(false);
     });
+
+    expect(audio.pause).toHaveBeenCalledTimes(1);
+    expect(audio.currentTime).toBe(0);
   });
 
-  it('does not schedule think-music notes when muted', () => {
+  it('does not play think music when muted', () => {
     const { result } = renderHook(() => useBoardAudio());
 
     act(() => {
@@ -236,11 +283,32 @@ describe('useBoardAudio', () => {
       result.current.setThinkMusic(true);
     });
 
-    expect(audioContextMock!.createOscillator).not.toHaveBeenCalled();
+    const audio = audioMock!.instances[0];
+    expect(audio.play).not.toHaveBeenCalled();
 
     act(() => {
       result.current.setThinkMusic(false);
     });
+  });
+
+  it('resumes and pauses think music when the mute toggle changes mid-countdown', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.setThinkMusic(true);
+    });
+    const audio = audioMock!.instances[0];
+    expect(audio.play).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.toggleMute();
+    });
+    expect(audio.pause).toHaveBeenCalled();
+
+    act(() => {
+      result.current.toggleMute();
+    });
+    expect(audio.play).toHaveBeenCalledTimes(2);
   });
 
   it('degrades gracefully when AudioContext is unavailable', () => {
