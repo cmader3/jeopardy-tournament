@@ -219,23 +219,29 @@
   border-radius: 0.25rem;
 }
 
-/* In-progress roster: fixed-width columns so the score, input and Set button
-   line up across every player row regardless of name length, score width, or
-   whether an Assign Control button is present. */
-.roster .rosterIdentity {
-  flex: 0 0 13rem;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.roster .rosterIdentity .playerName {
-  flex: 1 1 auto;
+/* In-progress roster: fixed-width name and control columns keep the Controller
+   badge and Assign Control button in the same column, while the score/input/Set
+   group is centered in the space between the control column and the
+   status/remove group on the right. */
+.roster .playerName {
+  flex: 0 0 8rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.roster .rosterControl {
+  flex: 0 0 12rem;
+  display: flex;
+  align-items: center;
+}
+
+.roster .rosterScoreGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 auto;
 }
 
 .roster .playerScore {
@@ -248,9 +254,10 @@
   flex: 0 0 5rem;
 }
 
-.roster .statusConnected,
-.roster .statusDisconnected {
-  margin-left: auto;
+.roster .rosterStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .roster .removePlayerButton {

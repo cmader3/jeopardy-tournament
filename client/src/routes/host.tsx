@@ -326,65 +326,68 @@ function RosterItem({ player, isController, onAdjustScore, onOverrideControl, on
       data-testid={`roster-item-${player.id}`}
       className={isController ? styles.controllingRosterItem : undefined}
     >
-      <div className={styles.rosterIdentity}>
-        <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
-          {player.name}
-        </span>
-        {isController && (
+      <span className={styles.playerName} data-testid={`roster-name-${player.id}`}>
+        {player.name}
+      </span>
+      <div className={styles.rosterControl}>
+        {isController ? (
           <span className={styles.controllerBadge} data-testid={`controller-badge-${player.id}`}>
             Controller
           </span>
-        )}
+        ) : canAssignControl && onOverrideControl ? (
+          <button
+            type="button"
+            className={styles.actionButton}
+            onClick={() => onOverrideControl(player.id)}
+            data-testid={`assign-control-${player.id}`}
+          >
+            Assign Control
+          </button>
+        ) : null}
       </div>
-      <span
-        className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
-        data-testid={`roster-score-${player.id}`}
-      >
-        {player.score}
-      </span>
-      <input
-        type="number"
-        className={styles.scoreInput}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        data-testid={`score-input-${player.id}`}
-        aria-label={`Adjust score for ${player.name}`}
-      />
-      <button
-        type="button"
-        className={styles.actionButton}
-        onClick={handleApply}
-        data-testid={`apply-score-${player.id}`}
-      >
-        Set
-      </button>
-      {canAssignControl && !isController && onOverrideControl && (
+      <div className={styles.rosterScoreGroup}>
+        <span
+          className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
+          data-testid={`roster-score-${player.id}`}
+        >
+          {player.score}
+        </span>
+        <input
+          type="number"
+          className={styles.scoreInput}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          data-testid={`score-input-${player.id}`}
+          aria-label={`Adjust score for ${player.name}`}
+        />
         <button
           type="button"
           className={styles.actionButton}
-          onClick={() => onOverrideControl(player.id)}
-          data-testid={`assign-control-${player.id}`}
+          onClick={handleApply}
+          data-testid={`apply-score-${player.id}`}
         >
-          Assign Control
+          Set
         </button>
-      )}
-      <span
-        className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
-        data-testid={`player-status-${player.id}`}
-      >
-        {player.connected ? 'connected' : 'disconnected'}
-      </span>
-      {onRequestRemove && (
-        <button
-          type="button"
-          className={styles.removePlayerButton}
-          onClick={() => onRequestRemove({ id: player.id, name: player.name })}
-          data-testid={`remove-player-${player.id}`}
-          aria-label={`Remove ${player.name}`}
+      </div>
+      <div className={styles.rosterStatus}>
+        <span
+          className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
+          data-testid={`player-status-${player.id}`}
         >
-          Remove
-        </button>
-      )}
+          {player.connected ? 'connected' : 'disconnected'}
+        </span>
+        {onRequestRemove && (
+          <button
+            type="button"
+            className={styles.removePlayerButton}
+            onClick={() => onRequestRemove({ id: player.id, name: player.name })}
+            data-testid={`remove-player-${player.id}`}
+            aria-label={`Remove ${player.name}`}
+          >
+            Remove
+          </button>
+        )}
+      </div>
     </li>
   );
 }
