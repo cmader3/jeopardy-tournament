@@ -673,12 +673,12 @@ function FinalStandings({ state }: { state: ContestantView }) {
             </span>
             <span
               data-testid={`contestant-final-standing-score-${player.id}`}
-              className={player.score < 0 ? styles.negativeScore : styles.scoreDisplay}
+              className={`${styles.transitionScore} ${styles.scoreDisplay} ${player.score < 0 ? styles.negativeScore : ''}`}
             >
               {player.score}
             </span>
             {coWinners.includes(player.id) && (
-              <span data-testid={`contestant-final-winner-${player.id}`}>Winner</span>
+              <span className={styles.winnerBadge} data-testid={`contestant-final-winner-${player.id}`}>Winner</span>
             )}
           </li>
         ))}

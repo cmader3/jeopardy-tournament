@@ -342,6 +342,20 @@
   margin-left: 0.5rem;
 }
 
+.winnerBadge {
+  margin-left: 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--value-gold);
+  border: 1px solid var(--value-gold);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .buzzer {
   flex: 0 0 auto;
   width: clamp(9rem, 44vw, 13rem);

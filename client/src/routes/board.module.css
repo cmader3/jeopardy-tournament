@@ -96,6 +96,7 @@
   padding: 1rem 1.25rem;
   text-align: center;
   min-height: 0;
+  overflow: hidden;
 }
 
 .waiting {
@@ -844,15 +845,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 2rem;
+  justify-content: safe center;
+  gap: 0.75rem;
+  padding: 0.5rem 2rem;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .finalRevealHeading {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 6vw, 6rem);
+  font-size: clamp(1.5rem, 4.5vw, 3.5rem);
   color: var(--value-gold);
   text-transform: uppercase;
   margin: 0;
@@ -862,8 +864,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1.5rem;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
   background: var(--jeopardy-blue);
   border: 3px solid var(--value-gold);
   border-radius: 0.5rem;
@@ -873,10 +875,12 @@
 
 .finalRevealPlayerName {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: clamp(1.75rem, 4vw, 3rem);
   color: var(--text-light);
   text-transform: uppercase;
   margin: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .finalRevealPlayerScore {
@@ -943,18 +947,29 @@
 .finalRevealedPlayer {
   flex: 1 1 200px;
   max-width: 300px;
+  min-width: 0;
   border: 2px solid var(--value-gold);
   border-radius: 0.5rem;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   background: var(--jeopardy-blue);
   font-family: var(--font-body);
   font-size: clamp(1rem, 2vw, 1.25rem);
   color: var(--text-light);
   text-align: center;
+}
+
+.finalRevealedPlayer .finalRevealPlayerName {
+  font-size: clamp(1.1rem, 2.5vw, 1.75rem);
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.finalRevealedPlayer .finalRevealPlayerScore {
+  font-size: clamp(1rem, 2vw, 1.5rem);
 }
 
 .finalStandings {
