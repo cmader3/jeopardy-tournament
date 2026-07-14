@@ -168,11 +168,11 @@
 .score {
   font-family: var(--font-score);
   font-size: clamp(1.25rem, 3vw, 2rem);
-  color: var(--value-gold-light);
+  color: var(--score-positive);
 }
 
 .negative {
-  color: #ff8a80;
+  color: var(--score-negative);
 }
 
 .disconnected {
@@ -904,8 +904,12 @@
 .finalRevealPlayerScore {
   font-family: var(--font-score);
   font-size: clamp(1.5rem, 4vw, 3rem);
-  color: var(--value-gold);
+  color: var(--score-positive);
   margin: 0;
+}
+
+.finalRevealPlayerScore.negative {
+  color: var(--score-negative);
 }
 
 .finalRevealAnswer {

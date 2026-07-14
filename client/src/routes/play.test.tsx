@@ -1139,7 +1139,7 @@ describe('PlayRoute', () => {
     expect(scores[0]).toHaveTextContent('Alice');
     expect(scores[0]).toHaveTextContent('300');
     expect(scores[1]).toHaveTextContent('Bob');
-    expect(scores[1]).toHaveTextContent('-100');
+    expect(scores[1]).toHaveTextContent('-$100');
   });
 
   it('shows the Final Jeopardy category and eligible message to an eligible contestant', async () => {
@@ -1759,7 +1759,7 @@ describe('PlayRoute', () => {
     expect(screen.getByTestId('contestant-final-standing-name-p1')).toHaveTextContent('Alice');
     expect(screen.getByTestId('contestant-final-standing-score-p1')).toHaveTextContent('0');
     expect(screen.getByTestId('contestant-final-standing-name-p2')).toHaveTextContent('Bob');
-    expect(screen.getByTestId('contestant-final-standing-score-p2')).toHaveTextContent('-100');
+    expect(screen.getByTestId('contestant-final-standing-score-p2')).toHaveTextContent('-$100');
   });
 
   it('styles the buzzer with a themed CSS module class', async () => {

@@ -185,11 +185,11 @@
 .playerScore {
   margin-left: auto;
   font-family: var(--font-score);
-  color: var(--value-gold);
+  color: var(--score-positive);
 }
 
 .negativeScore {
-  color: #ff8a80;
+  color: var(--score-negative);
 }
 
 .statusConnected {

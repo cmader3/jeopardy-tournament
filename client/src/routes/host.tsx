@@ -7,6 +7,7 @@ import { useSocket } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import type { HostView, ClueSelectionMode } from '@jeopardy/shared';
+import { formatScore } from '../format.js';
 import styles from './host.module.css';
 
 export interface HostLobbyProps {
@@ -376,7 +377,7 @@ function RosterItem({ player, isController, onAdjustScore, onOverrideControl, on
           className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}
           data-testid={`roster-score-${player.id}`}
         >
-          {player.score}
+          {formatScore(player.score)}
         </span>
         <input
           type="number"
@@ -474,7 +475,7 @@ function HostRoundTransition({ state, onAdvanceRound }: HostRoundTransitionProps
           <li key={player.id} data-testid={`transition-score-${player.id}`}>
             <span className={styles.playerName}>{player.name}</span>
             <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>
-              {player.score}
+              {formatScore(player.score)}
             </span>
           </li>
         ))}
@@ -518,7 +519,7 @@ function HostFinalIntro({ state, onOpenFinalWagers }: HostFinalIntroProps) {
               data-testid={eligible ? 'host-final-eligible' : 'host-final-ineligible'}
             >
               <span className={styles.playerName}>{player.name}</span>
-              <span className={styles.playerScore}>{player.score}</span>
+              <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
               <span>{eligible ? 'Eligible' : 'Not participating'}</span>
             </li>
           );
@@ -582,7 +583,7 @@ function HostFinalClue({ state }: HostFinalClueProps) {
           return (
             <li key={player.id} data-testid={`host-final-answer-player-${player.id}`}>
               <span className={styles.playerName}>{player.name}</span>
-              <span className={styles.playerScore}>{player.score}</span>
+              <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
               {eligible ? (
                 <span data-testid={submitted ? 'host-final-answer-submitted' : 'host-final-answer-pending'}>
                   {submitted ? 'Answer submitted' : 'Pending'}
@@ -626,7 +627,7 @@ function HostFinalReveal({
         <div className={styles.hostFinalRevealCurrent} data-testid="host-final-reveal-current">
           <p data-testid="host-final-reveal-player-name">
             <span className={styles.nameCaps}>{currentPlayer.name}</span> —{' '}
-            <span data-testid="host-final-reveal-player-score">${currentPlayer.score}</span>
+            <span className={`${styles.playerScore} ${currentPlayer.score < 0 ? styles.negativeScore : ''}`} data-testid="host-final-reveal-player-score">{formatScore(currentPlayer.score)}</span>
           </p>
           {state.finalRevealStep === 'ANSWER' && (
             <button
@@ -669,7 +670,7 @@ function HostFinalReveal({
                 {currentAnswer}
               </p>
               <p className={styles.hostFinalRevealWager} data-testid="host-final-reveal-wager">
-                {'Wager: $'}{currentWager}
+                Wager: {formatScore(currentWager ?? 0)}
               </p>
               <button
                 type="button"
@@ -693,9 +694,9 @@ function HostFinalReveal({
               return (
                 <li key={playerId} data-testid={`host-final-revealed-player-${playerId}`}>
                   <span className={styles.playerName}>{player.name}</span>
-                  <span className={styles.playerScore}>${player.score}</span>
+                  <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
                   <span data-testid={`host-final-revealed-answer-${playerId}`}>{state.finalRevealedAnswers[playerId]}</span>
-                  <span data-testid={`host-final-revealed-wager-${playerId}`}>${state.finalRevealedWagers[playerId]}</span>
+                  <span data-testid={`host-final-revealed-wager-${playerId}`}>{formatScore(state.finalRevealedWagers[playerId])}</span>
                 </li>
               );
             })}
@@ -732,7 +733,7 @@ function HostFinalStandings({ state }: HostFinalStandingsProps) {
           >
             <span className={styles.playerName}>{player.name}</span>
             <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>
-              {player.score}
+              {formatScore(player.score)}
             </span>
             {coWinners.includes(player.id) && (
               <span className={styles.hostFinalWinnerBadge} data-testid={`host-final-winner-${player.id}`}>
@@ -760,7 +761,7 @@ function HostFinalWager({ state, onForceFinalWagers }: HostFinalWagerProps) {
           return (
             <li key={player.id} data-testid={`host-final-wager-player-${player.id}`}>
               <span className={styles.playerName}>{player.name}</span>
-              <span className={styles.playerScore}>{player.score}</span>
+              <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
               {eligible ? (
                 <span data-testid={submitted ? 'host-final-wager-submitted' : 'host-final-wager-pending'}>
                   {submitted ? 'Wager submitted' : 'Pending'}
@@ -1019,7 +1020,7 @@ export function HostInProgress({
               )}
               {state?.dailyDoubleWager != null && (
                 <p className={styles.wagerText} data-testid="daily-double-wager">
-                  Daily Double wager: {'$'}{state.dailyDoubleWager}
+                  Daily Double wager: {formatScore(state.dailyDoubleWager)}
                 </p>
               )}
               <Countdown deadline={state?.deadline ?? null} serverNow={state?.serverNow ?? 0} />

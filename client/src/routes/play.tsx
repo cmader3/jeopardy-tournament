@@ -9,6 +9,7 @@ import { Countdown } from '../components/Countdown.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { useServerTime } from '../hooks/useServerTime.js';
 import { useSyncTime } from '../hooks/useSyncTime.js';
+import { formatScore } from '../format.js';
 import type { ContestantView } from '@jeopardy/shared';
 import styles from './play.module.css';
 
@@ -275,7 +276,7 @@ function DailyDoubleWager({
     return (
       <div data-testid="daily-double-wager-locked">
         <p className={styles.dailyDoubleSplash} data-testid="daily-double-splash">DAILY DOUBLE</p>
-        <p data-testid="dd-wager-locked-amount">Your wager: {'$'}{state.dailyDoubleWager}</p>
+        <p data-testid="dd-wager-locked-amount">Your wager: {formatScore(state.dailyDoubleWager ?? 0)}</p>
       </div>
     );
   }
@@ -378,7 +379,7 @@ function FinalWager({
     return (
       <div data-testid="final-wager-locked">
         <p data-testid="final-wager-locked-message">Your Final Jeopardy wager is locked in.</p>
-        <p data-testid="final-wager-locked-amount">Your wager: {'$'}{state.myFinalWager}</p>
+        <p data-testid="final-wager-locked-amount">Your wager: {formatScore(state.myFinalWager ?? 0)}</p>
       </div>
     );
   }
@@ -605,8 +606,8 @@ function FinalReveal({ state }: { state: ContestantView }) {
           </p>
           <p className={styles.finalRevealLine} data-testid="contestant-final-reveal-player-score">
             <span className={styles.finalRevealLabel}>Score</span>
-            <span className={currentPlayer.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
-              {currentPlayer.score}
+            <span className={`${styles.scoreDisplay} ${currentPlayer.score < 0 ? styles.negativeScore : ''}`}>
+              {formatScore(currentPlayer.score)}
             </span>
           </p>
           {currentAnswer !== undefined && (
@@ -618,7 +619,7 @@ function FinalReveal({ state }: { state: ContestantView }) {
           {currentWager !== undefined && (
             <p className={styles.finalRevealLine} data-testid="contestant-final-reveal-wager">
               <span className={styles.finalRevealLabel}>Wager</span>
-              <span className={styles.scoreDisplay}>${currentWager}</span>
+              <span className={styles.scoreDisplay}>{formatScore(currentWager)}</span>
             </p>
           )}
           {isMe && (
@@ -647,8 +648,8 @@ function FinalReveal({ state }: { state: ContestantView }) {
                 <li key={playerId} className={styles.revealedItem} data-testid="contestant-final-revealed-player">
                   <div className={styles.revealedItemHeader}>
                     <span className={styles.contestantName}>{player.name}</span>
-                    <span className={player.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
-                      {player.score}
+                    <span className={`${styles.scoreDisplay} ${player.score < 0 ? styles.negativeScore : ''}`}>
+                      {formatScore(player.score)}
                     </span>
                   </div>
                   <div className={styles.revealedItemDetail}>
@@ -660,7 +661,7 @@ function FinalReveal({ state }: { state: ContestantView }) {
                   <div className={styles.revealedItemDetail}>
                     <span className={styles.finalRevealLabel}>Wager</span>
                     <span className={styles.scoreDisplay} data-testid={`contestant-final-revealed-wager-${playerId}`}>
-                      ${state.finalRevealedWagers[playerId]}
+                      {formatScore(state.finalRevealedWagers[playerId])}
                     </span>
                   </div>
                 </li>
@@ -689,8 +690,8 @@ function FinalStandings({ state }: { state: ContestantView }) {
       <h2 className={styles.finalHeading} data-testid="contestant-final-standings-heading">Final Standings</h2>
       <p data-testid="contestant-final-standings-self">
         Your final score:{' '}
-        <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
-          {me?.score ?? 0}
+        <span className={`${styles.scoreDisplay} ${me?.score != null && me.score < 0 ? styles.negativeScore : ''}`}>
+          {formatScore(me?.score ?? 0)}
         </span>
       </p>
       <ul data-testid="contestant-final-standings-list">
@@ -703,7 +704,7 @@ function FinalStandings({ state }: { state: ContestantView }) {
               data-testid={`contestant-final-standing-score-${player.id}`}
               className={`${styles.transitionScore} ${styles.scoreDisplay} ${player.score < 0 ? styles.negativeScore : ''}`}
             >
-              {player.score}
+              {formatScore(player.score)}
             </span>
             {coWinners.includes(player.id) && (
               <span className={styles.winnerBadge} data-testid={`contestant-final-winner-${player.id}`}>Winner</span>
@@ -830,8 +831,8 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             </p>
             <div className={styles.scoreBlock} aria-live="polite" aria-atomic="true">
               <span className={styles.scoreLabel}>Score:</span>
-              <span className={me?.score != null && me.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
-                {me?.score ?? 0}
+              <span className={`${styles.scoreDisplay} ${me?.score != null && me.score < 0 ? styles.negativeScore : ''}`}>
+                {formatScore(me?.score ?? 0)}
               </span>
             </div>
           </div>
@@ -874,7 +875,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                     <span
                       className={`${styles.transitionScore} ${styles.scoreDisplay} ${player.score < 0 ? styles.negativeScore : ''}`}
                     >
-                      {player.score}
+                      {formatScore(player.score)}
                     </span>
                   </li>
                 ))}
@@ -959,7 +960,7 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
             <DailyDoubleWager state={gameState} onSubmit={socket.submitDDWager} error={error} clearError={clearError} />
           )}
           {gameState.phase === 'DAILY_DOUBLE_CLUE' && gameState.isControllingPlayer && gameState.dailyDoubleWager != null && (
-            <p data-testid="dd-wager-locked-amount">Your wager: {'$'}{gameState.dailyDoubleWager}</p>
+            <p data-testid="dd-wager-locked-amount">Your wager: {formatScore(gameState.dailyDoubleWager ?? 0)}</p>
           )}
         </div>
       )}

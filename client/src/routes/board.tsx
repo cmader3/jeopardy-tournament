@@ -8,6 +8,7 @@ import { AudioToggle } from '../components/AudioToggle.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { useBoardAudio } from '../hooks/useBoardAudio.js';
 import { useServerTime } from '../hooks/useServerTime.js';
+import { formatScore } from '../format.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
 import styles from './board.module.css';
 
@@ -31,7 +32,7 @@ function Scoreboard({ players, controllingPlayerId }: ScoreboardProps) {
             {player.name}
           </span>
           <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`}>
-            {player.score}
+            {formatScore(player.score)}
           </span>
         </div>
       ))}
@@ -251,7 +252,7 @@ function BetweenRoundScreen({ state }: BetweenRoundScreenProps) {
           >
             <span className={`${styles.name} ${styles.truncated}`}>{player.name}</span>
             <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`}>
-              {player.score}
+              {formatScore(player.score)}
             </span>
           </div>
         ))}
@@ -429,7 +430,7 @@ function FinalStandings({ state }: CompleteScreenProps) {
                 {player.name}
               </span>
               <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${player.id}`}>
-                {player.score}
+                {formatScore(player.score)}
               </span>
             </div>
           );
@@ -472,8 +473,8 @@ function FinalReveal({ state }: FinalRevealProps) {
           <p className={styles.finalRevealPlayerName} data-testid="final-reveal-player-name">
             {currentPlayer.name}
           </p>
-          <p className={styles.finalRevealPlayerScore} data-testid="final-reveal-player-score">
-            {'$'}{currentPlayer.score}
+          <p className={`${styles.finalRevealPlayerScore} ${currentPlayer.score < 0 ? styles.negative : ''}`} data-testid="final-reveal-player-score">
+            {formatScore(currentPlayer.score)}
           </p>
           {currentAnswer !== undefined && (
             <p className={styles.finalRevealAnswer} data-testid="final-reveal-answer">
@@ -482,7 +483,7 @@ function FinalReveal({ state }: FinalRevealProps) {
           )}
           {currentWager !== undefined && (
             <p className={styles.finalRevealWager} data-testid="final-reveal-wager">
-              {'Wager: $'}{currentWager}
+              Wager: {formatScore(currentWager)}
             </p>
           )}
           {state.lastOutcome && (
@@ -507,9 +508,9 @@ function FinalReveal({ state }: FinalRevealProps) {
               return (
                 <div key={playerId} className={styles.finalRevealedPlayer} data-testid="final-revealed-player">
                   <span className={styles.finalRevealPlayerName}>{player.name}</span>
-                  <span className={styles.finalRevealPlayerScore}>${player.score}</span>
+                  <span className={`${styles.finalRevealPlayerScore} ${player.score < 0 ? styles.negative : ''}`}>{formatScore(player.score)}</span>
                   <span data-testid={`final-revealed-answer-${playerId}`}>{state.finalRevealedAnswers[playerId]}</span>
-                  <span data-testid={`final-revealed-wager-${playerId}`}>{'$'}{state.finalRevealedWagers[playerId]}</span>
+                  <span data-testid={`final-revealed-wager-${playerId}`}>{formatScore(state.finalRevealedWagers[playerId])}</span>
                 </div>
               );
             })}

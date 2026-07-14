@@ -757,7 +757,7 @@ describe('BoardRoute', () => {
     expect(scores[0]).toHaveTextContent('Alice');
     expect(scores[0]).toHaveTextContent('250');
     expect(scores[1]).toHaveTextContent('Bob');
-    expect(scores[1]).toHaveTextContent('-50');
+    expect(scores[1]).toHaveTextContent('-$50');
   });
 
   it('shows the Final Jeopardy between-round screen when the target is FINAL', async () => {
@@ -861,7 +861,7 @@ describe('BoardRoute', () => {
     expect(screen.getByTestId('final-standing-name-p1')).toHaveTextContent('Alice');
     expect(screen.getByTestId('final-standing-score-p1')).toHaveTextContent('0');
     expect(screen.getByTestId('final-standing-name-p2')).toHaveTextContent('Bob');
-    expect(screen.getByTestId('final-standing-score-p2')).toHaveTextContent('-100');
+    expect(screen.getByTestId('final-standing-score-p2')).toHaveTextContent('-$100');
   });
 
   it('shows the Final wager phase with submission status and no amounts', async () => {

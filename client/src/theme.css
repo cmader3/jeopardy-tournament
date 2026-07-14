@@ -8,6 +8,8 @@
   --final-purple: #5e0a5e;
   --correct-green: #2e7d32;
   --incorrect-red: #b71c1c;
+  --score-positive: var(--value-gold-light);
+  --score-negative: #ff8a80;
   --text-light: #ffffff;
   --text-dark: #121212;
   --panel-bg: #0a0a2a;

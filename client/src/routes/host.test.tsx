@@ -472,7 +472,7 @@ describe('HostInProgress', () => {
     expect(screen.getByTestId('roster-name-p1')).toHaveTextContent('Alice');
     expect(screen.getByTestId('roster-score-p1')).toHaveTextContent('200');
     expect(screen.getByTestId('roster-name-p2')).toHaveTextContent('Bob');
-    expect(screen.getByTestId('roster-score-p2')).toHaveTextContent('-100');
+    expect(screen.getByTestId('roster-score-p2')).toHaveTextContent('-$100');
   });
 
   it('shows a waiting message when the roster is empty', () => {
@@ -1165,7 +1165,7 @@ describe('HostInProgress score tools', () => {
     expect(screen.getByTestId('transition-scores')).toBeInTheDocument();
     expect(screen.getByTestId('transition-score-p1')).toHaveTextContent('Alice');
     expect(screen.getByTestId('transition-score-p1')).toHaveTextContent('200');
-    expect(screen.getByTestId('transition-score-p2')).toHaveTextContent('-100');
+    expect(screen.getByTestId('transition-score-p2')).toHaveTextContent('-$100');
     expect(screen.getByTestId('continue-round-button')).toHaveTextContent(/Continue to Double Jeopardy!/i);
   });
 
@@ -1292,7 +1292,7 @@ describe('HostInProgress score tools', () => {
     expect(screen.getByTestId('host-final-standing-p1')).toHaveTextContent('Alice');
     expect(screen.getByTestId('host-final-standing-p1')).toHaveTextContent('0');
     expect(screen.getByTestId('host-final-standing-p2')).toHaveTextContent('Bob');
-    expect(screen.getByTestId('host-final-standing-p2')).toHaveTextContent('-100');
+    expect(screen.getByTestId('host-final-standing-p2')).toHaveTextContent('-$100');
   });
 
   it('shows the Final wager phase with submission status and force button', () => {
