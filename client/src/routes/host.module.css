@@ -237,6 +237,28 @@
   align-items: center;
 }
 
+/* Keep the Controller badge and Assign Control button the same size. */
+.roster .rosterControl .actionButton,
+.roster .rosterControl .controllerBadge {
+  width: 100%;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  border-width: 2px;
+  border-radius: 0.25rem;
+  text-align: center;
+}
+
+/* Reserve the same border box on every row so the controlling row's gold
+   border does not shift the centered score group out of alignment. */
+.roster li {
+  border: 2px solid transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.roster li.controllingRosterItem {
+  border: 2px solid var(--value-gold);
+}
+
 .roster .rosterScoreGroup {
   display: flex;
   align-items: center;
@@ -255,8 +277,10 @@
 }
 
 .roster .rosterStatus {
+  flex: 0 0 12rem;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.75rem;
 }
 
