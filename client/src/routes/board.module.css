@@ -88,6 +88,24 @@
   margin: 0;
 }
 
+.leaveButton {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  color: var(--value-gold);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(236, 194, 92, 0.5);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.leaveButton:hover {
+  background: var(--value-gold);
+  color: var(--jeopardy-blue-dark);
+}
+
 .stage {
   flex: 1;
   display: flex;

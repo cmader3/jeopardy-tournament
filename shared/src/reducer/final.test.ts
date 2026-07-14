@@ -251,7 +251,7 @@ describe('SUBMIT_FINAL_WAGER', () => {
     expect(second.state.finalWagers['p1']).toBe(50);
   });
 
-  it('advances to FINAL_CLUE when all eligible contestants have submitted', () => {
+  it('stays in FINAL_WAGER after all eligible contestants have submitted so the host initiates the clue', () => {
     const state = setupFinalWager({ p1: 200, p2: 100 });
 
     const first = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 200 }, { now: NOW });
@@ -260,8 +260,8 @@ describe('SUBMIT_FINAL_WAGER', () => {
     const second = reduce(first.state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p2', amount: 100 }, { now: NOW });
 
     expect(second.effects).toContainEqual({ type: 'BROADCAST_STATE' });
-    expect(second.state.phase).toBe('FINAL_CLUE');
-    expect(second.state.currentClueId).toBe('cl-final');
+    expect(second.state.phase).toBe('FINAL_WAGER');
+    expect(second.state.currentClueId).toBeNull();
     expect(second.state.finalWagers).toEqual({ p1: 200, p2: 100 });
   });
 

@@ -475,6 +475,8 @@ describe('full game sockets - import and no-DJ coverage', { timeout: 45000 }, ()
 
       awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_CLUE', 'final-clue');
       bob.emit('submit_final_wager', { amount: 200 });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      host.emit('force_final_wagers');
       const [, boardFinalClue, aliceFinalClue, bobFinalClue] = await awaitStates;
       expect(boardFinalClue).not.toHaveProperty('finalWagers');
       expect((aliceFinalClue as { myFinalWager: number }).myFinalWager).toBe(100);

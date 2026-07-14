@@ -109,6 +109,7 @@ export interface HostView {
   finalRevealedAnswers: Record<string, string>;
   finalRevealedWagers: Record<string, number>;
   roundComplete: boolean;
+  nextRoundTarget: 'DOUBLE_JEOPARDY' | 'FINAL';
   serverNow: number;
 }
 
@@ -157,6 +158,15 @@ function getCurrentClue(state: GameState): Clue | null {
   const round = getCurrentRound(state);
   if (!round || !state.currentClueId) return null;
   return round.clues.find((c) => c.id === state.currentClueId) ?? null;
+}
+
+function getNextRoundTarget(state: GameState): 'DOUBLE_JEOPARDY' | 'FINAL' {
+  for (let i = state.roundIndex + 1; i < state.board.rounds.length; i++) {
+    const round = state.board.rounds[i];
+    if (round.type === 'DOUBLE_JEOPARDY' && !state.board.includeDoubleJeopardy) continue;
+    return round.type === 'DOUBLE_JEOPARDY' ? 'DOUBLE_JEOPARDY' : 'FINAL';
+  }
+  return 'FINAL';
 }
 
 function projectBoardRound(round: GameState['board']['rounds'][number]): ProjectedRoundPublic {
@@ -354,6 +364,7 @@ export function projectHost(state: GameState, now: number): HostView {
     finalRevealedAnswers: getFinalRevealedAnswers(state),
     finalRevealedWagers: getFinalRevealedWagers(state),
     roundComplete: isRoundComplete(state),
+    nextRoundTarget: getNextRoundTarget(state),
     serverNow: now,
   };
 }

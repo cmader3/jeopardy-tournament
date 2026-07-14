@@ -262,6 +262,8 @@ async function advanceToFinalReveal(
   alice.emit('submit_final_wager', { amount: 300 });
   bob.emit('submit_final_wager', { amount: 100 });
   carol.emit('submit_final_wager', { amount: 200 });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  host.emit('force_final_wagers');
   await Promise.all([fcHost, fcBoard, fcAlice, fcBob, fcCarol]);
 
   const revealHost = waitForState(host, (s) => s.phase === 'FINAL_REVEAL', 5000, 'host-reveal');

@@ -244,6 +244,8 @@ async function advanceToFinalClue(
   const fcBob = waitForState(bob, (s) => s.phase === 'FINAL_CLUE', 5000, 'bob-fc');
   alice.emit('submit_final_wager', { amount: 0 });
   bob.emit('submit_final_wager', { amount: 0 });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  host.emit('force_final_wagers');
   await Promise.all([fcHost, fcBoard, fcAlice, fcBob]);
 }
 

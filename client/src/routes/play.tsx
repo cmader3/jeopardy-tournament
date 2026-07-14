@@ -599,20 +599,38 @@ function FinalReveal({ state }: { state: ContestantView }) {
     <div data-testid="contestant-final-reveal">
       <h2 className={styles.finalHeading} data-testid="contestant-final-reveal-heading">Final Jeopardy Reveal</h2>
       {currentPlayer && (
-        <div data-testid="contestant-final-reveal-current">
-          <p data-testid="contestant-final-reveal-player-name" className={styles.contestantName}>
+        <div className={styles.finalRevealCard} data-testid="contestant-final-reveal-current">
+          <p data-testid="contestant-final-reveal-player-name" className={styles.finalRevealName}>
             {currentPlayer.name}
           </p>
-          <p data-testid="contestant-final-reveal-player-score">Score: {currentPlayer.score}</p>
+          <p className={styles.finalRevealLine} data-testid="contestant-final-reveal-player-score">
+            <span className={styles.finalRevealLabel}>Score</span>
+            <span className={currentPlayer.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
+              {currentPlayer.score}
+            </span>
+          </p>
           {currentAnswer !== undefined && (
-            <p data-testid="contestant-final-reveal-answer">Answer: {currentAnswer}</p>
+            <p className={styles.finalRevealLine} data-testid="contestant-final-reveal-answer">
+              <span className={styles.finalRevealLabel}>Answer</span>
+              <span className={styles.finalRevealAnswerText}>{currentAnswer}</span>
+            </p>
           )}
           {currentWager !== undefined && (
-            <p data-testid="contestant-final-reveal-wager">{'Wager: $'}{currentWager}</p>
+            <p className={styles.finalRevealLine} data-testid="contestant-final-reveal-wager">
+              <span className={styles.finalRevealLabel}>Wager</span>
+              <span className={styles.scoreDisplay}>${currentWager}</span>
+            </p>
           )}
-          {isMe && <p data-testid="contestant-final-reveal-is-me">This is your reveal!</p>}
+          {isMe && (
+            <p className={styles.finalRevealIsMe} data-testid="contestant-final-reveal-is-me">
+              This is your reveal!
+            </p>
+          )}
           {state.lastOutcome && (
-            <p data-testid="contestant-final-reveal-outcome">
+            <p
+              className={state.lastOutcome.type === 'CORRECT' ? styles.outcomeCorrect : styles.outcomeIncorrect}
+              data-testid="contestant-final-reveal-outcome"
+            >
               {state.lastOutcome.type === 'CORRECT' ? 'Correct!' : 'Incorrect!'}
             </p>
           )}
@@ -620,21 +638,31 @@ function FinalReveal({ state }: { state: ContestantView }) {
       )}
       {revealedPlayerIds.length > 0 && (
         <div data-testid="contestant-final-revealed-list">
-          <h3>Revealed</h3>
-          <ul>
+          <h3 className={styles.finalRevealedHeading}>Revealed</h3>
+          <ul className={styles.revealedList}>
             {revealedPlayerIds.map((playerId) => {
               const player = state.players.find((p) => p.id === playerId);
               if (!player) return null;
               return (
-                <li key={playerId} data-testid="contestant-final-revealed-player">
-                  <span className={styles.contestantName}>{player.name}</span>
-                  <span> {player.score}</span>
-                  <span data-testid={`contestant-final-revealed-answer-${playerId}`}>
-                    {state.finalRevealedAnswers[playerId]}
-                  </span>
-                  <span data-testid={`contestant-final-revealed-wager-${playerId}`}>
-                    {'$'}{state.finalRevealedWagers[playerId]}
-                  </span>
+                <li key={playerId} className={styles.revealedItem} data-testid="contestant-final-revealed-player">
+                  <div className={styles.revealedItemHeader}>
+                    <span className={styles.contestantName}>{player.name}</span>
+                    <span className={player.score < 0 ? styles.negativeScore : styles.scoreDisplay}>
+                      {player.score}
+                    </span>
+                  </div>
+                  <div className={styles.revealedItemDetail}>
+                    <span className={styles.finalRevealLabel}>Answer</span>
+                    <span data-testid={`contestant-final-revealed-answer-${playerId}`}>
+                      {state.finalRevealedAnswers[playerId]}
+                    </span>
+                  </div>
+                  <div className={styles.revealedItemDetail}>
+                    <span className={styles.finalRevealLabel}>Wager</span>
+                    <span className={styles.scoreDisplay} data-testid={`contestant-final-revealed-wager-${playerId}`}>
+                      ${state.finalRevealedWagers[playerId]}
+                    </span>
+                  </div>
                 </li>
               );
             })}

@@ -1129,7 +1129,7 @@ function closeFinalWagerPhase(state: GameState, ctx: ReducerCtx): GameState {
 function handleSubmitFinalWager(
   state: GameState,
   intent: Extract<Intent, { type: 'SUBMIT_FINAL_WAGER' }>,
-  ctx: ReducerCtx,
+  _ctx: ReducerCtx,
 ): ReducerResult {
   if (state.phase !== 'FINAL_WAGER') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final wager is being accepted right now' }] };
@@ -1160,13 +1160,6 @@ function handleSubmitFinalWager(
   }
 
   const updated = { ...state, finalWagers: { ...state.finalWagers, [player.id]: intent.amount } };
-  const eligible = getFinalEligiblePlayers(updated.players);
-  const allSubmitted = eligible.length > 0 && eligible.every((p) => updated.finalWagers[p.id] !== undefined);
-
-  if (allSubmitted) {
-    return { state: closeFinalWagerPhase(updated, ctx), effects: [{ type: 'BROADCAST_STATE' }] };
-  }
-
   return { state: updated, effects: [{ type: 'BROADCAST_STATE' }] };
 }
 

@@ -246,6 +246,8 @@ describe('full game end-to-end', () => {
     // Wagers are secret from board and other contestants.
     state = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 200 }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p2', amount: 150 }, { now: NOW }).state;
+    expectPhase(state, 'FINAL_WAGER');
+    state = reduce(state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
     expectPhase(state, 'FINAL_CLUE');
     expect(state.finalWagers).toEqual({ p1: 200, p2: 150 });
 
@@ -386,6 +388,8 @@ describe('full game end-to-end', () => {
     expectPhase(state, 'FINAL_WAGER');
     state = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 0 }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p2', amount: 100 }, { now: NOW }).state;
+    expectPhase(state, 'FINAL_WAGER');
+    state = reduce(state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
     expectPhase(state, 'FINAL_CLUE');
 
     state = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1 }).state;

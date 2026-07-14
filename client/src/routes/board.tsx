@@ -741,6 +741,17 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
           Room Code: {roomCode}
         </p>
         <AudioToggle muted={muted} onToggle={toggleMute} />
+        <button
+          type="button"
+          className={styles.leaveButton}
+          data-testid="board-leave-game-button"
+          onClick={() => {
+            socket.leaveGame?.();
+            onReset();
+          }}
+        >
+          Leave Game
+        </button>
       </header>
       <div className={styles.stage}>{renderStage(state)}</div>
       <div className={styles.shareSection}>

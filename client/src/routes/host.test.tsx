@@ -138,6 +138,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     finalWagerSubmissionStatus: {},
     finalAnswerSubmissionStatus: {},
     roundComplete: false,
+    nextRoundTarget: 'FINAL',
     serverNow: 0,
     clueSelectionMode: 'HOST',
     pendingClueId: null,
@@ -1037,11 +1038,35 @@ describe('HostInProgress score tools', () => {
     expect(onUndoLastRuling).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the advance round button when the round is complete', () => {
-    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: true });
+  it('shows the advance round button labeled with the next round when the round is complete', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: true, nextRoundTarget: 'DOUBLE_JEOPARDY' });
     render(<HostInProgress roomCode="WXYZ" state={state} />);
 
+    expect(screen.getByTestId('advance-round-button')).toHaveTextContent('Advance to Double Jeopardy');
+  });
+
+  it('shows the round-complete popup and dismisses it via the X without advancing', async () => {
+    const onAdvanceRound = vi.fn();
+    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: true, nextRoundTarget: 'FINAL' });
+    render(<HostInProgress roomCode="WXYZ" state={state} onAdvanceRound={onAdvanceRound} />);
+
+    expect(screen.getByTestId('advance-round-modal')).toBeInTheDocument();
+    expect(screen.getByTestId('advance-round-modal-confirm')).toHaveTextContent('Advance to Final Jeopardy');
+
+    await userEvent.click(screen.getByTestId('advance-round-modal-close'));
+    expect(screen.queryByTestId('advance-round-modal')).not.toBeInTheDocument();
     expect(screen.getByTestId('advance-round-button')).toBeInTheDocument();
+    expect(onAdvanceRound).not.toHaveBeenCalled();
+  });
+
+  it('advances the round from the popup confirm button', async () => {
+    const onAdvanceRound = vi.fn();
+    const state = makeHostState({ phase: 'BOARD_SELECT', roundComplete: true });
+    render(<HostInProgress roomCode="WXYZ" state={state} onAdvanceRound={onAdvanceRound} />);
+
+    await userEvent.click(screen.getByTestId('advance-round-modal-confirm'));
+    expect(onAdvanceRound).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('advance-round-modal')).not.toBeInTheDocument();
   });
 
   it('does not show the advance round button while the round is incomplete', () => {
@@ -1280,6 +1305,46 @@ describe('HostInProgress score tools', () => {
 
     await userEvent.click(screen.getByTestId('force-final-wagers-button'));
     expect(onForceFinalWagers).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the start-final popup when all eligible wagers are in and starts Final Jeopardy', async () => {
+    const onForceFinalWagers = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_WAGER',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [
+        { id: 'p1', name: 'Alice', score: 200, connected: true },
+        { id: 'p2', name: 'Bob', score: 100, connected: true },
+      ],
+      finalEligiblePlayerIds: ['p1', 'p2'],
+      finalWagerSubmissionStatus: { p1: true, p2: true },
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onForceFinalWagers={onForceFinalWagers} />);
+
+    expect(screen.getByTestId('start-final-modal')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('start-final-modal-confirm'));
+    expect(onForceFinalWagers).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('start-final-modal')).not.toBeInTheDocument();
+  });
+
+  it('dismisses the start-final popup via the X without starting', async () => {
+    const onForceFinalWagers = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_WAGER',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      finalEligiblePlayerIds: ['p1'],
+      finalWagerSubmissionStatus: { p1: true },
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onForceFinalWagers={onForceFinalWagers} />);
+
+    expect(screen.getByTestId('start-final-modal')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('start-final-modal-close'));
+    expect(screen.queryByTestId('start-final-modal')).not.toBeInTheDocument();
+    expect(screen.getByTestId('force-final-wagers-button')).toBeInTheDocument();
+    expect(onForceFinalWagers).not.toHaveBeenCalled();
   });
 
   it('shows the Final clue and answer submission status during FINAL_CLUE', () => {

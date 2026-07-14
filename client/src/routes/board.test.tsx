@@ -332,6 +332,27 @@ describe('BoardRoute', () => {
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(3);
   });
 
+  it('leaves the game from the board via the Leave Game button', async () => {
+    const leaveGame = vi.fn();
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeBoardState({ phase: 'BOARD_SELECT', round: makeRound() }),
+      leaveGame,
+    });
+
+    renderBoardRoute();
+    await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('board-grid')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('board-leave-game-button'));
+
+    expect(leaveGame).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('jeopardy-board-room')).toBeNull();
+    expect(screen.getByLabelText(/room code/i)).toBeInTheDocument();
+  });
+
   it('shows a pending banner and highlights the selected cell without revealing the clue', async () => {
     mockUseSocket(
       makeBoardState({

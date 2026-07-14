@@ -425,6 +425,11 @@ const ROUND_LABELS: Record<'DOUBLE_JEOPARDY' | 'FINAL', string> = {
   FINAL: 'Final Jeopardy!',
 };
 
+const ROUND_TARGET_NAMES: Record<'DOUBLE_JEOPARDY' | 'FINAL', string> = {
+  DOUBLE_JEOPARDY: 'Double Jeopardy',
+  FINAL: 'Final Jeopardy',
+};
+
 interface HostRoundTransitionProps {
   state: HostView;
   onAdvanceRound?: () => void;
@@ -779,7 +784,26 @@ export function HostInProgress({
   onRevealFinalWager,
 }: HostInProgressProps) {
   const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
+  const [roundAdvanceDismissed, setRoundAdvanceDismissed] = useState(false);
+  const [finalStartDismissed, setFinalStartDismissed] = useState(false);
   const players = state?.players ?? [];
+
+  const roundOver = state?.phase === 'BOARD_SELECT' && Boolean(state?.roundComplete);
+  useEffect(() => {
+    if (!roundOver) setRoundAdvanceDismissed(false);
+  }, [roundOver]);
+
+  const nextRoundTarget = state?.nextRoundTarget ?? 'FINAL';
+  const nextRoundName = ROUND_TARGET_NAMES[nextRoundTarget];
+
+  const eligibleFinalIds = state?.finalEligiblePlayerIds ?? [];
+  const allFinalWagersIn =
+    state?.phase === 'FINAL_WAGER' &&
+    eligibleFinalIds.length > 0 &&
+    eligibleFinalIds.every((id) => state?.finalWagerSubmissionStatus?.[id]);
+  useEffect(() => {
+    if (!allFinalWagersIn) setFinalStartDismissed(false);
+  }, [allFinalWagersIn]);
   const currentClue = state?.currentClueId
     ? state?.round?.categories.flatMap((c) => c.clues).find((c) => c.id === state.currentClueId)
     : null;
@@ -840,6 +864,33 @@ export function HostInProgress({
           Phase: {state.phase}
         </p>
         <HostFinalWager state={state} onForceFinalWagers={onForceFinalWagers} />
+        {allFinalWagersIn && !finalStartDismissed && (
+          <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true" data-testid="start-final-modal">
+            <div className={styles.confirmCard}>
+              <button
+                type="button"
+                className={styles.modalClose}
+                aria-label="Close"
+                onClick={() => setFinalStartDismissed(true)}
+                data-testid="start-final-modal-close"
+              >
+                ✕
+              </button>
+              <p>All wagers are in. Ready to start Final Jeopardy?</p>
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => {
+                  onForceFinalWagers?.();
+                  setFinalStartDismissed(true);
+                }}
+                data-testid="start-final-modal-confirm"
+              >
+                Start Final Jeopardy
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -1068,8 +1119,35 @@ export function HostInProgress({
             onClick={onAdvanceRound}
             data-testid="advance-round-button"
           >
-            Advance Round
+            Advance to {nextRoundName}
           </button>
+        </div>
+      )}
+      {roundOver && !roundAdvanceDismissed && (
+        <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true" data-testid="advance-round-modal">
+          <div className={styles.confirmCard}>
+            <button
+              type="button"
+              className={styles.modalClose}
+              aria-label="Close"
+              onClick={() => setRoundAdvanceDismissed(true)}
+              data-testid="advance-round-modal-close"
+            >
+              ✕
+            </button>
+            <p>The round is complete. Ready to move on to {nextRoundName}?</p>
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={() => {
+                onAdvanceRound?.();
+                setRoundAdvanceDismissed(true);
+              }}
+              data-testid="advance-round-modal-confirm"
+            >
+              Advance to {nextRoundName}
+            </button>
+          </div>
         </div>
       )}
       <h2>Roster</h2>
