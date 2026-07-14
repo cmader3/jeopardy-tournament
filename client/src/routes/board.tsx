@@ -307,9 +307,6 @@ function IncorrectFeedback({ state }: IncorrectFeedbackProps) {
       role="status"
       aria-live="polite"
     >
-      <span className={styles.incorrectIcon} aria-hidden="true">
-        ✗
-      </span>
       <span className={styles.incorrectText}>
         Incorrect!{' '}
         <strong className={styles.incorrectPlayer}>{player?.name ?? 'Contestant'}</strong>{' '}

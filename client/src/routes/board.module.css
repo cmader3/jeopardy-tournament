@@ -637,11 +637,6 @@
   }
 }
 
-.incorrectIcon {
-  font-size: clamp(1.5rem, 4vw, 3rem);
-  line-height: 1;
-}
-
 .incorrectText {
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 3vw, 2.5rem);
