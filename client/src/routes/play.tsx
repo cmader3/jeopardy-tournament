@@ -4,7 +4,9 @@ import {
   getStoredContestantToken,
   clearStoredContestantToken,
 } from '../socket/useSocket.js';
+import type { RemovedReason } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
+import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { useServerTime } from '../hooks/useServerTime.js';
 import { useSyncTime } from '../hooks/useSyncTime.js';
 import type { ContestantView } from '@jeopardy/shared';
@@ -685,6 +687,34 @@ function FinalStandings({ state }: { state: ContestantView }) {
   );
 }
 
+function ContestantRemoved({
+  reason,
+  onBack,
+}: {
+  reason: RemovedReason | null;
+  onBack: () => void;
+}) {
+  const kicked = reason === 'kicked';
+  return (
+    <main className={styles.entry} data-testid="contestant-removed">
+      <h1 className={styles.title}>{kicked ? 'Removed from Game' : 'You Left the Game'}</h1>
+      <p className={styles.removedMessage}>
+        {kicked
+          ? 'The host has removed you from this game.'
+          : 'You have left this game.'}
+      </p>
+      <button
+        type="button"
+        className={styles.button}
+        data-testid="removed-back-button"
+        onClick={onBack}
+      >
+        Back to Join
+      </button>
+    </main>
+  );
+}
+
 function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobbyProps) {
   const token = getStoredContestantToken();
   const reconnectToken = token?.roomCode === roomCode ? token.reconnectToken : undefined;
@@ -725,8 +755,13 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
         : 'Final Jeopardy!'
       : null;
 
+  if (socket.status === 'removed') {
+    return <ContestantRemoved reason={socket.removedReason} onBack={onLeave} />;
+  }
+
   return (
     <main className={styles.play}>
+      <ConnectionStatus status={socket.status} />
       <header className={styles.playerBar}>
         <span className={styles.playerBrand}>Jeopardy!</span>
         <div className={styles.playerBarMeta}>

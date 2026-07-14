@@ -309,6 +309,64 @@ describe('PlayRoute', () => {
     expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
   });
 
+  it('shows a reconnecting banner while the socket is reconnecting', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(makeContestantState(), null, { status: 'reconnecting' });
+
+    render(<PlayRoute />);
+
+    expect(await screen.findByTestId('connection-reconnecting')).toHaveTextContent(/reconnecting/i);
+    expect(screen.getByTestId('contestant-welcome')).toBeInTheDocument();
+  });
+
+  it('shows the kicked screen when the host removes the player', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(makeContestantState(), null, { status: 'removed', removedReason: 'kicked' });
+
+    render(<PlayRoute />);
+
+    expect(await screen.findByTestId('contestant-removed')).toHaveTextContent('Removed from Game');
+    expect(screen.getByText('The host has removed you from this game.')).toBeInTheDocument();
+    expect(screen.queryByTestId('contestant-welcome')).not.toBeInTheDocument();
+  });
+
+  it('shows the left screen when the player has left', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(makeContestantState(), null, { status: 'removed', removedReason: 'left' });
+
+    render(<PlayRoute />);
+
+    expect(await screen.findByTestId('contestant-removed')).toHaveTextContent('You Left the Game');
+    expect(screen.getByText('You have left this game.')).toBeInTheDocument();
+  });
+
+  it('returns to the join form from the removed screen', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    mockUseSocket(makeContestantState(), null, { status: 'removed', removedReason: 'kicked' });
+
+    render(<PlayRoute />);
+
+    await userEvent.click(await screen.findByTestId('removed-back-button'));
+
+    expect(screen.getByRole('heading', { name: 'Join Game' })).toBeInTheDocument();
+  });
+
   it('shows the roster of players who have joined in the lobby', async () => {
     (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
       reconnectToken: 'stored-token',

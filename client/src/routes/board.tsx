@@ -5,6 +5,7 @@ import { Countdown, useCountdown } from '../components/Countdown.js';
 import { FitText } from '../components/FitText.js';
 import { RoundBanner } from '../components/RoundBanner.js';
 import { AudioToggle } from '../components/AudioToggle.js';
+import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { useBoardAudio } from '../hooks/useBoardAudio.js';
 import { useServerTime } from '../hooks/useServerTime.js';
 import type { BoardView, ProjectedPlayer } from '@jeopardy/shared';
@@ -729,6 +730,7 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
 
   return (
     <main className={styles.board}>
+      <ConnectionStatus status={socket.status} />
       <header className={styles.header}>
         <h1 className={styles.headerTitle}>Board</h1>
         <p className={styles.roomCode} data-testid="room-code">

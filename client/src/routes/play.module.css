@@ -610,6 +610,14 @@
   text-transform: uppercase;
 }
 
+.removedMessage {
+  font-family: var(--font-body);
+  color: var(--text-light);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  margin: 0 0 1.5rem;
+}
+
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

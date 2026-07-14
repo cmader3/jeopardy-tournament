@@ -1,0 +1,39 @@
+.banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.55rem 1rem;
+  background: var(--value-gold-light);
+  color: var(--jeopardy-blue-dark);
+  font-family: var(--font-display);
+  font-size: clamp(0.85rem, 2.5vw, 1.05rem);
+  letter-spacing: 0.02em;
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.reconnected {
+  background: var(--correct-green);
+  color: var(--text-light);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(0, 0, 128, 0.25);
+  border-top-color: var(--jeopardy-blue-dark);
+  border-radius: 50%;
+  animation: connection-spin 0.8s linear infinite;
+}
+
+@keyframes connection-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

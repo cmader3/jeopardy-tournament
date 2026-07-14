@@ -6,8 +6,14 @@ import { JoinPayload } from '@jeopardy/shared';
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:4000');
 
+export type SocketStatus = 'connecting' | 'connected' | 'reconnecting' | 'removed';
+
+export type RemovedReason = 'kicked' | 'left';
+
 export interface SocketState<T> {
   connected: boolean;
+  status: SocketStatus;
+  removedReason: RemovedReason | null;
   error: string | null;
   data: T | null;
   startGame?: () => void;
@@ -51,11 +57,14 @@ export function useSocket<T>(
   hostToken?: string,
 ): SocketState<T> {
   const [connected, setConnected] = useState(false);
+  const [status, setStatus] = useState<SocketStatus>('connecting');
+  const [removedReason, setRemovedReason] = useState<RemovedReason | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<T | null>(null);
   const onStateRef = useRef(onState);
   const socketRef = useRef<Socket | null>(null);
   const reconnectTokenRef = useRef<string | undefined>(reconnectToken);
+  const intentionalRef = useRef(false);
 
   useEffect(() => {
     onStateRef.current = onState;
@@ -70,14 +79,25 @@ export function useSocket<T>(
       return;
     }
 
+    intentionalRef.current = false;
+    setStatus('connecting');
+    setRemovedReason(null);
+
     const socket = io(API_BASE_URL, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 4000,
+      randomizationFactor: 0.5,
+      timeout: 10000,
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       setConnected(true);
+      setStatus('connected');
       setError(null);
       const payload: JoinPayload = {
         role,
@@ -89,8 +109,26 @@ export function useSocket<T>(
       socket.emit('join', payload);
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason: string) => {
       setConnected(false);
+      if (intentionalRef.current || reason === 'io client disconnect') {
+        return;
+      }
+      setStatus('reconnecting');
+      // Socket.IO does not auto-reconnect when the server initiates the
+      // disconnect (e.g. a deploy or restart), so trigger it manually.
+      if (reason === 'io server disconnect') {
+        socket.connect();
+      }
+    });
+
+    socket.on('removed', (payload: { reason?: RemovedReason }) => {
+      intentionalRef.current = true;
+      setRemovedReason(payload?.reason === 'kicked' ? 'kicked' : 'left');
+      setStatus('removed');
+      setConnected(false);
+      clearStoredContestantToken();
+      socket.disconnect();
     });
 
     socket.on('state', (state: T) => {
@@ -107,7 +145,36 @@ export function useSocket<T>(
       reconnectTokenRef.current = token.reconnectToken;
     });
 
+    // Proactively recover the connection when the device comes back online or
+    // the tab becomes visible again (covers mobile lock-screen / backgrounding,
+    // where the socket often dies silently and would otherwise sit as a zombie).
+    const attemptResume = () => {
+      const current = socketRef.current;
+      if (!current || intentionalRef.current) return;
+      if (!current.connected) {
+        current.connect();
+        return;
+      }
+      current.timeout(3000).emit('health_check', (err: unknown) => {
+        if (err && !intentionalRef.current) {
+          current.disconnect();
+          current.connect();
+        }
+      });
+    };
+
+    const handleOnline = () => attemptResume();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') attemptResume();
+    };
+
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
+      intentionalRef.current = true;
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
       socket.disconnect();
       socketRef.current = null;
     };
@@ -122,6 +189,7 @@ export function useSocket<T>(
   }, []);
 
   const leaveGame = useCallback(() => {
+    intentionalRef.current = true;
     socketRef.current?.emit('leave');
   }, []);
 
@@ -233,7 +301,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, error, data, startGame, restartGame, leaveGame, removePlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
+  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
 }
 
 export function getStoredContestantToken(): {

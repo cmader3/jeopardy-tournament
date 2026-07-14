@@ -137,6 +137,12 @@ function waitForToken(client: ClientSocket): Promise<{ reconnectToken: string; p
   });
 }
 
+function waitForRemoved(client: ClientSocket): Promise<{ reason: string }> {
+  return new Promise((resolve) => {
+    client.once('removed', (data) => resolve(data as { reason: string }));
+  });
+}
+
 function expectProjectionsEqual(a: Record<string, unknown>, b: Record<string, unknown>) {
   const { serverNow: aNow, ...aRest } = a;
   const { serverNow: bNow, ...bRest } = b;
@@ -414,6 +420,52 @@ describe('game sockets', { timeout: 15000 }, () => {
 
     alice.disconnect();
     host.disconnect();
+    await server.close();
+  });
+
+  it('notifies a kicked contestant with a removed event tagged kicked', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    const token = await tokenPromise;
+
+    const host = connectClient(server.url);
+    await waitForConnect(host);
+    host.emit('join', { role: 'host', roomCode, hostToken: mintHostToken() });
+    await waitForState(host);
+
+    const removedPromise = waitForRemoved(alice);
+    host.emit('remove_player', { playerId: token.playerId });
+    const removed = await removedPromise;
+    expect(removed.reason).toBe('kicked');
+
+    alice.disconnect();
+    host.disconnect();
+    await server.close();
+  });
+
+  it('notifies a leaving contestant with a removed event tagged left', async () => {
+    const server = await createTestServer();
+    const board = await boardRepository.create(makeBoardPayload());
+    const { roomCode } = await server.engine.createSession(board.id);
+
+    const alice = connectClient(server.url);
+    await waitForConnect(alice);
+    const tokenPromise = waitForToken(alice);
+    alice.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+    await tokenPromise;
+
+    const removedPromise = waitForRemoved(alice);
+    alice.emit('leave');
+    const removed = await removedPromise;
+    expect(removed.reason).toBe('left');
+
+    alice.disconnect();
     await server.close();
   });
 

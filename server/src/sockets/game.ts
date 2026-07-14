@@ -62,8 +62,33 @@ interface SocketMeta {
   playerId?: string;
 }
 
-const DISCONNECT_GRACE_MS = 8000;
+const DEFAULT_DISCONNECT_GRACE_MS = 30000;
 const pendingDisconnects = new Map<string, ReturnType<typeof setTimeout>>();
+
+function getDisconnectGraceMs(): number {
+  const parsed = Number(process.env.DISCONNECT_GRACE_MS);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_DISCONNECT_GRACE_MS;
+}
+
+function contestantRoom(roomCode: string, playerId: string): string {
+  return `session:${roomCode}:contestant:${playerId}`;
+}
+
+// Tell a removed player's client(s) that the removal was intentional (kicked by
+// the host or a voluntary leave) so they do not attempt to reconnect, then close
+// their sockets as a safety net once the event has been delivered.
+function notifyPlayerRemoved(
+  io: Server,
+  roomCode: string,
+  playerId: string,
+  reason: 'kicked' | 'left',
+): void {
+  const room = contestantRoom(roomCode, playerId);
+  io.to(room).emit('removed', { reason });
+  setTimeout(() => {
+    io.in(room).disconnectSockets(true);
+  }, 500);
+}
 
 function disconnectKey(roomCode: string, playerId: string): string {
   return `${roomCode}:${playerId}`;
@@ -89,7 +114,7 @@ function schedulePlayerDisconnect(engine: GameEngine, roomCode: string, playerId
     engine.disconnectPlayer(roomCode, playerId).catch(() => {
       // Session may already be gone; ignore.
     });
-  }, DISCONNECT_GRACE_MS);
+  }, getDisconnectGraceMs());
   pendingDisconnects.set(key, timer);
 }
 
@@ -99,6 +124,12 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
   };
 
   io.on('connection', (socket) => {
+    // Lightweight liveness probe the client uses to detect a zombie socket
+    // after the tab/app resumes; simply acknowledge it.
+    socket.on('health_check', (ack?: () => void) => {
+      if (typeof ack === 'function') ack();
+    });
+
     socket.on('join', async (payload: JoinPayload) => {
       try {
         const result = joinPayloadSchema.safeParse(payload);
@@ -270,7 +301,10 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
         if (rejected) {
           socket.emit('error', { message: rejected.reason });
+          return;
         }
+        cancelPendingDisconnect(meta.roomCode, validation.data.playerId);
+        notifyPlayerRemoved(io, meta.roomCode, validation.data.playerId, 'kicked');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Remove player failed';
         socket.emit('error', { message });
@@ -827,8 +861,11 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
 
       try {
-        await engine.removePlayer(meta.roomCode, meta.playerId);
+        const { roomCode, playerId } = meta;
+        await engine.removePlayer(roomCode, playerId);
         setSocketMeta(socket, undefined);
+        cancelPendingDisconnect(roomCode, playerId);
+        notifyPlayerRemoved(io, roomCode, playerId, 'left');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Leave failed';
         socket.emit('error', { message });

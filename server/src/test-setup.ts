@@ -1,5 +1,9 @@
 import './test-db.js';
 
+// Keep the disconnect grace at the historical value so existing socket tests
+// that wait for the grace window to elapse behave exactly as before.
+process.env.DISCONNECT_GRACE_MS = process.env.DISCONNECT_GRACE_MS ?? '8000';
+
 import { execSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

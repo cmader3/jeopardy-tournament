@@ -5,6 +5,7 @@ import { boardApi, BoardSummary } from '../api/boards.js';
 import { createGame, listGames, setGameArchived, deleteGame, GameSummary } from '../api/games.js';
 import { useSocket } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
+import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import type { HostView, ClueSelectionMode } from '@jeopardy/shared';
 import styles from './host.module.css';
 
@@ -1556,19 +1557,23 @@ export function HostContent() {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
     if (inLobby) {
       return (
-        <HostLobby
-          roomCode={roomCode}
-          state={gameState}
-          onStartGame={handleStartGame}
-          onCreateNewGame={handleCreateNewGame}
-          onSetClueSelectionMode={handleSetClueSelectionMode}
-          onRemovePlayer={handleRemovePlayer}
-          startError={hostSocket.error}
-        />
+        <>
+          <ConnectionStatus status={hostSocket.status} />
+          <HostLobby
+            roomCode={roomCode}
+            state={gameState}
+            onStartGame={handleStartGame}
+            onCreateNewGame={handleCreateNewGame}
+            onSetClueSelectionMode={handleSetClueSelectionMode}
+            onRemovePlayer={handleRemovePlayer}
+            startError={hostSocket.error}
+          />
+        </>
       );
     }
     return (
       <>
+        <ConnectionStatus status={hostSocket.status} />
         <HostGameControls onRestart={handleRestartGame} onBackToMenu={handleCreateNewGame} />
         <HostInProgress
         roomCode={roomCode}
