@@ -1,10 +1,22 @@
 import { GameState, Clue, AuditRecord, ClueSelectionMode, RemovedPlayer } from '../models/index.js';
+import { getActingCaptainId, getTeamMembers, isTeamMode } from '../reducer/index.js';
 
 export interface ProjectedPlayer {
   id: string;
   name: string;
   score: number;
   connected: boolean;
+  teamId?: string | null;
+}
+
+export interface ProjectedTeam {
+  id: string;
+  name: string;
+  score: number;
+  captainId: string | null;
+  actingCaptainId: string | null;
+  memberIds: string[];
+  connectedMemberIds: string[];
 }
 
 export interface ProjectedCluePublic {
@@ -53,6 +65,8 @@ export interface BoardView {
   roomCode: string;
   roundIndex: number;
   players: ProjectedPlayer[];
+  teamMode: boolean;
+  teams: ProjectedTeam[];
   round: ProjectedRoundPublic | null;
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
@@ -60,6 +74,7 @@ export interface BoardView {
   currentClueId: string | null;
   currentClueText: string | null;
   controllingPlayerId: string | null;
+  controllingTeamId: string | null;
   buzzWinnerId: string | null;
   deadline: number | null;
   answer: string | null;
@@ -84,6 +99,8 @@ export interface HostView {
   roomCode: string;
   roundIndex: number;
   players: ProjectedPlayer[];
+  teamMode: boolean;
+  teams: ProjectedTeam[];
   round: ProjectedRoundHost | null;
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
@@ -91,6 +108,7 @@ export interface HostView {
   currentClueId: string | null;
   currentClueText: string | null;
   controllingPlayerId: string | null;
+  controllingTeamId: string | null;
   buzzWinnerId: string | null;
   deadline: number | null;
   answer: string | null;
@@ -116,6 +134,13 @@ export interface HostView {
 
 export interface ContestantView extends BoardView {
   playerId: string;
+  teamId: string | null;
+  teamName: string | null;
+  teamScore: number | null;
+  isCaptain: boolean;
+  isActingCaptain: boolean;
+  isTemporaryCaptain: boolean;
+  isTeamLockedOut: boolean;
   isControllingPlayer: boolean;
   isLockedOut: boolean;
   lockoutUntil: number | null;
@@ -143,12 +168,40 @@ const HIDDEN_ANSWER_PHASES = new Set<GameState['phase']>([
 ]);
 
 function projectPlayers(state: GameState): ProjectedPlayer[] {
-  return state.players.map((p) => ({
-    id: p.id,
-    name: p.name,
-    score: p.score,
-    connected: p.connected,
-  }));
+  const teamMode = isTeamMode(state);
+  return state.players.map((p) => {
+    const projected: ProjectedPlayer = {
+      id: p.id,
+      name: p.name,
+      score: p.score,
+      connected: p.connected,
+    };
+    if (teamMode) projected.teamId = p.teamId ?? null;
+    return projected;
+  });
+}
+
+function projectTeams(state: GameState): ProjectedTeam[] {
+  if (!isTeamMode(state)) return [];
+  return (state.teams ?? []).map((team) => {
+    const members = getTeamMembers(state.players, team.id);
+    return {
+      id: team.id,
+      name: team.name,
+      score: team.score,
+      captainId: team.captainId,
+      actingCaptainId: getActingCaptainId(state, team.id),
+      memberIds: members.map((m) => m.id),
+      connectedMemberIds: members.filter((m) => m.connected).map((m) => m.id),
+    };
+  });
+}
+
+function holderIdForPlayer(state: GameState, playerId: string): string | null {
+  if (isTeamMode(state)) {
+    return state.players.find((p) => p.id === playerId)?.teamId ?? null;
+  }
+  return playerId;
 }
 
 function getCurrentRound(state: GameState): GameState['board']['rounds'][number] | undefined {
@@ -231,6 +284,10 @@ function projectHostRound(round: GameState['board']['rounds'][number]): Projecte
 
 function isLockedOut(state: GameState, playerId: string, now: number): boolean {
   if (state.lockedOutPlayerIds.includes(playerId)) return true;
+  if (isTeamMode(state)) {
+    const player = state.players.find((p) => p.id === playerId);
+    if (player && player.teamId && (state.lockedOutTeamIds ?? []).includes(player.teamId)) return true;
+  }
   const until = state.lockoutUntil[playerId];
   return until !== undefined && until > now;
 }
@@ -241,22 +298,30 @@ export function isRoundComplete(state: GameState): boolean {
   return round.clues.length > 0 && round.clues.every((clue) => state.usedClueIds.includes(clue.id));
 }
 
+// Final-eligible score holders: team ids in team mode, otherwise player ids.
 function getFinalEligiblePlayerIds(state: GameState): string[] {
+  if (isTeamMode(state)) {
+    return (state.teams ?? [])
+      .filter((t) => t.score > 0 && getTeamMembers(state.players, t.id).length > 0)
+      .map((t) => t.id);
+  }
   return state.players.filter((p) => p.score > 0).map((p) => p.id);
 }
 
 function getFinalWagerSubmissionStatus(state: GameState): Record<string, boolean> {
   const status: Record<string, boolean> = {};
-  for (const player of state.players) {
-    status[player.id] = state.finalWagers[player.id] !== undefined;
+  const ids = isTeamMode(state) ? (state.teams ?? []).map((t) => t.id) : state.players.map((p) => p.id);
+  for (const id of ids) {
+    status[id] = state.finalWagers[id] !== undefined;
   }
   return status;
 }
 
 function getFinalAnswerSubmissionStatus(state: GameState): Record<string, boolean> {
   const status: Record<string, boolean> = {};
-  for (const player of state.players) {
-    status[player.id] = state.finalAnswers[player.id] !== undefined;
+  const ids = isTeamMode(state) ? (state.teams ?? []).map((t) => t.id) : state.players.map((p) => p.id);
+  for (const id of ids) {
+    status[id] = state.finalAnswers[id] !== undefined;
   }
   return status;
 }
@@ -299,6 +364,8 @@ export function projectBoard(state: GameState, now: number): BoardView {
     roomCode: state.roomCode,
     roundIndex: state.roundIndex,
     players: projectPlayers(state),
+    teamMode: isTeamMode(state),
+    teams: projectTeams(state),
     round: round ? projectBoardRound(round) : null,
     usedClueIds: state.usedClueIds,
     clueSelectionMode: state.clueSelectionMode ?? 'HOST',
@@ -306,6 +373,7 @@ export function projectBoard(state: GameState, now: number): BoardView {
     currentClueId: state.currentClueId,
     currentClueText: showClueText ? currentClue?.clueText ?? null : null,
     controllingPlayerId: state.controllingPlayerId,
+    controllingTeamId: state.controllingTeamId ?? null,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
     answer: state.revealedAnswer,
@@ -338,6 +406,8 @@ export function projectHost(state: GameState, now: number): HostView {
     roomCode: state.roomCode,
     roundIndex: state.roundIndex,
     players: projectPlayers(state),
+    teamMode: isTeamMode(state),
+    teams: projectTeams(state),
     round: round ? projectHostRound(round) : null,
     usedClueIds: state.usedClueIds,
     clueSelectionMode: state.clueSelectionMode ?? 'HOST',
@@ -345,6 +415,7 @@ export function projectHost(state: GameState, now: number): HostView {
     currentClueId: state.currentClueId,
     currentClueText: showClueText ? currentClue?.clueText ?? null : null,
     controllingPlayerId: state.controllingPlayerId,
+    controllingTeamId: state.controllingTeamId ?? null,
     buzzWinnerId: state.buzzWinnerId,
     deadline: state.deadline,
     answer: state.revealedAnswer ?? (HIDDEN_ANSWER_PHASES.has(state.phase) ? null : currentClue?.answer ?? null),
@@ -373,24 +444,50 @@ export function projectHost(state: GameState, now: number): HostView {
 
 export function projectContestant(state: GameState, playerId: string, now: number): ContestantView {
   const board = projectBoard(state, now);
-  const isControllingPlayer = state.controllingPlayerId === playerId;
-  const lockoutUntil = state.lockoutUntil[playerId] ?? null;
-  const canSeeDailyDoubleWager = isControllingPlayer && (state.phase === 'DAILY_DOUBLE_WAGER' || state.phase === 'DAILY_DOUBLE_CLUE');
+  const teamMode = isTeamMode(state);
   const me = state.players.find((p) => p.id === playerId);
-  const isEligibleForFinal = me ? me.score > 0 : false;
-  const myFinalWager = state.finalWagers[playerId] ?? null;
-  const myFinalAnswer = state.finalAnswers[playerId] ?? null;
-  const canAnswerFinal = state.phase === 'FINAL_CLUE' && isEligibleForFinal && myFinalAnswer === null;
+  const team = teamMode && me?.teamId ? (state.teams ?? []).find((t) => t.id === me.teamId) ?? null : null;
+  const actingCaptainId = team ? getActingCaptainId(state, team.id) : null;
+  const isCaptain = team != null && team.captainId === playerId;
+  const isActingCaptain = team != null && actingCaptainId === playerId;
+  const isTemporaryCaptain = isActingCaptain && !isCaptain;
+
+  // Who acts as the board controller for this player's perspective.
+  const isControllingPlayer = teamMode
+    ? team != null && state.controllingTeamId === team.id && isActingCaptain
+    : state.controllingPlayerId === playerId;
+
+  const lockoutUntil = state.lockoutUntil[playerId] ?? null;
+  const canSeeDailyDoubleWager =
+    isControllingPlayer && (state.phase === 'DAILY_DOUBLE_WAGER' || state.phase === 'DAILY_DOUBLE_CLUE');
+
+  const holderId = holderIdForPlayer(state, playerId);
+  const holderScore = teamMode ? team?.score ?? 0 : me?.score ?? 0;
+  const isEligibleForFinal = teamMode ? (team != null && holderScore > 0) : holderScore > 0;
+  // In team mode only the acting captain submits on the team's behalf.
+  const canActForFinal = teamMode ? isActingCaptain : true;
+  const myFinalWager = holderId ? state.finalWagers[holderId] ?? null : null;
+  const myFinalAnswer = holderId ? state.finalAnswers[holderId] ?? null : null;
+  const canAnswerFinal =
+    state.phase === 'FINAL_CLUE' && isEligibleForFinal && canActForFinal && myFinalAnswer === null;
+
   return {
     ...board,
     playerId,
+    teamId: team?.id ?? null,
+    teamName: team?.name ?? null,
+    teamScore: team ? team.score : null,
+    isCaptain,
+    isActingCaptain,
+    isTemporaryCaptain,
+    isTeamLockedOut: team != null && (state.lockedOutTeamIds ?? []).includes(team.id),
     isControllingPlayer,
     isLockedOut: isLockedOut(state, playerId, now),
     lockoutUntil,
     canWager:
       state.phase === 'DAILY_DOUBLE_WAGER'
         ? isControllingPlayer
-        : state.phase === 'FINAL_WAGER' && isEligibleForFinal && myFinalWager === null,
+        : state.phase === 'FINAL_WAGER' && isEligibleForFinal && canActForFinal && myFinalWager === null,
     canAnswer: state.phase === 'DAILY_DOUBLE_CLUE' ? isControllingPlayer : canAnswerFinal,
     dailyDoubleWager: canSeeDailyDoubleWager ? state.dailyDoubleWager : null,
     isEligibleForFinal,

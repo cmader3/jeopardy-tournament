@@ -56,6 +56,13 @@ const submitFinalAnswerDraftPayloadSchema = z.object({
   answer: z.string(),
 });
 
+const configureTeamsPayloadSchema = z.object({
+  enabled: z.boolean(),
+  teams: z
+    .array(z.object({ id: z.string().min(1), name: z.string() }))
+    .max(6),
+});
+
 interface SocketMeta {
   role: 'host' | 'board' | 'contestant';
   roomCode: string;
@@ -361,6 +368,122 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('configure_teams', async (payload: { enabled: boolean; teams: { id: string; name: string }[] }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can configure teams' });
+        return;
+      }
+
+      const validation = configureTeamsPayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid team configuration' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'CONFIGURE_TEAMS', enabled: validation.data.enabled, teams: validation.data.teams },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Configure teams failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('choose_team', async (payload: { teamId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'contestant' || !meta.playerId) {
+        socket.emit('error', { message: 'Only a contestant can choose a team' });
+        return;
+      }
+
+      const validation = z.object({ teamId: z.string().min(1) }).safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid team' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'CHOOSE_TEAM', playerId: meta.playerId, teamId: validation.data.teamId },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Choose team failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('set_captain', async (payload: { teamId: string; playerId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can set a team captain' });
+        return;
+      }
+
+      const validation = z.object({ teamId: z.string().min(1), playerId: z.string().min(1) }).safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid captain assignment' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'SET_CAPTAIN', teamId: validation.data.teamId, playerId: validation.data.playerId },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Set captain failed';
+        socket.emit('error', { message });
+      }
+    });
+
+    socket.on('override_control_team', async (payload: { teamId: string }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can assign control' });
+        return;
+      }
+
+      const validation = z.object({ teamId: z.string().min(1) }).safeParse(payload);
+      if (!validation.success) {
+        socket.emit('error', { message: 'Invalid control assignment' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'OVERRIDE_CONTROL_TEAM', teamId: validation.data.teamId },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Override control failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('reveal_selected_clue', async () => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {
@@ -475,7 +598,7 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
         return;
       }
 
-      if (state.controllingPlayerId !== meta.playerId) {
+      if (!state.teamMode && state.controllingPlayerId !== meta.playerId) {
         socket.emit('error', { message: 'Only the controlling contestant can submit a Daily Double wager' });
         return;
       }

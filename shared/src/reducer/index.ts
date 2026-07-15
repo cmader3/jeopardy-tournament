@@ -1,4 +1,4 @@
-import { AuditRecord, ClueSelectionMode, GameState, Player } from '../models/index.js';
+import { AuditRecord, ClueSelectionMode, GameState, Player, Team } from '../models/index.js';
 
 export interface ReducerCtx {
   now: number;
@@ -10,6 +10,10 @@ export type Intent =
   | { type: 'LEAVE'; playerId: string }
   | { type: 'REMOVE_PLAYER'; playerId: string }
   | { type: 'ADMIT_PLAYER'; playerId: string }
+  | { type: 'CONFIGURE_TEAMS'; enabled: boolean; teams: { id: string; name: string }[] }
+  | { type: 'CHOOSE_TEAM'; playerId: string; teamId: string }
+  | { type: 'SET_CAPTAIN'; teamId: string; playerId: string }
+  | { type: 'OVERRIDE_CONTROL_TEAM'; teamId: string }
   | { type: 'DISCONNECT'; playerId: string }
   | { type: 'RECONNECT'; playerId: string }
   | { type: 'START_GAME' }
@@ -52,8 +56,101 @@ export interface ReducerResult {
 }
 
 const MAX_PLAYERS = 5;
+const MAX_TEAM_PLAYERS = 48;
+const MIN_TEAMS = 2;
+const MAX_TEAMS = 6;
 const EARLY_BUZZ_LOCKOUT_MS = 250;
 const FINAL_ANSWER_DRAFT_GRACE_MS = 300;
+
+export function isTeamMode(state: GameState): boolean {
+  return state.teamMode === true;
+}
+
+function getTeams(state: GameState): Team[] {
+  return state.teams ?? [];
+}
+
+function getTeamById(state: GameState, teamId: string | null | undefined): Team | undefined {
+  if (!teamId) return undefined;
+  return getTeams(state).find((t) => t.id === teamId);
+}
+
+function getPlayerTeam(state: GameState, playerId: string): Team | undefined {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || !player.teamId) return undefined;
+  return getTeamById(state, player.teamId);
+}
+
+export function getTeamMembers(players: Player[], teamId: string): Player[] {
+  return players.filter((p) => p.teamId === teamId).sort((a, b) => a.seatOrder - b.seatOrder);
+}
+
+// The player who acts for a team right now: the captain when connected,
+// otherwise the earliest-seated connected teammate (a temporary captain).
+export function getActingCaptainId(state: GameState, teamId: string | null | undefined): string | null {
+  const team = getTeamById(state, teamId);
+  if (!team) return null;
+  const members = getTeamMembers(state.players, team.id);
+  if (members.length === 0) return null;
+  if (team.captainId) {
+    const captain = members.find((m) => m.id === team.captainId);
+    if (captain && captain.connected) return captain.id;
+  }
+  const connected = members.find((m) => m.connected);
+  if (connected) return connected.id;
+  return team.captainId ?? members[0].id;
+}
+
+// Keep each team's persistent captain valid: reassign to the earliest remaining
+// member only when the current captain is no longer on the team.
+function recomputeCaptains(players: Player[], teams: Team[]): Team[] {
+  return teams.map((team) => {
+    const members = getTeamMembers(players, team.id);
+    const stillMember = team.captainId != null && members.some((m) => m.id === team.captainId);
+    const captainId = stillMember ? team.captainId : members[0]?.id ?? null;
+    return captainId === team.captainId ? team : { ...team, captainId };
+  });
+}
+
+function determineTrailingTeamId(state: GameState, teams: Team[]): string | null {
+  const withMembers = teams.filter((t) => getTeamMembers(state.players, t.id).length > 0);
+  const pool = withMembers.length > 0 ? withMembers : teams;
+  if (pool.length === 0) return null;
+  let trailing = pool[0];
+  for (const team of pool) {
+    if (team.score < trailing.score) trailing = team;
+  }
+  return trailing.id;
+}
+
+function isTeamLockedOut(state: GameState, teamId: string | null | undefined): boolean {
+  if (!teamId) return false;
+  return (state.lockedOutTeamIds ?? []).includes(teamId);
+}
+
+// Score holder = the team in team mode, otherwise the individual player.
+function holderScoreForPlayer(state: GameState, playerId: string): number {
+  if (isTeamMode(state)) return getPlayerTeam(state, playerId)?.score ?? 0;
+  return state.players.find((p) => p.id === playerId)?.score ?? 0;
+}
+
+function holderScoreById(state: GameState, holderId: string): number {
+  if (isTeamMode(state)) return getTeamById(state, holderId)?.score ?? 0;
+  return state.players.find((p) => p.id === holderId)?.score ?? 0;
+}
+
+function applyHolderDeltaById(
+  state: GameState,
+  holderId: string,
+  delta: number,
+): { players: Player[]; teams: Team[] } {
+  if (isTeamMode(state)) {
+    const teams = getTeams(state).map((t) => (t.id === holderId ? { ...t, score: t.score + delta } : t));
+    return { players: state.players, teams };
+  }
+  const players = state.players.map((p) => (p.id === holderId ? { ...p, score: p.score + delta } : p));
+  return { players, teams: getTeams(state) };
+}
 
 export function createInitialState(sessionId: string, roomCode: string, board: GameState['board']): GameState {
   return {
@@ -64,7 +161,10 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     phase: 'LOBBY',
     roundIndex: 0,
     players: [],
+    teamMode: false,
+    teams: [],
     controllingPlayerId: null,
+    controllingTeamId: null,
     usedClueIds: [],
     clueSelectionMode: 'HOST',
     pendingClueId: null,
@@ -76,6 +176,7 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     armedAt: null,
     deadline: null,
     lockedOutPlayerIds: [],
+    lockedOutTeamIds: [],
     lockoutUntil: {},
     auditLog: [],
     dailyDoubleWager: null,
@@ -102,6 +203,14 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRemovePlayer(state, intent.playerId);
     case 'ADMIT_PLAYER':
       return handleAdmitPlayer(state, intent.playerId);
+    case 'CONFIGURE_TEAMS':
+      return handleConfigureTeams(state, intent);
+    case 'CHOOSE_TEAM':
+      return handleChooseTeam(state, intent);
+    case 'SET_CAPTAIN':
+      return handleSetCaptain(state, intent);
+    case 'OVERRIDE_CONTROL_TEAM':
+      return handleOverrideControlTeam(state, intent.teamId);
     case 'DISCONNECT':
       return handleDisconnect(state, intent.playerId);
     case 'RECONNECT':
@@ -172,7 +281,8 @@ function handleJoin(state: GameState, player: Player): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Game is not in the lobby' }] };
   }
 
-  if (state.players.length >= MAX_PLAYERS) {
+  const playerCap = isTeamMode(state) ? MAX_TEAM_PLAYERS : MAX_PLAYERS;
+  if (state.players.length >= playerCap) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Game is full' }] };
   }
 
@@ -215,8 +325,9 @@ function handleLeave(state: GameState, playerId: string): ReducerResult {
 
   if (state.phase === 'LOBBY') {
     const remaining = state.players.filter((p) => p.id !== playerId);
+    const teams = isTeamMode(state) ? recomputeCaptains(remaining, getTeams(state)) : getTeams(state);
     return {
-      state: { ...state, players: remaining },
+      state: { ...state, players: remaining, teams },
       effects: [{ type: 'BROADCAST_STATE' }],
     };
   }
@@ -244,10 +355,12 @@ function handleRemovePlayer(state: GameState, playerId: string): ReducerResult {
     ? state.removedPlayers
     : [...state.removedPlayers, { id: player.id, name: player.name }];
 
+  const teams = isTeamMode(state) ? recomputeCaptains(remaining, getTeams(state)) : getTeams(state);
   return {
     state: {
       ...state,
       players: remaining,
+      teams,
       removedPlayers,
       controllingPlayerId: state.controllingPlayerId === playerId ? null : state.controllingPlayerId,
       buzzWinnerId: state.buzzWinnerId === playerId ? null : state.buzzWinnerId,
@@ -276,6 +389,114 @@ function handleAdmitPlayer(state: GameState, playerId: string): ReducerResult {
   };
 }
 
+function handleConfigureTeams(
+  state: GameState,
+  intent: Extract<Intent, { type: 'CONFIGURE_TEAMS' }>,
+): ReducerResult {
+  if (state.phase !== 'LOBBY') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Teams can only be configured in the lobby' }] };
+  }
+
+  if (!intent.enabled) {
+    const players = state.players.map((p) => ({ ...p, teamId: null }));
+    return {
+      state: { ...state, teamMode: false, teams: [], players, controllingTeamId: null },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
+  }
+
+  if (intent.teams.length < MIN_TEAMS || intent.teams.length > MAX_TEAMS) {
+    return {
+      state,
+      effects: [{ type: 'INTENT_REJECTED', reason: `Team mode requires between ${MIN_TEAMS} and ${MAX_TEAMS} teams` }],
+    };
+  }
+
+  const seen = new Set<string>();
+  for (const team of intent.teams) {
+    if (seen.has(team.id)) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Duplicate team id' }] };
+    }
+    seen.add(team.id);
+  }
+
+  const existing = getTeams(state);
+  const teams: Team[] = intent.teams.map((t) => {
+    const prev = existing.find((e) => e.id === t.id);
+    return { id: t.id, name: t.name, score: prev?.score ?? 0, captainId: prev?.captainId ?? null };
+  });
+  const validIds = new Set(teams.map((t) => t.id));
+  const players = state.players.map((p) => (p.teamId && !validIds.has(p.teamId) ? { ...p, teamId: null } : p));
+  const recomputed = recomputeCaptains(players, teams);
+  const controllingTeamId =
+    state.controllingTeamId && validIds.has(state.controllingTeamId) ? state.controllingTeamId : null;
+
+  return {
+    state: { ...state, teamMode: true, teams: recomputed, players, controllingTeamId },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleChooseTeam(
+  state: GameState,
+  intent: Extract<Intent, { type: 'CHOOSE_TEAM' }>,
+): ReducerResult {
+  if (!isTeamMode(state)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Team mode is not enabled' }] };
+  }
+  if (state.phase !== 'LOBBY') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'You can only choose a team in the lobby' }] };
+  }
+  const player = state.players.find((p) => p.id === intent.playerId);
+  if (!player) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  }
+  const team = getTeamById(state, intent.teamId);
+  if (!team) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Team not found' }] };
+  }
+
+  const players = state.players.map((p) => (p.id === intent.playerId ? { ...p, teamId: team.id } : p));
+  const recomputed = recomputeCaptains(players, getTeams(state));
+  return {
+    state: { ...state, players, teams: recomputed },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleSetCaptain(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SET_CAPTAIN' }>,
+): ReducerResult {
+  if (!isTeamMode(state)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Team mode is not enabled' }] };
+  }
+  const team = getTeamById(state, intent.teamId);
+  if (!team) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Team not found' }] };
+  }
+  const member = state.players.find((p) => p.id === intent.playerId && p.teamId === team.id);
+  if (!member) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'That contestant is not on this team' }] };
+  }
+  const teams = getTeams(state).map((t) => (t.id === team.id ? { ...t, captainId: intent.playerId } : t));
+  return { state: { ...state, teams }, effects: [{ type: 'BROADCAST_STATE' }] };
+}
+
+function handleOverrideControlTeam(state: GameState, teamId: string): ReducerResult {
+  if (!isTeamMode(state)) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Team mode is not enabled' }] };
+  }
+  if (state.phase !== 'BOARD_SELECT') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot assign control right now' }] };
+  }
+  const team = getTeamById(state, teamId);
+  if (!team) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Team not found' }] };
+  }
+  return { state: { ...state, controllingTeamId: teamId }, effects: [{ type: 'BROADCAST_STATE' }] };
+}
+
 function handleReopenClue(state: GameState, clueId: string, revertScores: boolean): ReducerResult {
   if (state.phase !== 'BOARD_SELECT') {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Clues can only be re-done between clues' }] };
@@ -295,6 +516,7 @@ function handleReopenClue(state: GameState, clueId: string, revertScores: boolea
   }
 
   const players = state.players.map((p) => ({ ...p }));
+  const teams = getTeams(state).map((t) => ({ ...t }));
   const remainingAudit: AuditRecord[] = [];
   for (const record of state.auditLog) {
     const isClueRuling =
@@ -303,9 +525,13 @@ function handleReopenClue(state: GameState, clueId: string, revertScores: boolea
       remainingAudit.push(record);
       continue;
     }
-    const target = players.find((p) => p.id === record.playerId);
-    if (target) {
-      target.score -= record.scoreAfter - record.scoreBefore;
+    const delta = record.scoreAfter - record.scoreBefore;
+    if (record.teamId) {
+      const team = teams.find((t) => t.id === record.teamId);
+      if (team) team.score -= delta;
+    } else {
+      const target = players.find((p) => p.id === record.playerId);
+      if (target) target.score -= delta;
     }
   }
 
@@ -314,6 +540,7 @@ function handleReopenClue(state: GameState, clueId: string, revertScores: boolea
       ...state,
       usedClueIds,
       players,
+      teams,
       auditLog: remainingAudit,
       lastOutcome: null,
     },
@@ -354,8 +581,15 @@ function handleReconnect(state: GameState, playerId: string): ReducerResult {
 function handleRestartGame(state: GameState): ReducerResult {
   const fresh = createInitialState(state.sessionId, state.roomCode, state.board);
   const players = state.players.map((player) => ({ ...player, score: 0 }));
+  const teams = getTeams(state).map((team) => ({ ...team, score: 0 }));
   return {
-    state: { ...fresh, players, clueSelectionMode: state.clueSelectionMode ?? 'HOST' },
+    state: {
+      ...fresh,
+      players,
+      teamMode: isTeamMode(state),
+      teams,
+      clueSelectionMode: state.clueSelectionMode ?? 'HOST',
+    },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }
@@ -368,6 +602,30 @@ function handleStartGame(state: GameState): ReducerResult {
   const connectedPlayers = state.players.filter((p) => p.connected);
   if (connectedPlayers.length === 0) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'At least one connected contestant is required to start' }] };
+  }
+
+  if (isTeamMode(state)) {
+    const teams = getTeams(state);
+    if (teams.length < MIN_TEAMS) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: `Team mode requires at least ${MIN_TEAMS} teams` }] };
+    }
+    for (const team of teams) {
+      if (team.name.trim().length === 0) {
+        return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Every team needs a name' }] };
+      }
+      if (getTeamMembers(state.players, team.id).length === 0) {
+        return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Every team needs at least one contestant' }] };
+      }
+    }
+    return {
+      state: {
+        ...state,
+        phase: 'BOARD_SELECT',
+        controllingPlayerId: null,
+        controllingTeamId: determineTrailingTeamId(state, teams),
+      },
+      effects: [{ type: 'BROADCAST_STATE' }],
+    };
   }
 
   const controller = connectedPlayers.reduce((lowest, p) => (p.seatOrder < lowest.seatOrder ? p : lowest));
@@ -391,7 +649,10 @@ function handleSelectClue(
 
   const mode = state.clueSelectionMode ?? 'HOST';
   const isHost = intent.hostOverride === true;
-  const isController = intent.selectorId !== undefined && intent.selectorId === state.controllingPlayerId;
+  const controllerId = isTeamMode(state)
+    ? getActingCaptainId(state, state.controllingTeamId)
+    : state.controllingPlayerId;
+  const isController = intent.selectorId !== undefined && intent.selectorId === controllerId;
 
   if (mode === 'HOST' && !isHost) {
     return {
@@ -432,6 +693,7 @@ function handleSelectClue(
         armedAt: null,
         deadline: null,
         lockedOutPlayerIds: [],
+        lockedOutTeamIds: [],
         lockoutUntil: {},
         revealedAnswer: null,
         lastOutcome: null,
@@ -453,6 +715,7 @@ function handleSelectClue(
       armedAt: null,
       deadline: null,
       lockedOutPlayerIds: [],
+      lockedOutTeamIds: [],
       lockoutUntil: {},
       revealedAnswer: null,
       lastOutcome: null,
@@ -508,6 +771,7 @@ function handleRevealSelectedClue(state: GameState): ReducerResult {
       armedAt: null,
       deadline: null,
       lockedOutPlayerIds: [],
+      lockedOutTeamIds: [],
       lockoutUntil: {},
       revealedAnswer: null,
       lastOutcome: null,
@@ -553,6 +817,10 @@ function isRoundComplete(state: GameState): boolean {
 
 function isLockedOut(state: GameState, playerId: string, now: number): boolean {
   if (state.lockedOutPlayerIds.includes(playerId)) return true;
+  if (isTeamMode(state)) {
+    const player = state.players.find((p) => p.id === playerId);
+    if (player && isTeamLockedOut(state, player.teamId)) return true;
+  }
   const until = state.lockoutUntil[playerId];
   return until !== undefined && until > now;
 }
@@ -617,15 +885,19 @@ function createAuditRecord(
   controllingPlayerIdBefore: string | null,
   timestamp: number,
   clueId?: string,
+  teamId?: string,
+  controllingTeamIdBefore?: string | null,
 ): AuditRecord {
   return {
     id: `${timestamp}-${playerId}`,
     type,
     playerId,
+    teamId,
     value,
     scoreBefore,
     scoreAfter,
     controllingPlayerIdBefore,
+    controllingTeamIdBefore,
     timestamp,
     clueId,
   };
@@ -641,6 +913,7 @@ function resolveClueReturnToBoard(state: GameState, clueId: string): GameState {
     armedAt: null,
     deadline: null,
     lockedOutPlayerIds: [],
+    lockedOutTeamIds: [],
     lockoutUntil: {},
     dailyDoubleWager: null,
   };
@@ -656,7 +929,9 @@ function handleDailyDoubleRuling(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Daily Double is available to rule right now' }] };
   }
 
-  if (state.dailyDoubleWager == null || state.currentClueId == null || state.controllingPlayerId == null) {
+  const teamMode = isTeamMode(state);
+  const hasController = teamMode ? state.controllingTeamId != null : state.controllingPlayerId != null;
+  if (state.dailyDoubleWager == null || state.currentClueId == null || !hasController) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Daily Double is not ready to be ruled' }] };
   }
 
@@ -665,22 +940,21 @@ function handleDailyDoubleRuling(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Current clue not found' }] };
   }
 
-  if (type === 'INCORRECT' && playerId !== state.controllingPlayerId) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling contestant can be ruled on a Daily Double' }] };
-  }
-
-  const controllerId = state.controllingPlayerId;
-  const playerIndex = state.players.findIndex((p) => p.id === controllerId);
-  if (playerIndex === -1) {
+  const controllerId = teamMode ? getActingCaptainId(state, state.controllingTeamId) : state.controllingPlayerId;
+  if (!controllerId) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Controlling contestant not found' }] };
   }
 
-  const player = state.players[playerIndex];
+  if (type === 'INCORRECT' && playerId !== controllerId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling contestant can be ruled on a Daily Double' }] };
+  }
+
+  const holderId = teamMode ? (state.controllingTeamId as string) : controllerId;
   const value = state.dailyDoubleWager;
-  const scoreBefore = player.score;
-  const scoreAfter = type === 'CORRECT' ? scoreBefore + value : scoreBefore - value;
-  const updatedPlayers = [...state.players];
-  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+  const scoreBefore = holderScoreById(state, holderId);
+  const delta = type === 'CORRECT' ? value : -value;
+  const { players, teams } = applyHolderDeltaById(state, holderId, delta);
+  const scoreAfter = scoreBefore + delta;
 
   const auditEntry = createAuditRecord(
     type,
@@ -691,13 +965,20 @@ function handleDailyDoubleRuling(
     state.controllingPlayerId,
     ctx.now,
     clue.id,
+    teamMode ? holderId : undefined,
+    state.controllingTeamId,
   );
+
+  const controlUpdate = teamMode
+    ? { controllingTeamId: state.controllingTeamId }
+    : { controllingPlayerId: controllerId };
 
   return {
     state: {
       ...resolveClueReturnToBoard(state, clue.id),
-      players: updatedPlayers,
-      controllingPlayerId: controllerId,
+      players,
+      teams,
+      ...controlUpdate,
       auditLog: [...state.auditLog, auditEntry],
       revealedAnswer: clue.answer,
       lastOutcome: { playerId: controllerId, type, value },
@@ -729,16 +1010,20 @@ function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
   }
 
   const value = clue.value ?? 0;
-  const winnerIndex = state.players.findIndex((p) => p.id === state.buzzWinnerId);
-  if (winnerIndex === -1) {
+  const winner = state.players.find((p) => p.id === state.buzzWinnerId);
+  if (!winner) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzed contestant not found' }] };
   }
 
-  const winner = state.players[winnerIndex];
-  const scoreBefore = winner.score;
+  const teamMode = isTeamMode(state);
+  const holderId = teamMode ? winner.teamId ?? null : winner.id;
+  if (teamMode && !holderId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzed contestant is not on a team' }] };
+  }
+
+  const scoreBefore = holderScoreById(state, holderId as string);
+  const { players, teams } = applyHolderDeltaById(state, holderId as string, value);
   const scoreAfter = scoreBefore + value;
-  const updatedPlayers = [...state.players];
-  updatedPlayers[winnerIndex] = { ...winner, score: scoreAfter };
 
   const auditEntry = createAuditRecord(
     'CORRECT',
@@ -749,13 +1034,20 @@ function handleRuleCorrect(state: GameState, ctx: ReducerCtx): ReducerResult {
     state.controllingPlayerId,
     ctx.now,
     clue.id,
+    teamMode ? (holderId as string) : undefined,
+    state.controllingTeamId,
   );
+
+  const controlUpdate = teamMode
+    ? { controllingTeamId: winner.teamId ?? state.controllingTeamId }
+    : { controllingPlayerId: winner.id };
 
   return {
     state: {
       ...resolveClueReturnToBoard(state, clue.id),
-      players: updatedPlayers,
-      controllingPlayerId: winner.id,
+      players,
+      teams,
+      ...controlUpdate,
       auditLog: [...state.auditLog, auditEntry],
       revealedAnswer: clue.answer,
       lastOutcome: { playerId: winner.id, type: 'CORRECT', value },
@@ -791,18 +1083,24 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
   }
 
   const value = clue.value ?? 0;
-  const playerIndex = state.players.findIndex((p) => p.id === playerId);
-  if (playerIndex === -1) {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzed contestant not found' }] };
   }
 
-  const player = state.players[playerIndex];
-  const scoreBefore = player.score;
+  const teamMode = isTeamMode(state);
+  const holderId = teamMode ? player.teamId ?? null : player.id;
+  if (teamMode && !holderId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Buzzed contestant is not on a team' }] };
+  }
+
+  const scoreBefore = holderScoreById(state, holderId as string);
+  const { players: updatedPlayers, teams } = applyHolderDeltaById(state, holderId as string, -value);
   const scoreAfter = scoreBefore - value;
-  const updatedPlayers = [...state.players];
-  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
 
   const updatedLockedOutPlayerIds = [...state.lockedOutPlayerIds, playerId];
+  const updatedLockedOutTeamIds =
+    teamMode && player.teamId ? [...(state.lockedOutTeamIds ?? []), player.teamId] : state.lockedOutTeamIds ?? [];
   const auditEntry = createAuditRecord(
     'INCORRECT',
     player.id,
@@ -812,10 +1110,16 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
     state.controllingPlayerId,
     ctx.now,
     clue.id,
+    teamMode ? (holderId as string) : undefined,
+    state.controllingTeamId,
   );
 
   const remainingEligible = updatedPlayers.filter(
-    (p) => p.id !== playerId && p.connected && !updatedLockedOutPlayerIds.includes(p.id),
+    (p) =>
+      p.id !== playerId &&
+      p.connected &&
+      !updatedLockedOutPlayerIds.includes(p.id) &&
+      !(teamMode && p.teamId != null && updatedLockedOutTeamIds.includes(p.teamId)),
   );
 
   if (remainingEligible.length === 0) {
@@ -823,6 +1127,7 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
       state: {
         ...resolveClueReturnToBoard(state, clue.id),
         players: updatedPlayers,
+        teams,
         auditLog: [...state.auditLog, auditEntry],
         revealedAnswer: clue.answer,
         lastOutcome: { playerId: player.id, type: 'INCORRECT', value },
@@ -837,10 +1142,12 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
       ...state,
       phase: 'BUZZERS_ARMED',
       players: updatedPlayers,
+      teams,
       buzzWinnerId: null,
       armedAt: ctx.now,
       deadline: ctx.now + durationMs,
       lockedOutPlayerIds: updatedLockedOutPlayerIds,
+      lockedOutTeamIds: updatedLockedOutTeamIds,
       auditLog: [...state.auditLog, auditEntry],
       lastOutcome: { playerId: player.id, type: 'INCORRECT', value },
     },
@@ -848,8 +1155,18 @@ function handleRuleIncorrect(state: GameState, playerId: string, ctx: ReducerCtx
   };
 }
 
-function buildFinalRevealOrder(players: Player[], finalWagers: Record<string, number>): string[] {
-  return players
+function buildFinalRevealOrder(state: GameState, finalWagers: Record<string, number>): string[] {
+  if (isTeamMode(state)) {
+    return getTeams(state)
+      .map((team, index) => ({ team, index }))
+      .filter(({ team }) => finalWagers[team.id] !== undefined)
+      .sort((a, b) => {
+        if (a.team.score !== b.team.score) return a.team.score - b.team.score;
+        return a.index - b.index;
+      })
+      .map(({ team }) => team.id);
+  }
+  return state.players
     .filter((p) => finalWagers[p.id] !== undefined)
     .sort((a, b) => {
       if (a.score !== b.score) return a.score - b.score;
@@ -876,14 +1193,14 @@ function handleTimeExpire(state: GameState): ReducerResult {
   }
 
   if (state.phase === 'FINAL_CLUE') {
-    const eligible = getFinalEligiblePlayers(state.players);
+    const eligible = getFinalEligibleHolderIds(state);
     const finalAnswers = { ...state.finalAnswers };
-    for (const player of eligible) {
-      if (finalAnswers[player.id] === undefined) {
-        finalAnswers[player.id] = state.finalAnswerDrafts[player.id] ?? '';
+    for (const holderId of eligible) {
+      if (finalAnswers[holderId] === undefined) {
+        finalAnswers[holderId] = state.finalAnswerDrafts[holderId] ?? '';
       }
     }
-    const finalRevealOrder = buildFinalRevealOrder(state.players, state.finalWagers);
+    const finalRevealOrder = buildFinalRevealOrder(state, state.finalWagers);
     if (finalRevealOrder.length === 0) {
       return {
         state: { ...state, phase: 'COMPLETE', finalAnswers, finalAnswerDrafts: {}, deadline: null },
@@ -928,7 +1245,10 @@ function handleSubmitDDWager(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Daily Double wager is being accepted right now' }] };
   }
 
-  if (state.controllingPlayerId !== intent.playerId) {
+  const controllerId = isTeamMode(state)
+    ? getActingCaptainId(state, state.controllingTeamId)
+    : state.controllingPlayerId;
+  if (controllerId !== intent.playerId) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only the controlling contestant can wager' }] };
   }
 
@@ -937,7 +1257,7 @@ function handleSubmitDDWager(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
   }
 
-  const maxWager = Math.max(player.score, getHighestClueValueInRound(state));
+  const maxWager = Math.max(holderScoreForPlayer(state, intent.playerId), getHighestClueValueInRound(state));
   if (intent.amount < DEFAULT_MIN_WAGER) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be at least the minimum of $${DEFAULT_MIN_WAGER}` }] };
   }
@@ -964,17 +1284,26 @@ function handleCancelDailyDouble(state: GameState): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A wager has already been submitted for this Daily Double' }] };
   }
 
-  if (state.controllingPlayerId == null) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No controlling contestant is assigned' }] };
-  }
-
-  const controller = state.players.find((p) => p.id === state.controllingPlayerId);
-  if (!controller) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Controlling contestant not found' }] };
-  }
-
-  if (controller.connected) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The controlling contestant is still connected' }] };
+  if (isTeamMode(state)) {
+    if (state.controllingTeamId == null) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No controlling team is assigned' }] };
+    }
+    const actingId = getActingCaptainId(state, state.controllingTeamId);
+    const acting = actingId ? state.players.find((p) => p.id === actingId) : undefined;
+    if (acting && acting.connected) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The controlling team still has a connected contestant' }] };
+    }
+  } else {
+    if (state.controllingPlayerId == null) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No controlling contestant is assigned' }] };
+    }
+    const controller = state.players.find((p) => p.id === state.controllingPlayerId);
+    if (!controller) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Controlling contestant not found' }] };
+    }
+    if (controller.connected) {
+      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The controlling contestant is still connected' }] };
+    }
   }
 
   return {
@@ -986,6 +1315,7 @@ function handleCancelDailyDouble(state: GameState): ReducerResult {
       armedAt: null,
       deadline: null,
       lockedOutPlayerIds: [],
+      lockedOutTeamIds: [],
       lockoutUntil: {},
       revealedAnswer: null,
       lastOutcome: null,
@@ -1081,19 +1411,23 @@ function handleAdvanceRound(state: GameState): ReducerResult {
     armedAt: null,
     deadline: null,
     lockedOutPlayerIds: [],
+    lockedOutTeamIds: [],
     lockoutUntil: {},
     revealedAnswer: null,
     lastOutcome: null,
   };
 
   if (state.transitionTarget === 'DOUBLE_JEOPARDY') {
+    const controlUpdate = isTeamMode(state)
+      ? { controllingPlayerId: null, controllingTeamId: determineTrailingTeamId(state, getTeams(state)) }
+      : { controllingPlayerId: determineTrailingController(state.players) };
     return {
       state: {
         ...state,
         phase: 'BOARD_SELECT',
         roundIndex: nextRoundIndex ?? state.roundIndex + 1,
         transitionTarget: null,
-        controllingPlayerId: determineTrailingController(state.players),
+        ...controlUpdate,
         ...resetClueState,
       },
       effects: [{ type: 'BROADCAST_STATE' }],
@@ -1129,8 +1463,36 @@ function handleOverrideControl(state: GameState, playerId: string): ReducerResul
   };
 }
 
-function getFinalEligiblePlayers(players: Player[]): Player[] {
-  return players.filter((p) => p.score > 0);
+// Final-eligible score holders: teams with a positive score and at least one
+// member in team mode, otherwise individual players with a positive score.
+function getFinalEligibleHolderIds(state: GameState): string[] {
+  if (isTeamMode(state)) {
+    return getTeams(state)
+      .filter((t) => t.score > 0 && getTeamMembers(state.players, t.id).length > 0)
+      .map((t) => t.id);
+  }
+  return state.players.filter((p) => p.score > 0).map((p) => p.id);
+}
+
+// Resolve the score holder a submitting player represents in Final Jeopardy.
+// In team mode only the acting captain of an eligible team may submit.
+function resolveFinalSubmission(
+  state: GameState,
+  playerId: string,
+): { holderId: string; score: number } | { error: string } {
+  if (isTeamMode(state)) {
+    const team = getPlayerTeam(state, playerId);
+    if (!team) return { error: 'You are not on a team' };
+    if (team.score <= 0) return { error: 'Only eligible teams can submit in Final Jeopardy' };
+    if (getActingCaptainId(state, team.id) !== playerId) {
+      return { error: 'Only the team captain can submit for the team' };
+    }
+    return { holderId: team.id, score: team.score };
+  }
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { error: 'Player not found' };
+  if (player.score <= 0) return { error: 'Only eligible contestants can submit in Final Jeopardy' };
+  return { holderId: player.id, score: player.score };
 }
 
 function getFinalRoundClueId(state: GameState): string | null {
@@ -1140,11 +1502,11 @@ function getFinalRoundClueId(state: GameState): string | null {
 }
 
 function closeFinalWagerPhase(state: GameState, ctx: ReducerCtx): GameState {
-  const eligible = getFinalEligiblePlayers(state.players);
+  const eligible = getFinalEligibleHolderIds(state);
   const finalWagers = { ...state.finalWagers };
-  for (const player of eligible) {
-    if (finalWagers[player.id] === undefined) {
-      finalWagers[player.id] = 0;
+  for (const holderId of eligible) {
+    if (finalWagers[holderId] === undefined) {
+      finalWagers[holderId] = 0;
     }
   }
   return {
@@ -1165,16 +1527,13 @@ function handleSubmitFinalWager(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final wager is being accepted right now' }] };
   }
 
-  const player = state.players.find((p) => p.id === intent.playerId);
-  if (!player) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  const resolved = resolveFinalSubmission(state, intent.playerId);
+  if ('error' in resolved) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: resolved.error }] };
   }
+  const { holderId, score } = resolved;
 
-  if (player.score <= 0) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only eligible contestants can submit a Final wager' }] };
-  }
-
-  if (state.finalWagers[player.id] !== undefined) {
+  if (state.finalWagers[holderId] !== undefined) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final wager has already been submitted' }] };
   }
 
@@ -1182,14 +1541,14 @@ function handleSubmitFinalWager(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Wager must be a whole number' }] };
   }
 
-  if (intent.amount < 0 || intent.amount > player.score) {
+  if (intent.amount < 0 || intent.amount > score) {
     return {
       state,
-      effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be between 0 and $${player.score}` }],
+      effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be between 0 and $${score}` }],
     };
   }
 
-  const updated = { ...state, finalWagers: { ...state.finalWagers, [player.id]: intent.amount } };
+  const updated = { ...state, finalWagers: { ...state.finalWagers, [holderId]: intent.amount } };
   return { state: updated, effects: [{ type: 'BROADCAST_STATE' }] };
 }
 
@@ -1206,25 +1565,22 @@ function handleSubmitFinalAnswer(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
   }
 
-  const player = state.players.find((p) => p.id === intent.playerId);
-  if (!player) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  const resolved = resolveFinalSubmission(state, intent.playerId);
+  if ('error' in resolved) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: resolved.error }] };
   }
+  const { holderId } = resolved;
 
-  if (player.score <= 0) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only eligible contestants can submit a Final answer' }] };
-  }
-
-  if (state.finalAnswers[player.id] !== undefined) {
+  if (state.finalAnswers[holderId] !== undefined) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final answer has already been submitted' }] };
   }
 
   const remainingDrafts = { ...state.finalAnswerDrafts };
-  delete remainingDrafts[player.id];
+  delete remainingDrafts[holderId];
   return {
     state: {
       ...state,
-      finalAnswers: { ...state.finalAnswers, [player.id]: intent.answer },
+      finalAnswers: { ...state.finalAnswers, [holderId]: intent.answer },
       finalAnswerDrafts: remainingDrafts,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
@@ -1244,23 +1600,20 @@ function handleSubmitFinalAnswerDraft(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
   }
 
-  const player = state.players.find((p) => p.id === intent.playerId);
-  if (!player) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
+  const resolved = resolveFinalSubmission(state, intent.playerId);
+  if ('error' in resolved) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: resolved.error }] };
   }
+  const { holderId } = resolved;
 
-  if (player.score <= 0) {
-    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Only eligible contestants can submit a Final answer' }] };
-  }
-
-  if (state.finalAnswers[player.id] !== undefined) {
+  if (state.finalAnswers[holderId] !== undefined) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A Final answer has already been submitted' }] };
   }
 
   return {
     state: {
       ...state,
-      finalAnswerDrafts: { ...state.finalAnswerDrafts, [player.id]: intent.answer },
+      finalAnswerDrafts: { ...state.finalAnswerDrafts, [holderId]: intent.answer },
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -1282,7 +1635,7 @@ function handleOpenFinalWagers(state: GameState): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot open Final wagers right now' }] };
   }
 
-  const eligible = getFinalEligiblePlayers(state.players);
+  const eligible = getFinalEligibleHolderIds(state);
   if (eligible.length === 0) {
     return {
       state: { ...state, phase: 'COMPLETE', finalNoEligiblePlayers: true },
@@ -1367,36 +1720,51 @@ function handleUndoLastRuling(state: GameState): ReducerResult {
   }
 
   const record = state.auditLog[rulingIndex];
-  const playerIndex = state.players.findIndex((p) => p.id === record.playerId);
-  if (playerIndex === -1) {
-    // The affected player no longer exists; treat as a safe no-op.
-    return { state, effects: [] };
-  }
-
-  const player = state.players[playerIndex];
   // Revert only the ruling's delta, preserving any later manual adjustments
-  // that may have been applied to the same contestant.
+  // that may have been applied to the same score holder.
   const rulingDelta = record.scoreAfter - record.scoreBefore;
-  const updatedPlayers = [...state.players];
-  updatedPlayers[playerIndex] = { ...player, score: player.score - rulingDelta };
+  let updatedPlayers = state.players;
+  let updatedTeams = getTeams(state);
+
+  if (record.teamId) {
+    if (!updatedTeams.some((t) => t.id === record.teamId)) {
+      // The affected team no longer exists; treat as a safe no-op.
+      return { state, effects: [] };
+    }
+    updatedTeams = updatedTeams.map((t) =>
+      t.id === record.teamId ? { ...t, score: t.score - rulingDelta } : t,
+    );
+  } else {
+    const playerIndex = state.players.findIndex((p) => p.id === record.playerId);
+    if (playerIndex === -1) {
+      // The affected player no longer exists; treat as a safe no-op.
+      return { state, effects: [] };
+    }
+    const player = state.players[playerIndex];
+    updatedPlayers = [...state.players];
+    updatedPlayers[playerIndex] = { ...player, score: player.score - rulingDelta };
+  }
 
   let updatedState: GameState = {
     ...state,
     players: updatedPlayers,
+    teams: updatedTeams,
     auditLog: state.auditLog.filter((_, i) => i !== rulingIndex),
   };
 
   if (record.type === 'CORRECT') {
-    updatedState = {
-      ...updatedState,
-      controllingPlayerId: record.controllingPlayerIdBefore,
-    };
+    updatedState = isTeamMode(state)
+      ? { ...updatedState, controllingTeamId: record.controllingTeamIdBefore ?? updatedState.controllingTeamId }
+      : { ...updatedState, controllingPlayerId: record.controllingPlayerIdBefore };
   }
 
   if (record.type === 'INCORRECT') {
     updatedState = {
       ...updatedState,
       lockedOutPlayerIds: state.lockedOutPlayerIds.filter((id) => id !== record.playerId),
+      lockedOutTeamIds: record.teamId
+        ? (state.lockedOutTeamIds ?? []).filter((id) => id !== record.teamId)
+        : state.lockedOutTeamIds ?? [],
     };
   }
 
@@ -1435,40 +1803,43 @@ function handleRuleFinalCorrect(state: GameState, ctx: ReducerCtx): ReducerResul
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The answer must be revealed before ruling' }] };
   }
 
-  const playerId = getCurrentFinalPlayerId(state);
-  if (playerId == null) {
+  const holderId = getCurrentFinalPlayerId(state);
+  if (holderId == null) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is queued for reveal' }] };
   }
 
-  const playerIndex = state.players.findIndex((p) => p.id === playerId);
-  if (playerIndex === -1) {
+  const teamMode = isTeamMode(state);
+  if (!teamMode && !state.players.some((p) => p.id === holderId)) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
   }
 
-  const player = state.players[playerIndex];
-  const wager = state.finalWagers[playerId] ?? 0;
-  const scoreBefore = player.score;
+  const wager = state.finalWagers[holderId] ?? 0;
+  const scoreBefore = holderScoreById(state, holderId);
+  const { players: updatedPlayers, teams } = applyHolderDeltaById(state, holderId, wager);
   const scoreAfter = scoreBefore + wager;
-  const updatedPlayers = [...state.players];
-  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+  const auditPlayerId = teamMode ? getActingCaptainId(state, holderId) ?? holderId : holderId;
 
   const auditEntry = createAuditRecord(
     'CORRECT',
-    playerId,
+    auditPlayerId,
     wager,
     scoreBefore,
     scoreAfter,
     state.controllingPlayerId,
     ctx.now,
+    undefined,
+    teamMode ? holderId : undefined,
+    state.controllingTeamId,
   );
 
   return {
     state: {
       ...state,
+      teams,
       players: updatedPlayers,
       auditLog: [...state.auditLog, auditEntry],
       finalRevealStep: 'WAGER',
-      lastOutcome: { playerId, type: 'CORRECT', value: wager },
+      lastOutcome: { playerId: auditPlayerId, type: 'CORRECT', value: wager },
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -1483,40 +1854,43 @@ function handleRuleFinalIncorrect(state: GameState, ctx: ReducerCtx): ReducerRes
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The answer must be revealed before ruling' }] };
   }
 
-  const playerId = getCurrentFinalPlayerId(state);
-  if (playerId == null) {
+  const holderId = getCurrentFinalPlayerId(state);
+  if (holderId == null) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No contestant is queued for reveal' }] };
   }
 
-  const playerIndex = state.players.findIndex((p) => p.id === playerId);
-  if (playerIndex === -1) {
+  const teamMode = isTeamMode(state);
+  if (!teamMode && !state.players.some((p) => p.id === holderId)) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
   }
 
-  const player = state.players[playerIndex];
-  const wager = state.finalWagers[playerId] ?? 0;
-  const scoreBefore = player.score;
+  const wager = state.finalWagers[holderId] ?? 0;
+  const scoreBefore = holderScoreById(state, holderId);
+  const { players: updatedPlayers, teams } = applyHolderDeltaById(state, holderId, -wager);
   const scoreAfter = scoreBefore - wager;
-  const updatedPlayers = [...state.players];
-  updatedPlayers[playerIndex] = { ...player, score: scoreAfter };
+  const auditPlayerId = teamMode ? getActingCaptainId(state, holderId) ?? holderId : holderId;
 
   const auditEntry = createAuditRecord(
     'INCORRECT',
-    playerId,
+    auditPlayerId,
     wager,
     scoreBefore,
     scoreAfter,
     state.controllingPlayerId,
     ctx.now,
+    undefined,
+    teamMode ? holderId : undefined,
+    state.controllingTeamId,
   );
 
   return {
     state: {
       ...state,
+      teams,
       players: updatedPlayers,
       auditLog: [...state.auditLog, auditEntry],
       finalRevealStep: 'WAGER',
-      lastOutcome: { playerId, type: 'INCORRECT', value: wager },
+      lastOutcome: { playerId: auditPlayerId, type: 'INCORRECT', value: wager },
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };

@@ -30,6 +30,14 @@ export interface Player {
   seatOrder: number;
   connected: boolean;
   reconnectToken: string;
+  teamId?: string | null;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  score: number;
+  captainId: string | null;
 }
 
 export interface RemovedPlayer {
@@ -74,11 +82,13 @@ export interface AuditRecord {
   id: string;
   type: 'CORRECT' | 'INCORRECT' | 'MANUAL';
   playerId: string;
+  teamId?: string;
   clueId?: string;
   value: number;
   scoreBefore: number;
   scoreAfter: number;
   controllingPlayerIdBefore: string | null;
+  controllingTeamIdBefore?: string | null;
   timestamp: number;
 }
 
@@ -90,7 +100,10 @@ export interface GameState {
   phase: GamePhase;
   roundIndex: number;
   players: Player[];
+  teamMode: boolean;
+  teams: Team[];
   controllingPlayerId: string | null;
+  controllingTeamId: string | null;
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
   pendingClueId: string | null;
@@ -102,6 +115,7 @@ export interface GameState {
   armedAt: number | null;
   deadline: number | null;
   lockedOutPlayerIds: string[];
+  lockedOutTeamIds: string[];
   lockoutUntil: Record<string, number>;
   auditLog: AuditRecord[];
   dailyDoubleWager: number | null;
