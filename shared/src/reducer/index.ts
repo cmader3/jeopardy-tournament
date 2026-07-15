@@ -59,7 +59,7 @@ const MAX_PLAYERS = 5;
 const MAX_TEAM_PLAYERS = 48;
 const MIN_TEAMS = 2;
 const MAX_TEAMS = 6;
-export const EARLY_BUZZ_LOCKOUT_MS = 250;
+export const EARLY_BUZZ_LOCKOUT_MS = 500;
 const FINAL_ANSWER_DRAFT_GRACE_MS = 300;
 
 export function isTeamMode(state: GameState): boolean {
