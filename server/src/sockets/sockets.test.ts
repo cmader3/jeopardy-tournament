@@ -1590,7 +1590,9 @@ describe('buzzer arming and fastest-finger sockets', { timeout: 15000 }, () => {
       bobUpdate,
     ]);
 
-    expect((aliceState as { isLockedOut: boolean }).isLockedOut).toBe(true);
+    // The early-buzz penalty is a timed lockout carried by lockoutUntil; the
+    // isLockedOut flag is reserved for permanent lockouts.
+    expect((aliceState as { isLockedOut: boolean }).isLockedOut).toBe(false);
     expect((aliceState as { lockoutUntil: number }).lockoutUntil).toBeGreaterThan(0);
     expect((hostState as { buzzWinnerId: string | null }).buzzWinnerId).toBeNull();
     expect((boardState as { buzzWinnerId: string | null }).buzzWinnerId).toBeNull();

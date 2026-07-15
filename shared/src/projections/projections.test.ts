@@ -296,7 +296,7 @@ describe('projections', () => {
     expect(view.answer).toBeNull();
   });
 
-  it('projectContestant reflects the early-buzz lockout for the affected player', () => {
+  it('projectContestant exposes the early-buzz lockout via lockoutUntil, not the isLockedOut flag', () => {
     const board = makeBoard();
     let state = createInitialState('s1', 'ABCD', board);
     const alice = makePlayer({ id: 'p1', name: 'Alice' });
@@ -310,7 +310,10 @@ describe('projections', () => {
 
     const view = projectContestant(state, alice.id, NOW);
 
-    expect(view.isLockedOut).toBe(true);
+    // isLockedOut is reserved for permanent lockouts (wrong answer / team lockout).
+    // The timed early-buzz penalty is carried by lockoutUntil so the client can
+    // release the buzzer when it elapses without waiting for a new broadcast.
+    expect(view.isLockedOut).toBe(false);
     expect(view.lockoutUntil).toBe(NOW + 250);
   });
 

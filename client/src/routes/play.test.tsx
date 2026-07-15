@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -964,6 +964,90 @@ describe('PlayRoute', () => {
     expect(buzzer).toHaveTextContent('Wait for Host');
     expect(buzzer).not.toHaveAttribute('data-too-early');
     expect(buzzer).toBeEnabled();
+  });
+
+  it('releases the buzzer after a server timed lockout elapses without a new broadcast', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: makeContestantState({
+        phase: 'CLUE_REVEALED',
+        round: makeRound(),
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        playerId: 'p1',
+        isLockedOut: false,
+        serverNow: 10_000,
+        lockoutUntil: 10_800,
+      }),
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz: vi.fn(),
+    });
+
+    render(<PlayRoute />);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toHaveTextContent('Too Early');
+    expect(buzzer).toBeDisabled();
+
+    await waitFor(() => expect(buzzer).toBeEnabled(), { timeout: 3000 });
+    expect(buzzer).toHaveTextContent('Wait for Host');
+  });
+
+  it('keeps an early-buzz lockout until it elapses even when another player buzzes', async () => {
+    (getStoredContestantToken as ReturnType<typeof vi.fn>).mockReturnValue({
+      reconnectToken: 'stored-token',
+      playerId: 'p1',
+      roomCode: 'ABCD',
+    });
+    const baseState = makeContestantState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      playerId: 'p1',
+      isLockedOut: false,
+      serverNow: 10_000,
+      lockoutUntil: 10_800,
+    });
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: baseState,
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz: vi.fn(),
+    });
+
+    const { rerender } = render(<PlayRoute />);
+
+    const buzzer = await screen.findByTestId('contestant-buzzer');
+    expect(buzzer).toBeDisabled();
+
+    // A fresh broadcast (e.g. another player buzzing early) arrives with a later
+    // serverNow but p1's own lockout window is unchanged. p1 must stay locked.
+    useSocket.mockReturnValue({
+      connected: true,
+      error: null,
+      data: { ...baseState, serverNow: 10_300 },
+      startGame: vi.fn(),
+      leaveGame: vi.fn(),
+      selectClue: vi.fn(),
+      buzz: vi.fn(),
+    });
+    rerender(<PlayRoute />);
+
+    expect(screen.getByTestId('contestant-buzzer')).toBeDisabled();
+
+    await waitFor(() => expect(screen.getByTestId('contestant-buzzer')).toBeEnabled(), { timeout: 3000 });
   });
 
   it('shows Too Early when the contestant is already locked out before arming', async () => {

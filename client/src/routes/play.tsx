@@ -8,9 +8,9 @@ import type { RemovedReason } from '../socket/useSocket.js';
 import { Countdown } from '../components/Countdown.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { useServerTime } from '../hooks/useServerTime.js';
-import { useSyncTime } from '../hooks/useSyncTime.js';
 import { formatScore } from '../format.js';
 import type { ContestantView } from '@jeopardy/shared';
+import { EARLY_BUZZ_LOCKOUT_MS } from '@jeopardy/shared';
 import styles from './play.module.css';
 
 interface JoinForm {
@@ -24,11 +24,6 @@ interface ContestantLobbyProps {
   name: string;
   onLeave: () => void;
   onTryAgain: () => void;
-}
-
-function useClientTime(serverNow: number): number {
-  const getTime = useCallback(() => Date.now(), []);
-  return useSyncTime(getTime, 50, serverNow);
 }
 
 function safeVibrate(pattern: number | number[]): void {
@@ -185,8 +180,6 @@ function ContestantTeamScores({ state }: { state: ContestantView }) {
   );
 }
 
-const TOO_EARLY_DISPLAY_MS = 1500;
-
 function Buzzer({
   state,
   onBuzz,
@@ -194,15 +187,39 @@ function Buzzer({
   state: ContestantView;
   onBuzz?: (playerId: string) => void;
 }) {
-  const clientTime = useClientTime(state.serverNow ?? 0);
-  const [lastTooEarlyAt, setLastTooEarlyAt] = useState<number | null>(null);
+  const [earlyLocked, setEarlyLocked] = useState(false);
+  const unlockAtRef = useRef(0);
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previousPhaseRef = useRef(state.phase);
 
+  // Arm the transient early-buzz lockout for a relative duration. A plain
+  // timeout (rather than a ticking clock or waiting on the next broadcast)
+  // guarantees the buzzer releases itself, even on mobile browsers that throttle
+  // intervals. The absolute unlock time is kept in a ref so repeated arming
+  // never shortens an in-flight lockout.
+  const armLockout = useCallback((durationMs: number) => {
+    const target = Date.now() + durationMs;
+    if (target <= unlockAtRef.current) return;
+    unlockAtRef.current = target;
+    setEarlyLocked(true);
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+    lockTimerRef.current = setTimeout(() => setEarlyLocked(false), durationMs);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+    },
+    [],
+  );
+
+  // Mirror the server's early-buzz lockout for this player. The remaining time
+  // is derived in server time (lockoutUntil - serverNow), so it is immune to
+  // client/server clock skew.
   useEffect(() => {
-    if (lastTooEarlyAt == null) return;
-    const id = setTimeout(() => setLastTooEarlyAt(null), TOO_EARLY_DISPLAY_MS);
-    return () => clearTimeout(id);
-  }, [lastTooEarlyAt]);
+    const remaining = state.lockoutUntil != null ? state.lockoutUntil - (state.serverNow ?? 0) : 0;
+    if (remaining > 0) armLockout(remaining);
+  }, [state.lockoutUntil, state.serverNow, armLockout]);
 
   useEffect(() => {
     if (previousPhaseRef.current !== 'BUZZERS_ARMED' && state.phase === 'BUZZERS_ARMED') {
@@ -211,37 +228,35 @@ function Buzzer({
     previousPhaseRef.current = state.phase;
   }, [state.phase]);
 
-  const isServerLocked = state.isLockedOut || (state.lockoutUntil != null && state.lockoutUntil > clientTime);
+  const isServerLocked = state.isLockedOut;
   const isWinner = state.buzzWinnerId === state.playerId;
   const isLoser = state.buzzWinnerId != null && state.buzzWinnerId !== state.playerId;
 
-  const displayLockout = lastTooEarlyAt != null && clientTime - lastTooEarlyAt < TOO_EARLY_DISPLAY_MS;
-
   let label = 'Buzz In';
   if (state.phase === 'CLUE_REVEALED') {
-    label = isServerLocked || displayLockout ? 'Too Early' : 'Wait for Host';
+    label = isServerLocked || earlyLocked ? 'Too Early' : 'Wait for Host';
   } else if (state.phase === 'BUZZERS_ARMED') {
-    label = isServerLocked ? 'Locked Out' : 'Buzz In';
+    label = isServerLocked || earlyLocked ? 'Locked Out' : 'Buzz In';
   } else if (state.phase === 'BUZZED') {
     label = isWinner ? 'You\'re In!' : 'Locked Out';
   }
 
   const canBuzz =
-    (state.phase === 'CLUE_REVEALED' && !isServerLocked && !displayLockout) ||
-    (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !isWinner && !isLoser);
+    (state.phase === 'CLUE_REVEALED' && !isServerLocked && !earlyLocked) ||
+    (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !earlyLocked && !isWinner && !isLoser);
 
-  const showTooEarly = state.phase === 'CLUE_REVEALED' && (isServerLocked || displayLockout);
+  const showTooEarly = state.phase === 'CLUE_REVEALED' && (isServerLocked || earlyLocked);
 
   const handlePress = useCallback(() => {
-    if (state.phase === 'CLUE_REVEALED' && !isServerLocked && !displayLockout) {
-      setLastTooEarlyAt(clientTime);
+    if (state.phase === 'CLUE_REVEALED' && !isServerLocked && !earlyLocked) {
+      armLockout(EARLY_BUZZ_LOCKOUT_MS);
       safeVibrate(50);
       onBuzz?.(state.playerId);
-    } else if (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !isWinner && !isLoser) {
+    } else if (state.phase === 'BUZZERS_ARMED' && !isServerLocked && !earlyLocked && !isWinner && !isLoser) {
       safeVibrate(80);
       onBuzz?.(state.playerId);
     }
-  }, [state.phase, isServerLocked, displayLockout, isWinner, isLoser, onBuzz, state.playerId, clientTime]);
+  }, [state.phase, isServerLocked, earlyLocked, isWinner, isLoser, onBuzz, state.playerId, armLockout]);
 
   let stateClass = styles.buzzerWait;
   if (state.phase === 'BUZZERS_ARMED' && canBuzz) {

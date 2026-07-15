@@ -282,14 +282,13 @@ function projectHostRound(round: GameState['board']['rounds'][number]): Projecte
   };
 }
 
-function isLockedOut(state: GameState, playerId: string, now: number): boolean {
+function isLockedOut(state: GameState, playerId: string): boolean {
   if (state.lockedOutPlayerIds.includes(playerId)) return true;
   if (isTeamMode(state)) {
     const player = state.players.find((p) => p.id === playerId);
     if (player && player.teamId && (state.lockedOutTeamIds ?? []).includes(player.teamId)) return true;
   }
-  const until = state.lockoutUntil[playerId];
-  return until !== undefined && until > now;
+  return false;
 }
 
 export function isRoundComplete(state: GameState): boolean {
@@ -482,7 +481,7 @@ export function projectContestant(state: GameState, playerId: string, now: numbe
     isTemporaryCaptain,
     isTeamLockedOut: team != null && (state.lockedOutTeamIds ?? []).includes(team.id),
     isControllingPlayer,
-    isLockedOut: isLockedOut(state, playerId, now),
+    isLockedOut: isLockedOut(state, playerId),
     lockoutUntil,
     canWager:
       state.phase === 'DAILY_DOUBLE_WAGER'
