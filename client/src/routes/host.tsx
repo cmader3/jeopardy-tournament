@@ -10,6 +10,25 @@ import type { HostView, ClueSelectionMode } from '@jeopardy/shared';
 import { formatScore } from '../format.js';
 import styles from './host.module.css';
 
+interface HostScoreHolder {
+  id: string;
+  name: string;
+  score: number;
+}
+
+function getHostHolders(state: HostView): HostScoreHolder[] {
+  if (state.teamMode) {
+    return state.teams.map((t) => ({ id: t.id, name: t.name, score: t.score }));
+  }
+  return state.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
+}
+
+function makeTeamId(): string {
+  const c = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  return `team-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export interface HostLobbyProps {
   roomCode: string;
   state: HostView | null;
@@ -18,6 +37,8 @@ export interface HostLobbyProps {
   onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
   onRemovePlayer?: (playerId: string) => void;
   onAdmitPlayer?: (playerId: string) => void;
+  onConfigureTeams?: (enabled: boolean, teams: { id: string; name: string }[]) => void;
+  onSetCaptain?: (teamId: string, playerId: string) => void;
   startError: string | null;
 }
 
@@ -60,11 +81,246 @@ function ClueSelectionToggle({
   );
 }
 
-export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onRemovePlayer, onAdmitPlayer, startError }: HostLobbyProps) {
+function TeamSetup({
+  state,
+  onConfigureTeams,
+}: {
+  state: HostView | null;
+  onConfigureTeams?: (enabled: boolean, teams: { id: string; name: string }[]) => void;
+}) {
+  const savedTeams = state?.teams ?? [];
+  const teamMode = state?.teamMode ?? false;
+  // Local edits are seeded from the server config on mount. HostLobby remounts
+  // this component (via key) whenever the saved config changes, so a save or a
+  // reconnect re-seeds these initializers without clobbering in-progress typing.
+  const [enabled, setEnabled] = useState(teamMode);
+  const [rows, setRows] = useState<{ id: string; name: string }[]>(() =>
+    savedTeams.length >= 2
+      ? savedTeams.map((t) => ({ id: t.id, name: t.name }))
+      : [
+          { id: makeTeamId(), name: '' },
+          { id: makeTeamId(), name: '' },
+        ],
+  );
+
+  const trimmed = rows.map((r) => ({ id: r.id, name: r.name.trim() }));
+  const lowerNames = trimmed.map((r) => r.name.toLowerCase());
+  const hasBlank = trimmed.some((r) => r.name.length === 0);
+  const hasDuplicate = new Set(lowerNames).size !== lowerNames.length;
+  const canSave = rows.length >= 2 && rows.length <= 6 && !hasBlank && !hasDuplicate;
+  const isDirty = !teamMode || savedTeams.map((t) => t.name).join('|') !== trimmed.map((r) => r.name).join('|');
+
+  const handleToggle = (next: boolean) => {
+    setEnabled(next);
+    if (!next) onConfigureTeams?.(false, []);
+  };
+
+  return (
+    <div className={styles.teamSetup} data-testid="team-setup">
+      <label className={styles.teamModeToggle}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => handleToggle(e.target.checked)}
+          data-testid="team-mode-toggle"
+        />
+        Team Mode
+      </label>
+      {enabled && (
+        <div className={styles.teamSetupBody}>
+          <p className={styles.teamSetupHint}>Enter 2–6 team names. Players choose a team after joining.</p>
+          {rows.map((row, i) => (
+            <div key={row.id} className={styles.teamSetupRow}>
+              <input
+                className={styles.teamNameInput}
+                value={row.name}
+                placeholder={`Team ${i + 1} name`}
+                onChange={(e) =>
+                  setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, name: e.target.value } : r)))
+                }
+                data-testid={`team-name-input-${i}`}
+                aria-label={`Team ${i + 1} name`}
+              />
+              {rows.length > 2 && (
+                <button
+                  type="button"
+                  className={styles.removePlayerButton}
+                  onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))}
+                  data-testid={`remove-team-${i}`}
+                  aria-label={`Remove team ${i + 1}`}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <div className={styles.teamSetupActions}>
+            {rows.length < 6 && (
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={() => setRows((prev) => [...prev, { id: makeTeamId(), name: '' }])}
+                data-testid="add-team-button"
+              >
+                Add Team
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={() => onConfigureTeams?.(true, trimmed)}
+              disabled={!canSave || !isDirty}
+              data-testid="save-teams-button"
+            >
+              Save Teams
+            </button>
+          </div>
+          {hasBlank && (
+            <p className={styles.teamSetupWarn} data-testid="team-setup-blank">
+              Every team needs a name.
+            </p>
+          )}
+          {hasDuplicate && (
+            <p className={styles.teamSetupWarn} data-testid="team-setup-duplicate">
+              Team names must be unique.
+            </p>
+          )}
+          {teamMode && !isDirty && (
+            <p className={styles.teamSetupSaved} data-testid="team-setup-saved">
+              Teams saved.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamRoster({
+  state,
+  showControl,
+  onSetCaptain,
+  onOverrideControlTeam,
+  onRequestRemove,
+}: {
+  state: HostView;
+  showControl?: boolean;
+  onSetCaptain?: (teamId: string, playerId: string) => void;
+  onOverrideControlTeam?: (teamId: string) => void;
+  onRequestRemove?: (player: { id: string; name: string }) => void;
+}) {
+  return (
+    <div className={styles.teamRoster} data-testid="team-roster">
+      {state.teams.map((team) => {
+        const members = team.memberIds
+          .map((id) => state.players.find((p) => p.id === id))
+          .filter((p): p is HostView['players'][number] => Boolean(p));
+        const isControlling = state.controllingTeamId === team.id;
+        return (
+          <div
+            key={team.id}
+            className={`${styles.teamRosterGroup} ${isControlling ? styles.teamRosterControlling : ''}`}
+            data-testid={`team-roster-${team.id}`}
+          >
+            <div className={styles.teamRosterHeader}>
+              <span className={styles.teamRosterName} data-testid={`team-roster-name-${team.id}`}>
+                {team.name}
+              </span>
+              <span
+                className={`${styles.playerScore} ${team.score < 0 ? styles.negativeScore : ''}`}
+                data-testid={`team-roster-score-${team.id}`}
+              >
+                {formatScore(team.score)}
+              </span>
+              {showControl &&
+                (isControlling ? (
+                  <span className={styles.controllerBadge} data-testid={`team-controlling-${team.id}`}>
+                    Controlling
+                  </span>
+                ) : onOverrideControlTeam ? (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={() => onOverrideControlTeam(team.id)}
+                    data-testid={`assign-control-team-${team.id}`}
+                  >
+                    Assign Control
+                  </button>
+                ) : null)}
+            </div>
+            {members.length === 0 ? (
+              <p className={styles.teamRosterEmpty} data-testid={`team-empty-${team.id}`}>
+                No players yet
+              </p>
+            ) : (
+              <ul className={styles.teamRosterMembers}>
+                {members.map((m) => {
+                  const isCaptain = team.captainId === m.id;
+                  const isActing = team.actingCaptainId === m.id;
+                  return (
+                    <li key={m.id} data-testid={`team-member-${m.id}`}>
+                      <span className={styles.playerName}>{m.name}</span>
+                      {isCaptain ? (
+                        <span className={styles.captainBadge} data-testid={`captain-badge-${m.id}`}>
+                          Captain
+                        </span>
+                      ) : (
+                        onSetCaptain && (
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            onClick={() => onSetCaptain(team.id, m.id)}
+                            data-testid={`make-captain-${m.id}`}
+                          >
+                            Make Captain
+                          </button>
+                        )
+                      )}
+                      {isActing && !isCaptain && (
+                        <span className={styles.actingBadge} data-testid={`acting-captain-${m.id}`}>
+                          Acting captain
+                        </span>
+                      )}
+                      <span
+                        className={m.connected ? styles.statusConnected : styles.statusDisconnected}
+                        data-testid={`player-status-${m.id}`}
+                      >
+                        {m.connected ? 'connected' : 'disconnected'}
+                      </span>
+                      {onRequestRemove && (
+                        <button
+                          type="button"
+                          className={styles.removePlayerButton}
+                          onClick={() => onRequestRemove({ id: m.id, name: m.name })}
+                          data-testid={`remove-player-${m.id}`}
+                          aria-label={`Remove ${m.name}`}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onRemovePlayer, onAdmitPlayer, onConfigureTeams, onSetCaptain, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
   const removedPlayers = state?.removedPlayers ?? [];
   const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
-  const canStart = connectedCount > 0;
+  const teamMode = state?.teamMode ?? false;
+  const teams = state?.teams ?? [];
+  const emptyTeams = teamMode ? teams.filter((t) => t.memberIds.length === 0) : [];
+  const teamsReady = !teamMode || (teams.length >= 2 && emptyTeams.length === 0);
+  const canStart = connectedCount > 0 && teamsReady;
+  const unassignedPlayers = teamMode ? (state?.players ?? []).filter((p) => !p.teamId) : [];
+  const teamSetupKey = teamMode ? teams.map((t) => `${t.id}:${t.name}`).join('|') : 'teams-off';
   const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
 
   return (
@@ -88,9 +344,45 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
           {startError}
         </p>
       )}
+      <TeamSetup key={teamSetupKey} state={state} onConfigureTeams={onConfigureTeams} />
       <h2>Players</h2>
       {playerCount === 0 ? (
         <p>Waiting for players...</p>
+      ) : teamMode && state ? (
+        <>
+          <TeamRoster
+            state={state}
+            onSetCaptain={onSetCaptain}
+            onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
+          />
+          {unassignedPlayers.length > 0 && (
+            <div className={styles.unassignedPlayers} data-testid="unassigned-players">
+              <h3>Not on a team yet</h3>
+              <ul className={styles.playerList}>
+                {unassignedPlayers.map((player) => (
+                  <li key={player.id}>
+                    <span className={styles.playerName}>{player.name}</span>{' '}
+                    <span
+                      className={`${player.connected ? styles.statusConnected : styles.statusDisconnected}`}
+                      data-testid={`player-status-${player.id}`}
+                    >
+                      {player.connected ? 'connected' : 'disconnected'}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.removePlayerButton}
+                      onClick={() => setPendingRemoval({ id: player.id, name: player.name })}
+                      data-testid={`remove-player-${player.id}`}
+                      aria-label={`Remove ${player.name}`}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       ) : (
         <ul className={styles.playerList}>
           {state?.players.map((player) => (
@@ -154,6 +446,13 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
         {connectedCount === 0 && (
           <p className={styles.minimumPlayers}>At least one connected contestant is required to start.</p>
         )}
+        {connectedCount > 0 && teamMode && !teamsReady && (
+          <p className={styles.minimumPlayers} data-testid="team-start-gate">
+            {teams.length < 2
+              ? 'Set up at least two teams to start.'
+              : `Every team needs at least one player. Waiting on: ${emptyTeams.map((t) => t.name).join(', ')}.`}
+          </p>
+        )}
       </div>
       {pendingRemoval && (
         <div className={styles.confirmDialogModal} role="alertdialog" aria-modal="true">
@@ -206,6 +505,8 @@ export interface HostInProgressProps {
   onOpenFinalWagers?: () => void;
   onForceFinalWagers?: () => void;
   onOverrideControl?: (playerId: string) => void;
+  onOverrideControlTeam?: (teamId: string) => void;
+  onSetCaptain?: (teamId: string, playerId: string) => void;
   onRevealFinalAnswer?: () => void;
   onRuleFinalCorrect?: () => void;
   onRuleFinalIncorrect?: () => void;
@@ -471,11 +772,11 @@ function HostRoundTransition({ state, onAdvanceRound }: HostRoundTransitionProps
       <h2 data-testid="transition-heading">{label}</h2>
       <p>Between-round scores</p>
       <ul className={styles.transitionScores} data-testid="transition-scores">
-        {state.players.map((player) => (
-          <li key={player.id} data-testid={`transition-score-${player.id}`}>
-            <span className={styles.playerName}>{player.name}</span>
-            <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>
-              {formatScore(player.score)}
+        {getHostHolders(state).map((holder) => (
+          <li key={holder.id} data-testid={`transition-score-${holder.id}`}>
+            <span className={styles.playerName}>{holder.name}</span>
+            <span className={`${styles.playerScore} ${holder.score < 0 ? styles.negativeScore : ''}`}>
+              {formatScore(holder.score)}
             </span>
           </li>
         ))}
@@ -510,16 +811,16 @@ function HostFinalIntro({ state, onOpenFinalWagers }: HostFinalIntroProps) {
       </div>
       <h3>Eligibility</h3>
       <ul className={styles.hostFinalEligibility} data-testid="host-final-eligibility">
-        {state.players.map((player) => {
-          const eligible = eligibleSet.has(player.id);
+        {getHostHolders(state).map((holder) => {
+          const eligible = eligibleSet.has(holder.id);
           return (
             <li
-              key={player.id}
+              key={holder.id}
               className={eligible ? styles.hostFinalEligible : styles.hostFinalIneligible}
               data-testid={eligible ? 'host-final-eligible' : 'host-final-ineligible'}
             >
-              <span className={styles.playerName}>{player.name}</span>
-              <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
+              <span className={styles.playerName}>{holder.name}</span>
+              <span className={`${styles.playerScore} ${holder.score < 0 ? styles.negativeScore : ''}`}>{formatScore(holder.score)}</span>
               <span>{eligible ? 'Eligible' : 'Not participating'}</span>
             </li>
           );
@@ -577,13 +878,13 @@ function HostFinalClue({ state }: HostFinalClueProps) {
       </p>
       <Countdown deadline={state.deadline} serverNow={state.serverNow} />
       <ul className={styles.hostFinalAnswerList} data-testid="host-final-answer-list">
-        {state.players.map((player) => {
-          const eligible = eligibleSet.has(player.id);
-          const submitted = state.finalAnswerSubmissionStatus[player.id] ?? false;
+        {getHostHolders(state).map((holder) => {
+          const eligible = eligibleSet.has(holder.id);
+          const submitted = state.finalAnswerSubmissionStatus[holder.id] ?? false;
           return (
-            <li key={player.id} data-testid={`host-final-answer-player-${player.id}`}>
-              <span className={styles.playerName}>{player.name}</span>
-              <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
+            <li key={holder.id} data-testid={`host-final-answer-player-${holder.id}`}>
+              <span className={styles.playerName}>{holder.name}</span>
+              <span className={`${styles.playerScore} ${holder.score < 0 ? styles.negativeScore : ''}`}>{formatScore(holder.score)}</span>
               {eligible ? (
                 <span data-testid={submitted ? 'host-final-answer-submitted' : 'host-final-answer-pending'}>
                   {submitted ? 'Answer submitted' : 'Pending'}
@@ -614,8 +915,10 @@ function HostFinalReveal({
   onRuleFinalIncorrect,
   onRevealFinalWager,
 }: HostFinalRevealProps) {
+  const holders = getHostHolders(state);
+  const findHolder = (id: string | null) => (id ? holders.find((h) => h.id === id) : undefined);
   const currentPlayerId = state.finalRevealOrder[state.finalRevealIndex] ?? null;
-  const currentPlayer = currentPlayerId ? state.players.find((p) => p.id === currentPlayerId) : undefined;
+  const currentPlayer = findHolder(currentPlayerId);
   const currentAnswer = currentPlayerId ? state.finalRevealedAnswers[currentPlayerId] : undefined;
   const currentWager = currentPlayerId ? state.finalRevealedWagers[currentPlayerId] : undefined;
   const revealedPlayerIds = state.finalRevealOrder.slice(0, state.finalRevealIndex);
@@ -689,7 +992,7 @@ function HostFinalReveal({
           <h3>Revealed</h3>
           <ul>
             {revealedPlayerIds.map((playerId) => {
-              const player = state.players.find((p) => p.id === playerId);
+              const player = findHolder(playerId);
               if (!player) return null;
               return (
                 <li key={playerId} data-testid={`host-final-revealed-player-${playerId}`}>
@@ -712,7 +1015,7 @@ interface HostFinalStandingsProps {
 }
 
 function HostFinalStandings({ state }: HostFinalStandingsProps) {
-  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  const sorted = [...getHostHolders(state)].sort((a, b) => b.score - a.score);
   const topScore = sorted[0]?.score ?? null;
   const coWinners = topScore != null ? sorted.filter((p) => p.score === topScore).map((p) => p.id) : [];
 
@@ -720,23 +1023,23 @@ function HostFinalStandings({ state }: HostFinalStandingsProps) {
     <div className={styles.hostFinalStandings} data-testid="host-final-standings">
       {state.finalNoEligiblePlayers && (
         <p className={styles.hostNoEligible} data-testid="host-no-eligible-standings">
-          No contestants were eligible for Final Jeopardy.
+          {state.teamMode ? 'No teams were eligible for Final Jeopardy.' : 'No contestants were eligible for Final Jeopardy.'}
         </p>
       )}
       <h2 data-testid="host-final-standings-heading">Final Standings</h2>
       <ul className={styles.hostFinalStandingsList} data-testid="host-final-standings-list">
-        {sorted.map((player) => (
+        {sorted.map((holder) => (
           <li
-            key={player.id}
-            className={coWinners.includes(player.id) ? styles.hostFinalWinner : undefined}
-            data-testid={`host-final-standing-${player.id}`}
+            key={holder.id}
+            className={coWinners.includes(holder.id) ? styles.hostFinalWinner : undefined}
+            data-testid={`host-final-standing-${holder.id}`}
           >
-            <span className={styles.playerName}>{player.name}</span>
-            <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>
-              {formatScore(player.score)}
+            <span className={styles.playerName}>{holder.name}</span>
+            <span className={`${styles.playerScore} ${holder.score < 0 ? styles.negativeScore : ''}`}>
+              {formatScore(holder.score)}
             </span>
-            {coWinners.includes(player.id) && (
-              <span className={styles.hostFinalWinnerBadge} data-testid={`host-final-winner-${player.id}`}>
+            {coWinners.includes(holder.id) && (
+              <span className={styles.hostFinalWinnerBadge} data-testid={`host-final-winner-${holder.id}`}>
                 Winner
               </span>
             )}
@@ -755,13 +1058,13 @@ function HostFinalWager({ state, onForceFinalWagers }: HostFinalWagerProps) {
       <h2 data-testid="host-final-wager-heading">Final Jeopardy Wagers</h2>
       <p data-testid="host-final-wager-instruction">Waiting for eligible contestants to submit their wagers.</p>
       <ul className={styles.hostFinalWagerList} data-testid="host-final-wager-list">
-        {state.players.map((player) => {
-          const eligible = eligibleSet.has(player.id);
-          const submitted = state.finalWagerSubmissionStatus[player.id] ?? false;
+        {getHostHolders(state).map((holder) => {
+          const eligible = eligibleSet.has(holder.id);
+          const submitted = state.finalWagerSubmissionStatus[holder.id] ?? false;
           return (
-            <li key={player.id} data-testid={`host-final-wager-player-${player.id}`}>
-              <span className={styles.playerName}>{player.name}</span>
-              <span className={`${styles.playerScore} ${player.score < 0 ? styles.negativeScore : ''}`}>{formatScore(player.score)}</span>
+            <li key={holder.id} data-testid={`host-final-wager-player-${holder.id}`}>
+              <span className={styles.playerName}>{holder.name}</span>
+              <span className={`${styles.playerScore} ${holder.score < 0 ? styles.negativeScore : ''}`}>{formatScore(holder.score)}</span>
               {eligible ? (
                 <span data-testid={submitted ? 'host-final-wager-submitted' : 'host-final-wager-pending'}>
                   {submitted ? 'Wager submitted' : 'Pending'}
@@ -805,6 +1108,8 @@ export function HostInProgress({
   onOpenFinalWagers,
   onForceFinalWagers,
   onOverrideControl,
+  onOverrideControlTeam,
+  onSetCaptain,
   onRevealFinalAnswer,
   onRuleFinalCorrect,
   onRuleFinalIncorrect,
@@ -838,9 +1143,25 @@ export function HostInProgress({
     ? state?.round?.categories.find((c) => c.clues.some((cl) => cl.id === state.pendingClueId))
     : null;
   const pendingClue = pendingCategory?.clues.find((cl) => cl.id === state?.pendingClueId) ?? null;
-  const controllerName = state?.controllingPlayerId
-    ? players.find((p) => p.id === state.controllingPlayerId)?.name ?? null
-    : null;
+  const teamMode = state?.teamMode ?? false;
+  const controllingTeam = teamMode ? state?.teams.find((t) => t.id === state?.controllingTeamId) ?? null : null;
+  const controllerName = teamMode
+    ? controllingTeam?.name ?? null
+    : state?.controllingPlayerId
+      ? players.find((p) => p.id === state.controllingPlayerId)?.name ?? null
+      : null;
+  // In team mode the acting captain answers the Daily Double on the team's behalf.
+  const ddActorId = teamMode ? controllingTeam?.actingCaptainId ?? null : state?.controllingPlayerId ?? null;
+  const ddActorName = teamMode
+    ? controllingTeam?.name ?? 'Controller'
+    : players.find((p) => p.id === state?.controllingPlayerId)?.name ?? 'Controller';
+  const showCancelDailyDouble =
+    state?.phase === 'DAILY_DOUBLE_WAGER' &&
+    state?.dailyDoubleWager == null &&
+    (teamMode
+      ? Boolean(controllingTeam && controllingTeam.connectedMemberIds.length === 0)
+      : state?.controllingPlayerId != null &&
+        players.find((p) => p.id === state.controllingPlayerId)?.connected === false);
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
   // Enable "undo last ruling" only when there is an actual ruling (correct or
   // incorrect) to undo. Manual score adjustments are not undoable via this control.
@@ -1045,18 +1366,16 @@ export function HostInProgress({
                     Reveal Daily Double Clue
                   </button>
                 )}
-                {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager == null &&
-                  state?.controllingPlayerId != null &&
-                  state?.players.find((p) => p.id === state.controllingPlayerId)?.connected === false && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={onCancelDailyDouble}
-                      data-testid="cancel-daily-double-button"
-                    >
-                      Cancel Daily Double / Return to Board
-                    </button>
-                  )}
+                {showCancelDailyDouble && (
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={onCancelDailyDouble}
+                    data-testid="cancel-daily-double-button"
+                  >
+                    Cancel Daily Double / Return to Board
+                  </button>
+                )}
                 {(state?.phase === 'CLUE_REVEALED' ||
                   (state?.phase === 'BUZZERS_ARMED' && state?.buzzWinnerId == null)) && (
                   <button
@@ -1068,13 +1387,10 @@ export function HostInProgress({
                     Reveal Answer / Return to Board
                   </button>
                 )}
-                {state?.phase === 'DAILY_DOUBLE_CLUE' && state?.controllingPlayerId && (
+                {state?.phase === 'DAILY_DOUBLE_CLUE' && ddActorId && (
                   <div className={styles.buzzedPanel} data-testid="daily-double-ruling">
                     <p>
-                      Daily Double:{' '}
-                      <strong>
-                        {state.players.find((p) => p.id === state.controllingPlayerId)?.name ?? 'Controller'}
-                      </strong>
+                      Daily Double: <strong>{ddActorName}</strong>
                     </p>
                     <div className={styles.actionRow}>
                       <button
@@ -1088,7 +1404,7 @@ export function HostInProgress({
                       <button
                         type="button"
                         className={styles.actionButton}
-                        onClick={() => onRuleIncorrect?.(state.controllingPlayerId!)}
+                        onClick={() => onRuleIncorrect?.(ddActorId)}
                         data-testid="rule-incorrect-button"
                       >
                         Incorrect
@@ -1180,6 +1496,14 @@ export function HostInProgress({
       <h2>Roster</h2>
       {players.length === 0 ? (
         <p>No contestants connected.</p>
+      ) : teamMode && state ? (
+        <TeamRoster
+          state={state}
+          showControl={state.phase === 'BOARD_SELECT'}
+          onSetCaptain={onSetCaptain}
+          onOverrideControlTeam={onOverrideControlTeam}
+          onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
+        />
       ) : (
         <ul className={styles.roster} data-testid="roster">
           {players.map((player) => (
@@ -1656,6 +1980,24 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleConfigureTeams = useCallback(
+    (enabled: boolean, teams: { id: string; name: string }[]) => {
+      hostSocket.configureTeams?.(enabled, teams);
+    },
+    [hostSocket],
+  );
+  const handleSetCaptain = useCallback(
+    (teamId: string, playerId: string) => {
+      hostSocket.setCaptain?.(teamId, playerId);
+    },
+    [hostSocket],
+  );
+  const handleOverrideControlTeam = useCallback(
+    (teamId: string) => {
+      hostSocket.overrideControlTeam?.(teamId);
+    },
+    [hostSocket],
+  );
   const handleRevealFinalAnswer = useCallback(() => {
     hostSocket.revealFinalAnswer?.();
   }, [hostSocket]);
@@ -1683,6 +2025,8 @@ export function HostContent() {
             onSetClueSelectionMode={handleSetClueSelectionMode}
             onRemovePlayer={handleRemovePlayer}
             onAdmitPlayer={handleAdmitPlayer}
+            onConfigureTeams={handleConfigureTeams}
+            onSetCaptain={handleSetCaptain}
             startError={hostSocket.error}
           />
         </>
@@ -1712,6 +2056,8 @@ export function HostContent() {
         onOpenFinalWagers={handleOpenFinalWagers}
         onForceFinalWagers={handleForceFinalWagers}
         onOverrideControl={handleOverrideControl}
+        onOverrideControlTeam={handleOverrideControlTeam}
+        onSetCaptain={handleSetCaptain}
         onRevealFinalAnswer={handleRevealFinalAnswer}
         onRuleFinalCorrect={handleRuleFinalCorrect}
         onRuleFinalIncorrect={handleRuleFinalIncorrect}

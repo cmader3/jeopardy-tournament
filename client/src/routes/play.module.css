@@ -739,3 +739,119 @@
   cursor: not-allowed;
 }
 
+.teamBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-1);
+  border: 1px solid var(--accent-gold);
+  border-radius: var(--radius-md, 0.5rem);
+}
+
+.teamBannerRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.teamBannerName {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-gold);
+}
+
+.teamRole {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.teamLocked {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--score-negative);
+}
+
+.teamPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.teamPickerHeading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.teamPickerOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.teamPickerButton {
+  flex: 1 1 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1rem;
+  background: var(--surface-2);
+  color: var(--text-light);
+  border: 2px solid var(--accent-gold);
+  border-radius: var(--radius-md, 0.5rem);
+  cursor: pointer;
+}
+
+.teamPickerButton:hover {
+  background: var(--surface-hover);
+}
+
+.teamPickerName {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  text-transform: uppercase;
+}
+
+.teamPickerCount {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.teamScores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.teamScoreRow {
+  flex: 1 1 40%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md, 0.5rem);
+}
+
+.teamScoreControlling {
+  border-color: var(--accent-gold);
+  outline: 2px solid var(--accent-gold);
+}
+
+.teamScoreName {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+

@@ -1072,3 +1072,146 @@ button.hostCell:hover {
   color: var(--value-gold);
 }
 
+.teamSetup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  margin: 0.5rem 0 1rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-md, 0.5rem);
+}
+
+.teamModeToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.teamSetupBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.teamSetupHint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.teamSetupRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.teamNameInput {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface-0);
+  color: var(--text-light);
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 0.35rem;
+  font-size: 1rem;
+}
+
+.teamSetupActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.teamSetupWarn {
+  margin: 0;
+  color: var(--score-negative);
+  font-size: 0.85rem;
+}
+
+.teamSetupSaved {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.teamRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.teamRosterGroup {
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md, 0.5rem);
+}
+
+.teamRosterControlling {
+  border-color: var(--value-gold);
+  outline: 2px solid var(--value-gold);
+}
+
+.teamRosterHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.teamRosterName {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--value-gold);
+}
+
+.teamRosterEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.teamRosterMembers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.teamRosterMembers li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.captainBadge {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  background: var(--value-gold);
+  color: var(--text-dark);
+}
+
+.actingBadge {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.unassignedPlayers {
+  margin-top: 0.75rem;
+}
+

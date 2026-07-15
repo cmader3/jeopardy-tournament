@@ -42,6 +42,10 @@ export interface SocketState<T> {
   advanceRound?: () => void;
   openFinalWagers?: () => void;
   overrideControl?: (playerId: string) => void;
+  configureTeams?: (enabled: boolean, teams: { id: string; name: string }[]) => void;
+  chooseTeam?: (teamId: string) => void;
+  setCaptain?: (teamId: string, playerId: string) => void;
+  overrideControlTeam?: (teamId: string) => void;
   revealFinalAnswer?: () => void;
   ruleFinalCorrect?: () => void;
   ruleFinalIncorrect?: () => void;
@@ -294,6 +298,22 @@ export function useSocket<T>(
     socketRef.current?.emit('override_control', { playerId });
   }, []);
 
+  const configureTeams = useCallback((enabled: boolean, teams: { id: string; name: string }[]) => {
+    socketRef.current?.emit('configure_teams', { enabled, teams });
+  }, []);
+
+  const chooseTeam = useCallback((teamId: string) => {
+    socketRef.current?.emit('choose_team', { teamId });
+  }, []);
+
+  const setCaptain = useCallback((teamId: string, playerId: string) => {
+    socketRef.current?.emit('set_captain', { teamId, playerId });
+  }, []);
+
+  const overrideControlTeam = useCallback((teamId: string) => {
+    socketRef.current?.emit('override_control_team', { teamId });
+  }, []);
+
   const revealFinalAnswer = useCallback(() => {
     socketRef.current?.emit('reveal_final_answer');
   }, []);
@@ -314,7 +334,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, admitPlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
+  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, admitPlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, configureTeams, chooseTeam, setCaptain, overrideControlTeam, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
 }
 
 export function getStoredContestantToken(): {

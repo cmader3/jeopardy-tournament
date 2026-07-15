@@ -57,10 +57,15 @@ function getStatusDescription(state: ContestantView): string {
       return `Score ${score}. Final Jeopardy. ${state.isEligibleForFinal ? 'You are eligible.' : 'You are not eligible.'}`;
     case 'FINAL_WAGER':
       return `Score ${score}. Place your Final Jeopardy wager.`;
-    case 'BOARD_SELECT':
-      return state.isControllingPlayer
-        ? `Score ${score}. It is your turn to select a clue.`
-        : `Score ${score}. Waiting for ${controller?.name ?? 'the controller'} to select a clue.`;
+    case 'BOARD_SELECT': {
+      if (state.isControllingPlayer) {
+        return `Score ${score}. It is your turn to select a clue.`;
+      }
+      const controllerLabel = state.teamMode
+        ? state.teams.find((t) => t.id === state.controllingTeamId)?.name ?? 'the controlling team'
+        : controller?.name ?? 'the controller';
+      return `Score ${score}. Waiting for ${controllerLabel} to select a clue.`;
+    }
     case 'CLUE_REVEALED':
       return `Score ${score}. Clue revealed. Buzzers are not yet armed.`;
     case 'BUZZERS_ARMED':
@@ -80,6 +85,104 @@ function getStatusDescription(state: ContestantView): string {
     default:
       return `Score ${score}.`;
   }
+}
+
+interface ScoreHolder {
+  id: string;
+  name: string;
+  score: number;
+}
+
+function getScoreHolders(state: ContestantView): ScoreHolder[] {
+  if (state.teamMode) {
+    return state.teams.map((t) => ({ id: t.id, name: t.name, score: t.score }));
+  }
+  return state.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
+}
+
+function TeamPicker({
+  state,
+  onChoose,
+}: {
+  state: ContestantView;
+  onChoose?: (teamId: string) => void;
+}) {
+  return (
+    <div className={styles.teamPicker} data-testid="team-picker">
+      <p className={styles.teamPickerHeading}>Choose your team</p>
+      <div className={styles.teamPickerOptions}>
+        {state.teams.map((team) => (
+          <button
+            key={team.id}
+            type="button"
+            className={styles.teamPickerButton}
+            data-testid={`choose-team-${team.id}`}
+            onClick={() => onChoose?.(team.id)}
+          >
+            <span className={styles.teamPickerName}>{team.name}</span>
+            <span className={styles.teamPickerCount}>
+              {team.memberIds.length} player{team.memberIds.length === 1 ? '' : 's'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TeamBanner({ state }: { state: ContestantView }) {
+  if (!state.teamMode || !state.teamId) return null;
+  const role = state.isTemporaryCaptain
+    ? 'You are the temporary captain'
+    : state.isCaptain
+      ? 'You are the team captain'
+      : 'Teammate';
+  return (
+    <div className={styles.teamBanner} data-testid="contestant-team-banner">
+      <div className={styles.teamBannerRow}>
+        <span className={styles.teamBannerName} data-testid="contestant-team-name">
+          {state.teamName}
+        </span>
+        <span
+          className={`${styles.scoreDisplay} ${(state.teamScore ?? 0) < 0 ? styles.negativeScore : ''}`}
+          data-testid="contestant-team-score"
+        >
+          {formatScore(state.teamScore ?? 0)}
+        </span>
+      </div>
+      <span className={styles.teamRole} data-testid="contestant-team-role">
+        {role}
+      </span>
+      {state.isTeamLockedOut && (
+        <span className={styles.teamLocked} data-testid="contestant-team-locked">
+          Your team is locked out for this clue.
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ContestantTeamScores({ state }: { state: ContestantView }) {
+  if (!state.teamMode) return null;
+  return (
+    <div className={styles.teamScores} data-testid="contestant-team-scores">
+      {state.teams.map((team) => (
+        <div
+          key={team.id}
+          className={`${styles.teamScoreRow} ${state.controllingTeamId === team.id ? styles.teamScoreControlling : ''}`}
+          data-testid={`contestant-team-score-row-${team.id}`}
+        >
+          <span className={styles.teamScoreName}>
+            {team.name}
+            {team.id === state.teamId ? ' (You)' : ''}
+          </span>
+          <span className={`${styles.scoreDisplay} ${team.score < 0 ? styles.negativeScore : ''}`}>
+            {formatScore(team.score)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const TOO_EARLY_DISPLAY_MS = 1500;
@@ -258,10 +361,13 @@ function DailyDoubleWager({
     state.round?.categories
       .flatMap((c) => c.clues)
       .reduce((max, clue) => Math.max(max, clue.value ?? 0), 0) ?? 0;
-  const maxWager = Math.max(me?.score ?? 0, highestValue);
+  const holderScore = state.teamMode ? state.teams.find((t) => t.id === state.controllingTeamId)?.score ?? 0 : me?.score ?? 0;
+  const maxWager = Math.max(holderScore, highestValue);
   const minWager = 5;
   const isLocked = state.dailyDoubleWager != null;
-  const controllerName = state.players.find((p) => p.id === state.controllingPlayerId)?.name ?? 'the controller';
+  const controllerName = state.teamMode
+    ? `${state.teams.find((t) => t.id === state.controllingTeamId)?.name ?? 'the controlling team'} captain`
+    : state.players.find((p) => p.id === state.controllingPlayerId)?.name ?? 'the controller';
 
   if (!state.isControllingPlayer) {
     return (
@@ -364,13 +470,27 @@ function FinalWager({
   const [amount, setAmount] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const me = state.players.find((p) => p.id === state.playerId);
-  const maxWager = me?.score ?? 0;
+  const maxWager = state.teamMode ? state.teamScore ?? 0 : me?.score ?? 0;
   const isLocked = state.finalWagerSubmitted;
+  const wagerOwnerLabel = state.teamMode ? "Your team's" : 'Your';
 
   if (!state.isEligibleForFinal) {
     return (
       <div data-testid="final-wager-ineligible">
-        <p>You are not eligible for Final Jeopardy.</p>
+        <p>{state.teamMode ? 'Your team is not eligible for Final Jeopardy.' : 'You are not eligible for Final Jeopardy.'}</p>
+      </div>
+    );
+  }
+
+  if (state.teamMode && !state.isActingCaptain) {
+    return (
+      <div data-testid="final-wager-team-passive">
+        <p className={styles.finalHeading}>Final Jeopardy Wager</p>
+        {isLocked ? (
+          <p data-testid="final-wager-locked-amount">Team wager: {formatScore(state.myFinalWager ?? 0)}</p>
+        ) : (
+          <p>Your team captain is entering the wager.</p>
+        )}
       </div>
     );
   }
@@ -378,8 +498,8 @@ function FinalWager({
   if (isLocked) {
     return (
       <div data-testid="final-wager-locked">
-        <p data-testid="final-wager-locked-message">Your Final Jeopardy wager is locked in.</p>
-        <p data-testid="final-wager-locked-amount">Your wager: {formatScore(state.myFinalWager ?? 0)}</p>
+        <p data-testid="final-wager-locked-message">{wagerOwnerLabel} Final Jeopardy wager is locked in.</p>
+        <p data-testid="final-wager-locked-amount">{state.teamMode ? 'Team' : 'Your'} wager: {formatScore(state.myFinalWager ?? 0)}</p>
       </div>
     );
   }
@@ -525,7 +645,20 @@ function FinalAnswer({
   if (!state.isEligibleForFinal) {
     return (
       <div data-testid="final-answer-ineligible">
-        <p>You are not eligible for Final Jeopardy.</p>
+        <p>{state.teamMode ? 'Your team is not eligible for Final Jeopardy.' : 'You are not eligible for Final Jeopardy.'}</p>
+      </div>
+    );
+  }
+
+  if (state.teamMode && !state.isActingCaptain) {
+    return (
+      <div data-testid="final-answer-team-passive">
+        <p className={styles.finalHeading}>Final Jeopardy Answer</p>
+        {isLocked ? (
+          <p data-testid="final-answer-locked-text">Team answer: {state.myFinalAnswer}</p>
+        ) : (
+          <p>Your team captain is entering the answer.</p>
+        )}
       </div>
     );
   }
@@ -533,8 +666,8 @@ function FinalAnswer({
   if (isLocked) {
     return (
       <div data-testid="final-answer-locked">
-        <p data-testid="final-answer-locked-message">Your Final Jeopardy answer is locked in.</p>
-        <p data-testid="final-answer-locked-text">Your answer: {state.myFinalAnswer}</p>
+        <p data-testid="final-answer-locked-message">{state.teamMode ? "Your team's" : 'Your'} Final Jeopardy answer is locked in.</p>
+        <p data-testid="final-answer-locked-text">{state.teamMode ? 'Team' : 'Your'} answer: {state.myFinalAnswer}</p>
       </div>
     );
   }
@@ -589,12 +722,14 @@ function FinalAnswer({
 }
 
 function FinalReveal({ state }: { state: ContestantView }) {
+  const holders = getScoreHolders(state);
+  const findHolder = (id: string | null) => (id ? holders.find((h) => h.id === id) : undefined);
   const currentPlayerId = state.finalRevealOrder[state.finalRevealIndex] ?? null;
-  const currentPlayer = currentPlayerId ? state.players.find((p) => p.id === currentPlayerId) : undefined;
+  const currentPlayer = findHolder(currentPlayerId);
   const currentAnswer = currentPlayerId ? state.finalRevealedAnswers[currentPlayerId] : undefined;
   const currentWager = currentPlayerId ? state.finalRevealedWagers[currentPlayerId] : undefined;
   const revealedPlayerIds = state.finalRevealOrder.slice(0, state.finalRevealIndex);
-  const isMe = currentPlayerId === state.playerId;
+  const isMe = state.teamMode ? currentPlayerId === state.teamId : currentPlayerId === state.playerId;
 
   return (
     <div data-testid="contestant-final-reveal">
@@ -642,7 +777,7 @@ function FinalReveal({ state }: { state: ContestantView }) {
           <h3 className={styles.finalRevealedHeading}>Revealed</h3>
           <ul className={styles.revealedList}>
             {revealedPlayerIds.map((playerId) => {
-              const player = state.players.find((p) => p.id === playerId);
+              const player = findHolder(playerId);
               if (!player) return null;
               return (
                 <li key={playerId} className={styles.revealedItem} data-testid="contestant-final-revealed-player">
@@ -675,21 +810,22 @@ function FinalReveal({ state }: { state: ContestantView }) {
 }
 
 function FinalStandings({ state }: { state: ContestantView }) {
-  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  const sorted = [...getScoreHolders(state)].sort((a, b) => b.score - a.score);
   const topScore = sorted[0]?.score ?? null;
   const coWinners = topScore != null ? sorted.filter((p) => p.score === topScore).map((p) => p.id) : [];
-  const me = state.players.find((p) => p.id === state.playerId);
+  const myId = state.teamMode ? state.teamId : state.playerId;
+  const me = sorted.find((h) => h.id === myId);
 
   return (
     <div data-testid="contestant-final-standings">
       {state.finalNoEligiblePlayers && (
         <p data-testid="contestant-final-no-eligible">
-          No contestants were eligible for Final Jeopardy.
+          {state.teamMode ? 'No teams were eligible for Final Jeopardy.' : 'No contestants were eligible for Final Jeopardy.'}
         </p>
       )}
       <h2 className={styles.finalHeading} data-testid="contestant-final-standings-heading">Final Standings</h2>
       <p data-testid="contestant-final-standings-self">
-        Your final score:{' '}
+        {state.teamMode ? "Your team's final score:" : 'Your final score:'}{' '}
         <span className={`${styles.scoreDisplay} ${me?.score != null && me.score < 0 ? styles.negativeScore : ''}`}>
           {formatScore(me?.score ?? 0)}
         </span>
@@ -836,12 +972,17 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               </span>
             </div>
           </div>
+          <TeamBanner state={gameState} />
           <div className={styles.srOnly} aria-live="polite" aria-atomic="true">
             {getStatusDescription(gameState)}
           </div>
           {gameState.phase === 'LOBBY' && (
             <>
-              <p>Waiting for the host to start the game.</p>
+              {gameState.teamMode && !gameState.teamId ? (
+                <TeamPicker state={gameState} onChoose={socket.chooseTeam} />
+              ) : (
+                <p>Waiting for the host to start the game.</p>
+              )}
               <div className={styles.lobbyPlayers} data-testid="lobby-players">
                 <p className={styles.lobbyPlayersHeading}>Players ({gameState.players.length})</p>
                 <ul className={styles.playerList}>
@@ -869,13 +1010,13 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
               <h2 data-testid="contestant-transition-heading">{transitionLabel}</h2>
               <p>Between-round scores</p>
               <ul data-testid="contestant-transition-scores">
-                {gameState.players.map((player) => (
-                  <li key={player.id} data-testid="contestant-transition-score">
-                    <span className={styles.contestantName}>{player.name}</span>
+                {getScoreHolders(gameState).map((holder) => (
+                  <li key={holder.id} data-testid="contestant-transition-score">
+                    <span className={styles.contestantName}>{holder.name}</span>
                     <span
-                      className={`${styles.transitionScore} ${styles.scoreDisplay} ${player.score < 0 ? styles.negativeScore : ''}`}
+                      className={`${styles.transitionScore} ${styles.scoreDisplay} ${holder.score < 0 ? styles.negativeScore : ''}`}
                     >
-                      {formatScore(player.score)}
+                      {formatScore(holder.score)}
                     </span>
                   </li>
                 ))}
@@ -889,9 +1030,13 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 {gameState.round?.categories[0]?.title ?? 'Final Category'}
               </p>
               {gameState.isEligibleForFinal ? (
-                <p data-testid="contestant-final-eligible">You are eligible for Final Jeopardy. Wait for the host to open wagers.</p>
+                <p data-testid="contestant-final-eligible">
+                  {gameState.teamMode ? 'Your team is eligible for Final Jeopardy.' : 'You are eligible for Final Jeopardy.'} Wait for the host to open wagers.
+                </p>
               ) : (
-                <p data-testid="contestant-final-ineligible">You are not eligible for Final Jeopardy.</p>
+                <p data-testid="contestant-final-ineligible">
+                  {gameState.teamMode ? 'Your team is not eligible for Final Jeopardy.' : 'You are not eligible for Final Jeopardy.'}
+                </p>
               )}
             </div>
           )}
@@ -910,11 +1055,16 @@ function ContestantLobby({ roomCode, name, onLeave, onTryAgain }: ContestantLobb
                 <p className={styles.instruction}>Select a clue from the board.</p>
               ) : gameState.clueSelectionMode === 'PLAYER' ? (
                 <p className={styles.instruction}>
-                  Waiting for {gameState.players.find((p) => p.id === gameState.controllingPlayerId)?.name ?? 'the controller'} to select a clue.
+                  Waiting for{' '}
+                  {gameState.teamMode
+                    ? gameState.teams.find((t) => t.id === gameState.controllingTeamId)?.name ?? 'the controlling team'
+                    : gameState.players.find((p) => p.id === gameState.controllingPlayerId)?.name ?? 'the controller'}{' '}
+                  to select a clue.
                 </p>
               ) : (
                 <p className={styles.instruction}>Waiting for the host to select a clue.</p>
               )}
+              <ContestantTeamScores state={gameState} />
               <ContestantGrid state={gameState} onSelectClue={socket.selectClue} />
             </>
           )}

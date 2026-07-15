@@ -40,6 +40,46 @@ function Scoreboard({ players, controllingPlayerId }: ScoreboardProps) {
   );
 }
 
+interface BoardScoreHolder {
+  id: string;
+  name: string;
+  score: number;
+}
+
+function getBoardHolders(state: BoardView): BoardScoreHolder[] {
+  if (state.teamMode) {
+    return state.teams.map((t) => ({ id: t.id, name: t.name, score: t.score }));
+  }
+  return state.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
+}
+
+function TeamScoreboard({
+  teams,
+  controllingTeamId,
+}: {
+  teams: BoardView['teams'];
+  controllingTeamId?: string | null;
+}) {
+  return (
+    <div className={styles.scoreboard} aria-live="polite" aria-atomic="false" data-testid="team-scoreboard">
+      {teams.map((team) => (
+        <div
+          key={team.id}
+          className={`${styles.scoreCard} ${team.id === controllingTeamId ? styles.controlling : ''}`}
+          data-testid="team-score-card"
+        >
+          <span className={`${styles.name} ${styles.truncated}`} data-testid="team-score-name">
+            {team.name}
+          </span>
+          <span className={`${styles.score} ${team.score < 0 ? styles.negative : ''}`}>
+            {formatScore(team.score)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface ShareableLinkProps {
   roomCode: string;
 }
@@ -244,15 +284,15 @@ function BetweenRoundScreen({ state }: BetweenRoundScreenProps) {
         {label}
       </h2>
       <div className={styles.betweenRoundScores} data-testid="between-round-scores">
-        {state.players.map((player) => (
+        {getBoardHolders(state).map((holder) => (
           <div
-            key={player.id}
-            className={`${styles.betweenRoundScore} ${player.id === state.controllingPlayerId ? styles.controlling : ''}`}
+            key={holder.id}
+            className={`${styles.betweenRoundScore} ${holder.id === (state.teamMode ? state.controllingTeamId : state.controllingPlayerId) ? styles.controlling : ''}`}
             data-testid="between-round-score"
           >
-            <span className={`${styles.name} ${styles.truncated}`}>{player.name}</span>
-            <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`}>
-              {formatScore(player.score)}
+            <span className={`${styles.name} ${styles.truncated}`}>{holder.name}</span>
+            <span className={`${styles.score} ${holder.score < 0 ? styles.negative : ''}`}>
+              {formatScore(holder.score)}
             </span>
           </div>
         ))}
@@ -338,16 +378,16 @@ function FinalWager({ state }: FinalWagerProps) {
       <div className={styles.finalWagerStatus} data-testid="final-wager-status">
         <h3 className={styles.finalWagerHeading}>Wagers are being submitted</h3>
         <div className={styles.finalPlayerList} data-testid="final-wager-player-list">
-          {state.players.map((player) => {
-            const eligible = eligibleSet.has(player.id);
-            const submitted = state.finalWagerSubmissionStatus[player.id] ?? false;
+          {getBoardHolders(state).map((holder) => {
+            const eligible = eligibleSet.has(holder.id);
+            const submitted = state.finalWagerSubmissionStatus[holder.id] ?? false;
             return (
               <div
-                key={player.id}
+                key={holder.id}
                 className={`${styles.finalPlayer} ${eligible ? styles.finalEligible : styles.finalIneligible}`}
                 data-testid="final-wager-player"
               >
-                <span className={styles.finalPlayerName}>{player.name}</span>
+                <span className={styles.finalPlayerName}>{holder.name}</span>
                 <span className={styles.finalPlayerStatus} data-testid={eligible ? (submitted ? 'final-wager-submitted' : 'final-wager-pending') : 'final-wager-not-participating'}>
                   {eligible ? (submitted ? 'Wager submitted' : 'Pending') : 'Not participating'}
                 </span>
@@ -372,19 +412,19 @@ function FinalIntro({ state }: FinalIntroProps) {
       </div>
       <div className={styles.finalEligibility}>
         <h3 className={styles.finalEligibilityHeading}>Final Jeopardy Eligibility</h3>
-        {state.players.length === 0 ? (
-          <p className={styles.finalNoPlayers}>No contestants joined.</p>
+        {getBoardHolders(state).length === 0 ? (
+          <p className={styles.finalNoPlayers}>{state.teamMode ? 'No teams joined.' : 'No contestants joined.'}</p>
         ) : (
           <div className={styles.finalPlayerList} data-testid="final-player-list">
-            {state.players.map((player) => {
-              const eligible = eligibleSet.has(player.id);
+            {getBoardHolders(state).map((holder) => {
+              const eligible = eligibleSet.has(holder.id);
               return (
                 <div
-                  key={player.id}
+                  key={holder.id}
                   className={`${styles.finalPlayer} ${eligible ? styles.finalEligible : styles.finalIneligible}`}
                   data-testid="final-player"
                 >
-                  <span className={styles.finalPlayerName}>{player.name}</span>
+                  <span className={styles.finalPlayerName}>{holder.name}</span>
                   <span className={styles.finalPlayerStatus} data-testid={eligible ? 'eligible' : 'not-participating'}>
                     {eligible ? 'Eligible' : 'Not participating'}
                   </span>
@@ -403,7 +443,7 @@ interface CompleteScreenProps {
 }
 
 function FinalStandings({ state }: CompleteScreenProps) {
-  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  const sorted = [...getBoardHolders(state)].sort((a, b) => b.score - a.score);
   const topScore = sorted[0]?.score ?? null;
   const coWinners = topScore != null ? sorted.filter((p) => p.score === topScore).map((p) => p.id) : [];
 
@@ -411,26 +451,26 @@ function FinalStandings({ state }: CompleteScreenProps) {
     <div className={styles.finalStandings} data-testid="final-standings">
       <h2 className={styles.finalStandingsHeading} data-testid="final-standings-heading">Final Standings</h2>
       <div className={styles.finalStandingsList} data-testid="final-standings-list">
-        {sorted.map((player) => {
-          const isWinner = coWinners.includes(player.id);
+        {sorted.map((holder) => {
+          const isWinner = coWinners.includes(holder.id);
           return (
             <div
-              key={player.id}
+              key={holder.id}
               className={`${styles.finalStanding} ${isWinner ? styles.finalStandingWinner : ''}`}
               data-testid="final-standing"
             >
               <span className={styles.finalStandingBadge}>
                 {isWinner && (
-                  <span className={styles.finalWinnerBadge} data-testid={`final-winner-${player.id}`}>
+                  <span className={styles.finalWinnerBadge} data-testid={`final-winner-${holder.id}`}>
                     Winner
                   </span>
                 )}
               </span>
-              <span className={`${styles.name} ${styles.truncated}`} data-testid={`final-standing-name-${player.id}`}>
-                {player.name}
+              <span className={`${styles.name} ${styles.truncated}`} data-testid={`final-standing-name-${holder.id}`}>
+                {holder.name}
               </span>
-              <span className={`${styles.score} ${player.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${player.id}`}>
-                {formatScore(player.score)}
+              <span className={`${styles.score} ${holder.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${holder.id}`}>
+                {formatScore(holder.score)}
               </span>
             </div>
           );
@@ -459,8 +499,10 @@ interface FinalRevealProps {
 }
 
 function FinalReveal({ state }: FinalRevealProps) {
+  const holders = getBoardHolders(state);
+  const findHolder = (id: string | null) => (id ? holders.find((h) => h.id === id) : undefined);
   const currentPlayerId = state.finalRevealOrder[state.finalRevealIndex] ?? null;
-  const currentPlayer = currentPlayerId ? state.players.find((p) => p.id === currentPlayerId) : undefined;
+  const currentPlayer = findHolder(currentPlayerId);
   const currentAnswer = currentPlayerId ? state.finalRevealedAnswers[currentPlayerId] : undefined;
   const currentWager = currentPlayerId ? state.finalRevealedWagers[currentPlayerId] : undefined;
   const revealedPlayerIds = state.finalRevealOrder.slice(0, state.finalRevealIndex);
@@ -503,7 +545,7 @@ function FinalReveal({ state }: FinalRevealProps) {
           <h3>Revealed</h3>
           <div className={styles.finalRevealedGrid}>
             {revealedPlayerIds.map((playerId) => {
-              const player = state.players.find((p) => p.id === playerId);
+              const player = findHolder(playerId);
               if (!player) return null;
               return (
                 <div key={playerId} className={styles.finalRevealedPlayer} data-testid="final-revealed-player">
@@ -762,9 +804,12 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
         <p className={styles.shareLabel}>Share this board display:</p>
         <ShareableLink roomCode={roomCode} />
       </div>
-      {state.phase !== 'COMPLETE' && (
-        <Scoreboard players={state.players} controllingPlayerId={state.controllingPlayerId} />
-      )}
+      {state.phase !== 'COMPLETE' &&
+        (state.teamMode ? (
+          <TeamScoreboard teams={state.teams} controllingTeamId={state.controllingTeamId} />
+        ) : (
+          <Scoreboard players={state.players} controllingPlayerId={state.controllingPlayerId} />
+        ))}
     </main>
   );
 }
