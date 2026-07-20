@@ -405,6 +405,7 @@
 }
 
 .hostCell {
+  position: relative;
   background: var(--jeopardy-blue);
   border: 2px solid var(--value-gold);
   border-radius: 0.25rem;
@@ -419,6 +420,20 @@
   cursor: pointer;
   transition: border-color var(--transition), color var(--transition),
     box-shadow var(--transition), transform var(--transition), background var(--transition);
+}
+
+.hostDdMarker {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  font-family: var(--font-body);
+  font-size: clamp(0.55rem, 1.1vw, 0.8rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--jeopardy-blue);
+  background: var(--value-gold);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
 }
 
 button.hostCell:hover {

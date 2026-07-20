@@ -540,7 +540,6 @@ function HostGrid({
         {state.round.categories.map((category) => (
           <div key={category.id} className={styles.hostCategoryHeader} data-testid="host-category-header">
             {category.title}
-            {category.clues.some((c) => c.isDailyDouble) && <span data-testid="dd-marker"> (DD)</span>}
           </div>
         ))}
         {rows.map((row) =>
@@ -580,6 +579,11 @@ function HostGrid({
                 onClick={() => onSelectClue?.(clue.id)}
               >
                 <span className={styles.value}>${clue.value}</span>
+                {clue.isDailyDouble && (
+                  <span className={styles.hostDdMarker} data-testid="dd-marker">
+                    DD
+                  </span>
+                )}
               </button>
             );
           }),

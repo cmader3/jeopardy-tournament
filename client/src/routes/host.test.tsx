@@ -586,11 +586,16 @@ describe('HostInProgress grid and selection', () => {
     expect(screen.getAllByTestId('host-clue-cell')).toHaveLength(3);
   });
 
-  it('shows daily double markers on the host grid', () => {
+  it('marks the daily double on its clue cell, not the category header', () => {
     const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound() });
     render(<HostInProgress roomCode="WXYZ" state={state} />);
 
-    expect(screen.getByTestId('dd-marker')).toBeInTheDocument();
+    const marker = screen.getByTestId('dd-marker');
+    expect(marker).toBeInTheDocument();
+    expect(marker.closest('[data-testid="host-clue-cell"]')?.getAttribute('data-clue-id')).toBe('cl2');
+    for (const header of screen.getAllByTestId('host-category-header')) {
+      expect(header.textContent).not.toContain('DD');
+    }
   });
 
   it('calls onSelectClue when a usable cell is clicked', async () => {
