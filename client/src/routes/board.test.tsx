@@ -28,6 +28,7 @@ vi.mock('../hooks/useServerTime.js', () => ({
 
 const recordedCues: string[] = [];
 const recordedThinkMusic: boolean[] = [];
+const recordedWinnerMusic = { count: 0 };
 const mockAudioMuted = { current: false };
 
 function MockUseBoardAudio() {
@@ -41,6 +42,10 @@ function MockUseBoardAudio() {
     recordedThinkMusic.push(active);
   }, []);
 
+  const playWinnerMusic = useCallback(() => {
+    recordedWinnerMusic.count += 1;
+  }, []);
+
   const toggleMute = useCallback(() => {
     setMuted((m) => {
       const next = !m;
@@ -49,7 +54,7 @@ function MockUseBoardAudio() {
     });
   }, []);
 
-  return { muted, toggleMute, playCue, setThinkMusic };
+  return { muted, toggleMute, playCue, setThinkMusic, playWinnerMusic };
 }
 
 vi.mock('../hooks/useBoardAudio.js', () => ({
@@ -67,6 +72,7 @@ function mockBoardAudioReset() {
   mockAudioMuted.current = false;
   recordedCues.length = 0;
   recordedThinkMusic.length = 0;
+  recordedWinnerMusic.count = 0;
 }
 
 beforeEach(() => {
@@ -1240,6 +1246,64 @@ describe('Board audio cues', () => {
     );
 
     expect(recordedThinkMusic).toContain(true);
+  });
+
+  it('plays the winner music once on entering COMPLETE and re-arms it for a new game', async () => {
+    const finalPlayers = [
+      { id: 'p1', name: 'Alice', score: 800, connected: true },
+      { id: 'p2', name: 'Bob', score: 200, connected: true },
+    ];
+
+    mockUseSocket(makeBoardState({ phase: 'BOARD_SELECT', round: makeRound() }));
+    const { rerender } = renderBoardRoute();
+    await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('board-grid');
+    expect(recordedWinnerMusic.count).toBe(0);
+
+    mockUseSocket(
+      makeFinalIntroState({ phase: 'COMPLETE', players: finalPlayers, finalEligiblePlayerIds: ['p1', 'p2'] }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('final-standings-heading');
+    expect(recordedWinnerMusic.count).toBe(1);
+
+    // A re-broadcast of the same winner screen must not replay the fanfare.
+    mockUseSocket(
+      makeFinalIntroState({ phase: 'COMPLETE', players: finalPlayers, finalEligiblePlayerIds: ['p1', 'p2'] }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+    expect(recordedWinnerMusic.count).toBe(1);
+
+    // Starting a new game and reaching its winner screen plays it again.
+    mockUseSocket(makeBoardState({ phase: 'BOARD_SELECT', round: makeRound() }));
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+    await screen.findByTestId('board-grid');
+
+    mockUseSocket(
+      makeFinalIntroState({ phase: 'COMPLETE', players: finalPlayers, finalEligiblePlayerIds: ['p1', 'p2'] }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+    await screen.findByTestId('final-standings-heading');
+    expect(recordedWinnerMusic.count).toBe(2);
   });
 
   it('cancels the scheduled timeUp cue when the phase changes away before the deadline', async () => {

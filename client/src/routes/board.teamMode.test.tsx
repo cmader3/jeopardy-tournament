@@ -19,8 +19,9 @@ vi.mock('../hooks/useBoardAudio.js', () => ({
   useBoardAudio: () => {
     const playCue = useCallback(() => {}, []);
     const setThinkMusic = useCallback(() => {}, []);
+    const playWinnerMusic = useCallback(() => {}, []);
     const toggleMute = useCallback(() => {}, []);
-    return { muted: false, toggleMute, playCue, setThinkMusic };
+    return { muted: false, toggleMute, playCue, setThinkMusic, playWinnerMusic };
   },
   __esModule: true,
 }));

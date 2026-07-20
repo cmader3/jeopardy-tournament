@@ -7,6 +7,7 @@ export interface UseBoardAudioResult {
   toggleMute: () => void;
   playCue: (cue: CueType) => void;
   setThinkMusic: (active: boolean) => void;
+  playWinnerMusic: () => void;
 }
 
 // Looping "think" music played from a file in client/public during the clue
@@ -14,6 +15,12 @@ export interface UseBoardAudioResult {
 // your own track; if the file is absent, playback simply stays silent.
 const THINK_MUSIC_SRC = '/think-music.mp3';
 const THINK_MUSIC_VOLUME = 0.5;
+
+// One-shot fanfare played a single time when the winner screen appears. Drop an
+// MP3 at client/public/winner-music.mp3 to use your own track; if the file is
+// absent, playback simply stays silent.
+const WINNER_MUSIC_SRC = '/winner-music.mp3';
+const WINNER_MUSIC_VOLUME = 0.6;
 
 const MUTE_KEY = 'jeopardy-board-muted';
 
@@ -126,6 +133,8 @@ export function useBoardAudio(): UseBoardAudioResult {
   const thinkAudioRef = useRef<HTMLAudioElement | null>(null);
   const thinkActiveRef = useRef(false);
 
+  const winnerAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const ensureContext = useCallback((): AudioContext | null => {
     if (!isAudioContextSupported()) return null;
     if (!ctxRef.current) {
@@ -204,6 +213,43 @@ export function useBoardAudio(): UseBoardAudioResult {
     [ensureThinkAudio, playThinkAudio, stopThinkAudio],
   );
 
+  const ensureWinnerAudio = useCallback((): HTMLAudioElement | null => {
+    if (!isAudioElementSupported()) return null;
+    if (!winnerAudioRef.current) {
+      const audio = new Audio(WINNER_MUSIC_SRC);
+      audio.loop = false;
+      audio.volume = WINNER_MUSIC_VOLUME;
+      audio.preload = 'auto';
+      winnerAudioRef.current = audio;
+    }
+    return winnerAudioRef.current;
+  }, []);
+
+  const stopWinnerMusic = useCallback(() => {
+    const audio = winnerAudioRef.current;
+    if (!audio) return;
+    try {
+      audio.pause();
+    } catch {
+      // ignore playback control failures
+    }
+  }, []);
+
+  const playWinnerMusic = useCallback(() => {
+    if (mutedRef.current) return;
+    const audio = ensureWinnerAudio();
+    if (!audio) return;
+    try {
+      audio.currentTime = 0;
+      const result = audio.play();
+      if (result && typeof result.catch === 'function') {
+        result.catch(() => {});
+      }
+    } catch {
+      // Autoplay blocked before a user gesture, or unsupported (e.g., jsdom).
+    }
+  }, [ensureWinnerAudio]);
+
   useEffect(() => {
     return () => {
       const audio = thinkAudioRef.current;
@@ -211,8 +257,13 @@ export function useBoardAudio(): UseBoardAudioResult {
         stopThinkAudio(audio, true);
         thinkAudioRef.current = null;
       }
+      const winner = winnerAudioRef.current;
+      if (winner) {
+        stopWinnerMusic();
+        winnerAudioRef.current = null;
+      }
     };
-  }, [stopThinkAudio]);
+  }, [stopThinkAudio, stopWinnerMusic]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !muted;
@@ -228,6 +279,12 @@ export function useBoardAudio(): UseBoardAudioResult {
       }
     }
 
+    // The winner fanfare is a one-shot: muting stops it, but unmuting does not
+    // restart it.
+    if (nextMuted) {
+      stopWinnerMusic();
+    }
+
     const ctx = ensureContext();
     if (ctx && ctx.state !== 'closed') {
       void ctx.resume().then(() => {
@@ -236,7 +293,7 @@ export function useBoardAudio(): UseBoardAudioResult {
         }
       });
     }
-  }, [muted, ensureContext, flushPending, playThinkAudio, stopThinkAudio]);
+  }, [muted, ensureContext, flushPending, playThinkAudio, stopThinkAudio, stopWinnerMusic]);
 
   // When the AudioContext becomes available/running, flush any cues that were queued before
   // a user gesture (e.g., the initial armed event before the board was interacted with).
@@ -259,5 +316,5 @@ export function useBoardAudio(): UseBoardAudioResult {
     };
   }, [muted, ensureContext, flushPending]);
 
-  return { muted, toggleMute, playCue, setThinkMusic };
+  return { muted, toggleMute, playCue, setThinkMusic, playWinnerMusic };
 }

@@ -654,11 +654,12 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const [gameState, setGameState] = useState<BoardView | null>(null);
   const socket = useSocket<BoardView>('board', roomCode, setGameState);
   const state = gameState ?? socket.data;
-  const { muted, toggleMute, playCue, setThinkMusic } = useBoardAudio();
+  const { muted, toggleMute, playCue, setThinkMusic, playWinnerMusic } = useBoardAudio();
 
   const prevPhaseRef = useRef<BoardView['phase'] | null>(null);
   const prevDeadlineRef = useRef<number | null>(null);
   const timeUpFiredForDeadlineRef = useRef<number | null>(null);
+  const winnerMusicFiredRef = useRef(false);
   const serverNow = useServerTime(state?.serverNow ?? 0);
   const serverNowRef = useRef(serverNow);
 
@@ -728,6 +729,19 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
     const finalTimerRunning = phase === 'FINAL_CLUE' && state?.deadline != null;
     setThinkMusic(phase === 'BUZZERS_ARMED' || finalTimerRunning);
   }, [state?.phase, state?.deadline, setThinkMusic]);
+
+  // Play the winner fanfare a single time when the final standings screen
+  // appears, and re-arm it if a later game reaches its own winner screen.
+  useEffect(() => {
+    if (state?.phase === 'COMPLETE') {
+      if (!winnerMusicFiredRef.current) {
+        winnerMusicFiredRef.current = true;
+        playWinnerMusic();
+      }
+    } else {
+      winnerMusicFiredRef.current = false;
+    }
+  }, [state?.phase, playWinnerMusic]);
 
   // Dedicated deadline-based effect for the timeUp cue. Serves as a backup
   // for the no-broadcast case (e.g., server doesn't broadcast the transition).

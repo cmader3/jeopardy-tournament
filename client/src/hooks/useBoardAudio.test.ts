@@ -311,6 +311,72 @@ describe('useBoardAudio', () => {
     expect(audio.play).toHaveBeenCalledTimes(2);
   });
 
+  it('plays the winner music once without looping', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.playWinnerMusic();
+    });
+
+    expect(audioMock!.instances.length).toBe(1);
+    const audio = audioMock!.instances[0];
+    expect(audio.src).toContain('winner-music.mp3');
+    expect(audio.loop).toBe(false);
+    expect(audio.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('restarts the winner music from the beginning on replay and reuses the element', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.playWinnerMusic();
+    });
+    const audio = audioMock!.instances[0];
+    audio.currentTime = 5;
+
+    act(() => {
+      result.current.playWinnerMusic();
+    });
+
+    expect(audio.currentTime).toBe(0);
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(audioMock!.instances.length).toBe(1);
+  });
+
+  it('does not play the winner music when muted', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.toggleMute();
+    });
+
+    act(() => {
+      result.current.playWinnerMusic();
+    });
+
+    expect(audioMock!.instances.length).toBe(0);
+  });
+
+  it('stops the winner music when muted mid-playback and does not restart it on unmute', () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    act(() => {
+      result.current.playWinnerMusic();
+    });
+    const audio = audioMock!.instances[0];
+    expect(audio.play).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.toggleMute();
+    });
+    expect(audio.pause).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.toggleMute();
+    });
+    expect(audio.play).toHaveBeenCalledTimes(1);
+  });
+
   it('degrades gracefully when AudioContext is unavailable', () => {
     Object.defineProperty(globalThis, 'AudioContext', {
       value: undefined,
