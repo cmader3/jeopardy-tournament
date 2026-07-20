@@ -1304,6 +1304,32 @@ export function HostInProgress({
         Phase: {state?.phase ?? '—'}
       </p>
       <ClueSelectionToggle mode={state?.clueSelectionMode ?? 'HOST'} onSetMode={onSetClueSelectionMode} />
+      <h2>Roster</h2>
+      {players.length === 0 ? (
+        <p>No contestants connected.</p>
+      ) : teamMode && state ? (
+        <TeamRoster
+          state={state}
+          showControl={state.phase === 'BOARD_SELECT'}
+          onSetCaptain={onSetCaptain}
+          onOverrideControlTeam={onOverrideControlTeam}
+          onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
+        />
+      ) : (
+        <ul className={styles.roster} data-testid="roster">
+          {players.map((player) => (
+            <RosterItem
+              key={`${player.id}-${player.score}`}
+              player={player}
+              isController={player.id === state?.controllingPlayerId}
+              onAdjustScore={onAdjustScore}
+              onOverrideControl={onOverrideControl}
+              onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
+              canAssignControl={state?.phase === 'BOARD_SELECT'}
+            />
+          ))}
+        </ul>
+      )}
       {state?.phase === 'CLUE_SELECTED' && pendingClue && (
         <div className={styles.stickyControls}>
           <div className={styles.currentClue} data-testid="pending-clue">
@@ -1492,32 +1518,6 @@ export function HostInProgress({
             </button>
           </div>
         </div>
-      )}
-      <h2>Roster</h2>
-      {players.length === 0 ? (
-        <p>No contestants connected.</p>
-      ) : teamMode && state ? (
-        <TeamRoster
-          state={state}
-          showControl={state.phase === 'BOARD_SELECT'}
-          onSetCaptain={onSetCaptain}
-          onOverrideControlTeam={onOverrideControlTeam}
-          onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
-        />
-      ) : (
-        <ul className={styles.roster} data-testid="roster">
-          {players.map((player) => (
-            <RosterItem
-              key={`${player.id}-${player.score}`}
-              player={player}
-              isController={player.id === state?.controllingPlayerId}
-              onAdjustScore={onAdjustScore}
-              onOverrideControl={onOverrideControl}
-              onRequestRemove={onRemovePlayer ? setPendingRemoval : undefined}
-              canAssignControl={state?.phase === 'BOARD_SELECT'}
-            />
-          ))}
-        </ul>
       )}
       <h2>Board</h2>
       {state && <HostGrid state={state} onSelectClue={onSelectClue} onReopenClue={onReopenClue} />}
