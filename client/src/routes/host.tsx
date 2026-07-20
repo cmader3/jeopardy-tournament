@@ -504,6 +504,7 @@ export interface HostInProgressProps {
   onAdvanceRound?: () => void;
   onOpenFinalWagers?: () => void;
   onForceFinalWagers?: () => void;
+  onStartFinalTimer?: () => void;
   onOverrideControl?: (playerId: string) => void;
   onOverrideControlTeam?: (teamId: string) => void;
   onSetCaptain?: (teamId: string, playerId: string) => void;
@@ -865,11 +866,13 @@ interface HostFinalWagerProps {
 
 interface HostFinalClueProps {
   state: HostView;
+  onStartFinalTimer?: () => void;
 }
 
-function HostFinalClue({ state }: HostFinalClueProps) {
+function HostFinalClue({ state, onStartFinalTimer }: HostFinalClueProps) {
   const category = state.round?.categories[0];
   const eligibleSet = new Set(state.finalEligiblePlayerIds);
+  const timerStarted = state.deadline != null;
 
   return (
     <div className={styles.hostFinalClue} data-testid="host-final-clue">
@@ -880,7 +883,18 @@ function HostFinalClue({ state }: HostFinalClueProps) {
       <p className={styles.hostFinalClueText} data-testid="host-final-clue-text">
         {state.currentClueText}
       </p>
-      <Countdown deadline={state.deadline} serverNow={state.serverNow} />
+      {timerStarted ? (
+        <Countdown deadline={state.deadline} serverNow={state.serverNow} />
+      ) : (
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={onStartFinalTimer}
+          data-testid="start-final-timer-button"
+        >
+          Start Timer
+        </button>
+      )}
       <ul className={styles.hostFinalAnswerList} data-testid="host-final-answer-list">
         {getHostHolders(state).map((holder) => {
           const eligible = eligibleSet.has(holder.id);
@@ -1111,6 +1125,7 @@ export function HostInProgress({
   onAdvanceRound,
   onOpenFinalWagers,
   onForceFinalWagers,
+  onStartFinalTimer,
   onOverrideControl,
   onOverrideControlTeam,
   onSetCaptain,
@@ -1261,7 +1276,7 @@ export function HostInProgress({
         <p className={styles.phase} data-testid="phase-indicator">
           Phase: {state.phase}
         </p>
-        <HostFinalClue state={state} />
+        <HostFinalClue state={state} onStartFinalTimer={onStartFinalTimer} />
       </main>
     );
   }
@@ -1982,6 +1997,9 @@ export function HostContent() {
   const handleForceFinalWagers = useCallback(() => {
     hostSocket.forceFinalWagers?.();
   }, [hostSocket]);
+  const handleStartFinalTimer = useCallback(() => {
+    hostSocket.startFinalTimer?.();
+  }, [hostSocket]);
   const handleOverrideControl = useCallback(
     (playerId: string) => {
       hostSocket.overrideControl?.(playerId);
@@ -2063,6 +2081,7 @@ export function HostContent() {
         onAdvanceRound={handleAdvanceRound}
         onOpenFinalWagers={handleOpenFinalWagers}
         onForceFinalWagers={handleForceFinalWagers}
+        onStartFinalTimer={handleStartFinalTimer}
         onOverrideControl={handleOverrideControl}
         onOverrideControlTeam={handleOverrideControlTeam}
         onSetCaptain={handleSetCaptain}

@@ -316,6 +316,8 @@ describe('Final Jeopardy in team mode', () => {
 
     state = reduce(state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
     expect(state.phase).toBe('FINAL_CLUE');
+    expect(state.deadline).toBeNull();
+    state = reduce(state, { type: 'START_FINAL_TIMER' }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'a', answer: 'Red answer' }, { now: NOW }).state;
     state = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'c', answer: 'Blue answer' }, { now: NOW }).state;
     expect(state.finalAnswers[RED.id]).toBe('Red answer');

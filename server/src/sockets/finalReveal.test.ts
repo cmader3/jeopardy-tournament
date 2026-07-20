@@ -266,6 +266,9 @@ async function advanceToFinalReveal(
   host.emit('force_final_wagers');
   await Promise.all([fcHost, fcBoard, fcAlice, fcBob, fcCarol]);
 
+  host.emit('start_final_timer');
+  await waitForState(alice, (s) => (s as { deadline: number | null }).deadline != null, 5000, 'alice-timer');
+
   const revealHost = waitForState(host, (s) => s.phase === 'FINAL_REVEAL', 5000, 'host-reveal');
   const revealBoard = waitForState(boardClient, (s) => s.phase === 'FINAL_REVEAL', 5000, 'board-reveal');
   const revealAlice = waitForState(alice, (s) => s.phase === 'FINAL_REVEAL', 5000, 'alice-reveal');

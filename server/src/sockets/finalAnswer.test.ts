@@ -247,6 +247,9 @@ async function advanceToFinalClue(
   await new Promise((resolve) => setTimeout(resolve, 200));
   host.emit('force_final_wagers');
   await Promise.all([fcHost, fcBoard, fcAlice, fcBob]);
+
+  host.emit('start_final_timer');
+  await waitForState(alice, (s) => (s as { deadline: number | null }).deadline != null, 5000, 'alice-timer');
 }
 
 describe('Final Jeopardy answer sockets', { timeout: 15000 }, () => {

@@ -259,6 +259,11 @@ describe('full game end-to-end', () => {
     expect(projectContestant(state, 'p2', NOW).myFinalWager).toBe(150);
     expect(projectContestant(state, 'p3', NOW).myFinalWager).toBeNull();
 
+    // The host reads the clue, then starts the answer timer.
+    expect(state.deadline).toBeNull();
+    state = reduce(state, { type: 'START_FINAL_TIMER' }, { now: NOW }).state;
+    expect(state.deadline).toBe(NOW + 30_000);
+
     // Final answers are secret during the answer phase.
     state = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1 }).state;
     state = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p2', answer: 'Rowling' }, { now: NOW + 2 }).state;

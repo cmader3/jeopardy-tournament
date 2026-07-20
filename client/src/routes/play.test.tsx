@@ -1507,6 +1507,40 @@ describe('PlayRoute', () => {
     expect(screen.getByTestId('final-answer-heading')).toHaveTextContent('Final Jeopardy Answer');
   });
 
+  it('tells an eligible contestant to wait until the host starts the timer', async () => {
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_CLUE',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        isEligibleForFinal: true,
+        canAnswer: true,
+        finalAnswerSubmitted: false,
+        myFinalAnswer: null,
+        deadline: null,
+      }),
+    );
+
+    render(<PlayRoute />);
+
+    const roomInput = screen.getByLabelText('Room Code');
+    const nameInput = screen.getByLabelText('Your Name');
+    const button = screen.getByRole('button', { name: 'Join Game' });
+
+    await userEvent.type(roomInput, 'ABCD');
+    await userEvent.type(nameInput, 'Alice');
+    await userEvent.click(button);
+
+    expect(await screen.findByTestId('final-answer-waiting')).toBeInTheDocument();
+    expect(screen.getByTestId('final-answer-waiting-text')).toHaveTextContent('Waiting for the host to start the timer');
+    expect(screen.queryByTestId('final-answer-text-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('countdown')).not.toBeInTheDocument();
+  });
+
   it('submits a written Final answer and locks the input', async () => {
     const submitFinalAnswer = vi.fn();
     mockUseSocket(
@@ -1514,6 +1548,7 @@ describe('PlayRoute', () => {
         phase: 'FINAL_CLUE',
         roundIndex: 1,
         round: makeFinalRound(),
+        deadline: 30_000,
         playerId: 'p1',
         players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
         currentClueId: 'cl-final',
@@ -1551,6 +1586,7 @@ describe('PlayRoute', () => {
         phase: 'FINAL_CLUE',
         roundIndex: 1,
         round: makeFinalRound(),
+        deadline: 30_000,
         playerId: 'p1',
         players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
         currentClueId: 'cl-final',

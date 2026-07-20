@@ -299,12 +299,22 @@ describe('FORCE_FINAL_WAGERS', () => {
 
 function setupFinalClue(scores: Record<string, number>): GameState {
   const wager = setupFinalWager(scores);
-  const forced = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW });
-  return forced.state;
+  const forced = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+  return reduce(forced, { type: 'START_FINAL_TIMER' }, { now: NOW }).state;
 }
 
 describe('FINAL_CLUE transition', () => {
-  it('sets the deadline from the board finalTimerSeconds when entering FINAL_CLUE', () => {
+  it('reveals the clue without starting the answer timer when wagers close', () => {
+    const wager = setupFinalWager({ p1: 200 });
+
+    const forced = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+
+    expect(forced.phase).toBe('FINAL_CLUE');
+    expect(forced.deadline).toBeNull();
+    expect(forced.currentClueId).toBe('cl-final');
+  });
+
+  it('sets the deadline from the board finalTimerSeconds when the host starts the timer', () => {
     const state = setupFinalClue({ p1: 200 });
 
     expect(state.phase).toBe('FINAL_CLUE');
@@ -322,9 +332,40 @@ describe('FINAL_CLUE transition', () => {
       players: [makePlayer({ id: 'p1', name: 'Alice', score: 200 })],
     };
     const wager = reduce(intro, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW }).state;
-    const clue = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+    const forced = reduce(wager, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+    expect(forced.deadline).toBeNull();
+
+    const clue = reduce(forced, { type: 'START_FINAL_TIMER' }, { now: NOW }).state;
 
     expect(clue.deadline).toBe(NOW + 45_000);
+  });
+});
+
+describe('START_FINAL_TIMER', () => {
+  it('starts the answer timer from finalTimerSeconds', () => {
+    const forced = reduce(setupFinalWager({ p1: 200 }), { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+
+    const result = reduce(forced, { type: 'START_FINAL_TIMER' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.deadline).toBe(NOW + 30_000);
+  });
+
+  it('is rejected outside of FINAL_CLUE', () => {
+    const wager = setupFinalWager({ p1: 200 });
+
+    const result = reduce(wager, { type: 'START_FINAL_TIMER' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+  });
+
+  it('is rejected when the timer has already started', () => {
+    const state = setupFinalClue({ p1: 200 });
+
+    const result = reduce(state, { type: 'START_FINAL_TIMER' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('already') });
+    expect(result.state.deadline).toBe(NOW + 30_000);
   });
 });
 
@@ -371,6 +412,15 @@ describe('SUBMIT_FINAL_ANSWER', () => {
     const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 31_000 });
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('closed') });
+    expect(result.state.finalAnswers['p1']).toBeUndefined();
+  });
+
+  it('is rejected before the host starts the timer', () => {
+    const forced = reduce(setupFinalWager({ p1: 200 }), { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+
+    const result = reduce(forced, { type: 'SUBMIT_FINAL_ANSWER', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('started') });
     expect(result.state.finalAnswers['p1']).toBeUndefined();
   });
 
@@ -453,7 +503,8 @@ function setupFinalClueWithWagers(scores: Record<string, number>, wagers: Record
   for (const [playerId, amount] of Object.entries(wagers)) {
     state = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId, amount }, { now: NOW }).state;
   }
-  return reduce(state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+  const forced = reduce(state, { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+  return reduce(forced, { type: 'START_FINAL_TIMER' }, { now: NOW }).state;
 }
 
 function setupFinalReveal(
@@ -685,6 +736,15 @@ describe('SUBMIT_FINAL_ANSWER_DRAFT', () => {
     const result = reduce(state, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 30_500 });
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('closed') });
+  });
+
+  it('is rejected before the host starts the timer', () => {
+    const forced = reduce(setupFinalWager({ p1: 200 }), { type: 'FORCE_FINAL_WAGERS' }, { now: NOW }).state;
+
+    const result = reduce(forced, { type: 'SUBMIT_FINAL_ANSWER_DRAFT', playerId: 'p1', answer: 'Tolkien' }, { now: NOW + 1_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('started') });
+    expect(result.state.finalAnswerDrafts['p1']).toBeUndefined();
   });
 
   it('accepts a draft within the grace window after the deadline', () => {

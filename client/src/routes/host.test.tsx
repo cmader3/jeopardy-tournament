@@ -1429,6 +1429,48 @@ describe('HostInProgress score tools', () => {
     expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
   });
 
+  it('shows a Start Timer button before the Final timer starts and starts it on click', async () => {
+    const onStartFinalTimer = vi.fn();
+    const state = makeHostState({
+      phase: 'FINAL_CLUE',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      currentClueId: 'cl-final',
+      currentClueText: 'He wrote The Hobbit',
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      finalEligiblePlayerIds: ['p1'],
+      finalWagerSubmissionStatus: { p1: true },
+      finalAnswerSubmissionStatus: { p1: false },
+      deadline: null,
+      serverNow: 0,
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onStartFinalTimer={onStartFinalTimer} />);
+
+    expect(screen.queryByTestId('countdown')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('start-final-timer-button'));
+    expect(onStartFinalTimer).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the Start Timer button and shows the countdown once the Final timer is running', () => {
+    const state = makeHostState({
+      phase: 'FINAL_CLUE',
+      roundIndex: 1,
+      round: makeFinalRound(),
+      currentClueId: 'cl-final',
+      currentClueText: 'He wrote The Hobbit',
+      players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      finalEligiblePlayerIds: ['p1'],
+      finalWagerSubmissionStatus: { p1: true },
+      finalAnswerSubmissionStatus: { p1: false },
+      deadline: 30_000,
+      serverNow: 0,
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} onStartFinalTimer={vi.fn()} />);
+
+    expect(screen.queryByTestId('start-final-timer-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('countdown')).toHaveTextContent('30');
+  });
+
   it('does not expose Final answers to the host before reveal', () => {
     const state = makeHostState({
       phase: 'FINAL_CLUE',

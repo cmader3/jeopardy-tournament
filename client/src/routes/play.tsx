@@ -687,6 +687,15 @@ function FinalAnswer({
     );
   }
 
+  if (deadline == null) {
+    return (
+      <div data-testid="final-answer-waiting">
+        <p className={styles.finalHeading} data-testid="final-answer-heading">Final Jeopardy Answer</p>
+        <p data-testid="final-answer-waiting-text">Get ready. Waiting for the host to start the timer.</p>
+      </div>
+    );
+  }
+
   const isAnswerError = (msg?: string | null) => Boolean(msg && /answer/i.test(msg));
   const displayError = validationError || (isAnswerError(error) ? error : null);
 

@@ -34,6 +34,7 @@ export type Intent =
   | { type: 'SUBMIT_FINAL_ANSWER'; playerId: string; answer: string }
   | { type: 'SUBMIT_FINAL_ANSWER_DRAFT'; playerId: string; answer: string }
   | { type: 'FORCE_FINAL_WAGERS' }
+  | { type: 'START_FINAL_TIMER' }
   | { type: 'CANCEL_DAILY_DOUBLE' }
   | { type: 'ADVANCE_ROUND' }
   | { type: 'OVERRIDE_CONTROL'; playerId: string }
@@ -247,6 +248,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleSubmitFinalAnswerDraft(state, intent, ctx);
     case 'FORCE_FINAL_WAGERS':
       return handleForceFinalWagers(state, ctx);
+    case 'START_FINAL_TIMER':
+      return handleStartFinalTimer(state, ctx);
     case 'CANCEL_DAILY_DOUBLE':
       return handleCancelDailyDouble(state);
     case 'REVEAL_CLUE':
@@ -1501,7 +1504,7 @@ function getFinalRoundClueId(state: GameState): string | null {
   return round.clues[0]?.id ?? null;
 }
 
-function closeFinalWagerPhase(state: GameState, ctx: ReducerCtx): GameState {
+function closeFinalWagerPhase(state: GameState, _ctx: ReducerCtx): GameState {
   const eligible = getFinalEligibleHolderIds(state);
   const finalWagers = { ...state.finalWagers };
   for (const holderId of eligible) {
@@ -1514,7 +1517,9 @@ function closeFinalWagerPhase(state: GameState, ctx: ReducerCtx): GameState {
     phase: 'FINAL_CLUE',
     finalWagers,
     currentClueId: getFinalRoundClueId(state),
-    deadline: ctx.now + state.board.finalTimerSeconds * 1000,
+    // The clue is revealed so the host can read it aloud; the answer timer does
+    // not start until the host explicitly starts it (START_FINAL_TIMER).
+    deadline: null,
   };
 }
 
@@ -1561,7 +1566,11 @@ function handleSubmitFinalAnswer(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final answer is being accepted right now' }] };
   }
 
-  if (state.deadline != null && ctx.now > state.deadline) {
+  if (state.deadline == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final Jeopardy timer has not started yet' }] };
+  }
+
+  if (ctx.now > state.deadline) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
   }
 
@@ -1596,7 +1605,11 @@ function handleSubmitFinalAnswerDraft(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No Final answer is being accepted right now' }] };
   }
 
-  if (state.deadline != null && ctx.now > state.deadline + FINAL_ANSWER_DRAFT_GRACE_MS) {
+  if (state.deadline == null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final Jeopardy timer has not started yet' }] };
+  }
+
+  if (ctx.now > state.deadline + FINAL_ANSWER_DRAFT_GRACE_MS) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final answer window has closed' }] };
   }
 
@@ -1628,6 +1641,21 @@ function handleForceFinalWagers(
   }
 
   return { state: closeFinalWagerPhase(state, ctx), effects: [{ type: 'BROADCAST_STATE' }] };
+}
+
+function handleStartFinalTimer(state: GameState, ctx: ReducerCtx): ReducerResult {
+  if (state.phase !== 'FINAL_CLUE') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final timer cannot be started right now' }] };
+  }
+
+  if (state.deadline != null) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The Final timer has already started' }] };
+  }
+
+  return {
+    state: { ...state, deadline: ctx.now + state.board.finalTimerSeconds * 1000 },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
 }
 
 function handleOpenFinalWagers(state: GameState): ReducerResult {

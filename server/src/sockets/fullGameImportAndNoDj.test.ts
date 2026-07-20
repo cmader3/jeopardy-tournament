@@ -483,6 +483,11 @@ describe('full game sockets - import and no-DJ coverage', { timeout: 45000 }, ()
       expect((bobFinalClue as { myFinalWager: number }).myFinalWager).toBe(200);
       expect(boardFinalClue).not.toHaveProperty('finalAnswers');
 
+      // The host reads the clue, then starts the answer timer.
+      awaitStates = collectStates(clients, (s) => (s.deadline as number | null) != null, 'final-timer-started');
+      host.emit('start_final_timer');
+      await awaitStates;
+
       awaitStates = collectStates(
         clients,
         (s) => {

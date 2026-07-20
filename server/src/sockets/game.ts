@@ -751,6 +751,25 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('start_final_timer', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can start the Final timer' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'START_FINAL_TIMER' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Start Final timer failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('reveal_final_answer', async () => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

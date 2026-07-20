@@ -356,6 +356,11 @@ describe('full game sockets', { timeout: 45000 }, () => {
     expect((boardFinalClue.finalWagerSubmissionStatus as Record<string, boolean>)[bobId]).toBe(true);
     expect(aliceFinalClue.myFinalWager).toBe(200);
 
+    // The host reads the clue, then starts the answer timer.
+    awaitStates = collectStates(clients, (s) => (s.deadline as number | null) != null, 'final-timer-started');
+    host.emit('start_final_timer');
+    await awaitStates;
+
     // Final answers are secret during the answer phase.
     awaitStates = collectStates(clients, (s) => s.phase === 'FINAL_CLUE' && (s.finalAnswerSubmissionStatus as Record<string, boolean>)[aliceId] === true, 'final-answer-alice');
     alice.emit('submit_final_answer', { answer: 'Tolkien' });
