@@ -137,6 +137,30 @@
   cursor: not-allowed;
 }
 
+/* In-game host action buttons: add clear hover/press/focus affordances so they
+   read as clickable rather than as static titles or board elements. */
+.hostInProgress .actionButton {
+  transition: transform var(--transition), box-shadow var(--transition),
+    border-color var(--transition), color var(--transition), background var(--transition);
+}
+
+.hostInProgress .actionButton:hover:not(:disabled) {
+  border-color: var(--value-gold-light);
+  color: var(--value-gold-light);
+  box-shadow: 0 0 0 3px rgba(240, 216, 120, 0.5), 0 6px 16px rgba(0, 0, 0, 0.45);
+  transform: translateY(-2px);
+}
+
+.hostInProgress .actionButton:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 0 0 2px rgba(240, 216, 120, 0.45);
+}
+
+.hostInProgress .actionButton:focus-visible {
+  outline: 3px solid var(--value-gold-light);
+  outline-offset: 2px;
+}
+
 /* Modernized buttons for the pre-game lobby only. The in-game host controls
    (.hostInProgress) intentionally keep their on-air styling. */
 .hostLobby .actionButton {
@@ -633,6 +657,10 @@ button.hostCell:hover {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.hostFinalIntro .actionButton {
+  align-self: flex-start;
 }
 
 .hostFinalIntro h2 {
