@@ -472,4 +472,51 @@ describe('disconnect and recovery during active play', { timeout: 15000 }, () =>
     bob.disconnect();
     await server.close();
   });
+
+  it('a stale duplicate socket closing does not disconnect a contestant still connected on another socket, so they can still buzz', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    // Alice ends up with a second, live socket (as happens on a mobile
+    // wifi/cellular handoff or tab resume) by reconnecting with her token.
+    // Both of Alice's sockets are now connected.
+    const aliceSecond = connectClient(server.url);
+    await waitForConnect(aliceSecond);
+    const secondStatePromise = waitForState(aliceSecond);
+    aliceSecond.emit('join', { role: 'contestant', roomCode, reconnectToken: tokenA.reconnectToken });
+    await secondStatePromise;
+
+    const previousGrace = process.env.DISCONNECT_GRACE_MS;
+    process.env.DISCONNECT_GRACE_MS = '100';
+    try {
+      // The original socket now drops. It must NOT mark Alice offline, because
+      // her second socket is still connected. Wait well past the grace window.
+      alice.disconnect();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const state = server.engine.getState(roomCode)!;
+      expect(state.players.find((p) => p.id === tokenA.playerId)?.connected).toBe(true);
+
+      // She can still buzz from her live socket.
+      const firstClue = state.board.rounds[0].clues[0];
+      host.emit('select_clue', { clueId: firstClue.id });
+      await Promise.all([waitForState(host), waitForState(boardClient), waitForState(aliceSecond), waitForState(bob)]);
+      host.emit('arm_buzzers');
+      await Promise.all([waitForState(host), waitForState(boardClient), waitForState(aliceSecond), waitForState(bob)]);
+
+      const hostBuzzed = waitForState(host, (s) => s.phase === 'BUZZED');
+      aliceSecond.emit('buzz', { playerId: tokenA.playerId });
+      const buzzedState = await hostBuzzed;
+      expect((buzzedState as { buzzWinnerId: string | null }).buzzWinnerId).toBe(tokenA.playerId);
+    } finally {
+      if (previousGrace === undefined) delete process.env.DISCONNECT_GRACE_MS;
+      else process.env.DISCONNECT_GRACE_MS = previousGrace;
+    }
+
+    aliceSecond.disconnect();
+    host.disconnect();
+    boardClient.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });

@@ -101,6 +101,23 @@ function disconnectKey(roomCode: string, playerId: string): string {
   return `${roomCode}:${playerId}`;
 }
 
+// Whether the player still has at least one live socket in their contestant
+// room (optionally ignoring one socket id). A player often ends up with
+// overlapping sockets for a moment (mobile wifi/cellular handoff, tab resume,
+// a client-forced reconnect, or a reconnection race), and a stale socket
+// closing must never knock a contestant who is still connected offline.
+function playerHasLiveSocket(
+  io: Server,
+  roomCode: string,
+  playerId: string,
+  excludeSocketId?: string,
+): boolean {
+  const sockets = io.sockets.adapter.rooms.get(contestantRoom(roomCode, playerId));
+  if (!sockets || sockets.size === 0) return false;
+  if (excludeSocketId && sockets.has(excludeSocketId)) return sockets.size > 1;
+  return sockets.size > 0;
+}
+
 function cancelPendingDisconnect(roomCode: string, playerId: string): void {
   const key = disconnectKey(roomCode, playerId);
   const timer = pendingDisconnects.get(key);
@@ -110,7 +127,12 @@ function cancelPendingDisconnect(roomCode: string, playerId: string): void {
   }
 }
 
-function schedulePlayerDisconnect(engine: GameEngine, roomCode: string, playerId: string): void {
+function schedulePlayerDisconnect(
+  io: Server,
+  engine: GameEngine,
+  roomCode: string,
+  playerId: string,
+): void {
   const key = disconnectKey(roomCode, playerId);
   const existing = pendingDisconnects.get(key);
   if (existing) {
@@ -118,6 +140,10 @@ function schedulePlayerDisconnect(engine: GameEngine, roomCode: string, playerId
   }
   const timer = setTimeout(() => {
     pendingDisconnects.delete(key);
+    // The player may have reconnected on another socket during the grace
+    // window (including a silent Socket.IO connection-state recovery that
+    // never re-emits `join`); never mark a still-connected contestant offline.
+    if (playerHasLiveSocket(io, roomCode, playerId)) return;
     engine.disconnectPlayer(roomCode, playerId).catch(() => {
       // Session may already be gone; ignore.
     });
@@ -1025,7 +1051,10 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       if (!meta) return;
 
       if (meta.role === 'contestant' && meta.playerId) {
-        schedulePlayerDisconnect(engine, meta.roomCode, meta.playerId);
+        // A duplicate/stale socket for this player closing must not schedule a
+        // disconnect while a newer socket is still connected.
+        if (playerHasLiveSocket(io, meta.roomCode, meta.playerId, socket.id)) return;
+        schedulePlayerDisconnect(io, engine, meta.roomCode, meta.playerId);
       }
     });
   });
