@@ -248,9 +248,11 @@ function GameStatusBanner({ state }: GameStatusBannerProps) {
   if (state.phase === 'BUZZED' && state.buzzWinnerId) {
     const winner = state.players.find((p) => p.id === state.buzzWinnerId);
     if (winner) {
+      const winnerTeam =
+        state.teamMode && winner.teamId ? state.teams.find((t) => t.id === winner.teamId) : null;
       return (
         <div className={styles.buzzedIndicator} data-testid="buzzed-indicator" role="status" aria-live="polite" aria-atomic="true">
-          Buzzed in: <strong data-testid="buzzed-player-name">{winner.name}</strong>
+          Buzzed in: <strong data-testid="buzzed-player-name">{winner.name}{winnerTeam ? ` (${winnerTeam.name})` : ''}</strong>
         </div>
       );
     }

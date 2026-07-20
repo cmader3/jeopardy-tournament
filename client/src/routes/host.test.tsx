@@ -690,6 +690,30 @@ describe('HostInProgress grid and selection', () => {
     expect(screen.getByTestId('rule-incorrect-button')).toBeInTheDocument();
   });
 
+  it('shows the buzzed contestant with their team name in parentheses in team mode', () => {
+    const state = makeHostState({
+      phase: 'BUZZED',
+      teamMode: true,
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+      buzzWinnerId: 'p2',
+      controllingTeamId: 't2',
+      players: [
+        { id: 'p1', name: 'Alice', score: 0, connected: true, teamId: 't1' },
+        { id: 'p2', name: 'Bob', score: 0, connected: true, teamId: 't2' },
+      ],
+      teams: [
+        { id: 't1', name: 'Red', score: 0, captainId: 'p1', actingCaptainId: 'p1', memberIds: ['p1'], connectedMemberIds: ['p1'] },
+        { id: 't2', name: 'Blue', score: 0, captainId: 'p2', actingCaptainId: 'p2', memberIds: ['p2'], connectedMemberIds: ['p2'] },
+      ],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('buzzed-player')).toHaveTextContent('Buzzed in: Bob (Blue)');
+  });
+
   it('calls onRuleCorrect and onRuleIncorrect when ruling buttons are clicked', async () => {
     const onRuleCorrect = vi.fn();
     const onRuleIncorrect = vi.fn();

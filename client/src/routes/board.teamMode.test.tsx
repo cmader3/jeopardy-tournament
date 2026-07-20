@@ -115,6 +115,19 @@ describe('Board team mode', () => {
     expect(scores).toHaveTextContent('Blue');
   });
 
+  it('shows the buzzed-in player with their team name in parentheses', async () => {
+    await showBoard(
+      makeBoardState({
+        phase: 'BUZZED',
+        currentClueId: 'cl1',
+        currentClueText: 'H2O is this compound',
+        buzzWinnerId: 'b',
+      }),
+    );
+
+    expect(await screen.findByTestId('buzzed-player-name')).toHaveTextContent('Bob (Blue)');
+  });
+
   it('renders team names in the final standings', async () => {
     await showBoard(
       makeBoardState({

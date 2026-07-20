@@ -1163,6 +1163,10 @@ export function HostInProgress({
       : state?.controllingPlayerId != null &&
         players.find((p) => p.id === state.controllingPlayerId)?.connected === false);
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
+  const buzzedTeam =
+    teamMode && buzzedPlayer?.teamId
+      ? state?.teams.find((t) => t.id === buzzedPlayer?.teamId) ?? null
+      : null;
   // Enable "undo last ruling" only when there is an actual ruling (correct or
   // incorrect) to undo. Manual score adjustments are not undoable via this control.
   const hasUndoableRuling = state?.auditLog?.some(
@@ -1441,7 +1445,7 @@ export function HostInProgress({
                 {state?.phase === 'BUZZED' && buzzedPlayer && (
                   <div className={styles.buzzedPanel} data-testid="buzzed-player">
                     <p>
-                      Buzzed in: <strong className={styles.nameCaps}>{buzzedPlayer.name}</strong>
+                      Buzzed in: <strong className={styles.nameCaps}>{buzzedPlayer.name}{buzzedTeam ? ` (${buzzedTeam.name})` : ''}</strong>
                     </p>
                     <div className={styles.actionRow}>
                       <button
