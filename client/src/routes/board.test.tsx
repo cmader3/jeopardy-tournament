@@ -1200,6 +1200,48 @@ describe('Board audio cues', () => {
     expect(recordedCues.filter((cue) => cue === 'timeUp')).toHaveLength(1);
   });
 
+  it('does not start the Final think music until the host starts the timer', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+        deadline: null,
+        serverNow: 0,
+      }),
+    );
+
+    const { rerender } = renderBoardRoute();
+    await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    await screen.findByTestId('clue-text');
+    expect(recordedThinkMusic).not.toContain(true);
+
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_CLUE',
+        currentClueId: 'cl-final',
+        currentClueText: 'He wrote The Hobbit',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalEligiblePlayerIds: ['p1'],
+        finalWagerSubmissionStatus: { p1: true },
+        deadline: 30_000,
+        serverNow: 0,
+      }),
+    );
+    rerender(
+      <MemoryRouter>
+        <BoardRoute />
+      </MemoryRouter>,
+    );
+
+    expect(recordedThinkMusic).toContain(true);
+  });
+
   it('cancels the scheduled timeUp cue when the phase changes away before the deadline', async () => {
     mockUseSocket(
       makeBoardState({

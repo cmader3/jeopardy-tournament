@@ -723,8 +723,11 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   // it as soon as the phase ends (buzz-in, time-up, or reveal).
   useEffect(() => {
     const phase = state?.phase;
-    setThinkMusic(phase === 'BUZZERS_ARMED' || phase === 'FINAL_CLUE');
-  }, [state?.phase, setThinkMusic]);
+    // In Final Jeopardy the clue is revealed before the host starts the timer,
+    // so the think music must wait until the answer timer is actually running.
+    const finalTimerRunning = phase === 'FINAL_CLUE' && state?.deadline != null;
+    setThinkMusic(phase === 'BUZZERS_ARMED' || finalTimerRunning);
+  }, [state?.phase, state?.deadline, setThinkMusic]);
 
   // Dedicated deadline-based effect for the timeUp cue. Serves as a backup
   // for the no-broadcast case (e.g., server doesn't broadcast the transition).
