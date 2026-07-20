@@ -1059,6 +1059,33 @@
   justify-content: center;
 }
 
+.previewCategoryTitleInput {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-transform: inherit;
+  text-align: center;
+  padding: 0.15rem 0.25rem;
+  border-radius: 0.2rem;
+}
+
+.previewCategoryTitleInput:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.previewCategoryTitleInput:focus {
+  border-color: var(--value-gold);
+  outline: none;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.previewCategoryTitleInput::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
 .previewCell,
 .previewCellFinal,
 .previewCellDailyDouble {

@@ -143,8 +143,8 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    expect(await screen.findByText('Science', { selector: 'div' })).toBeInTheDocument();
-    expect(screen.getByText('History', { selector: 'div' })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^jeopardy round category 1 title$/i)).toHaveValue('Science');
+    expect(screen.getByLabelText(/^jeopardy round category 2 title$/i)).toHaveValue('History');
     expect(screen.getByDisplayValue('Water symbol?')).toBeInTheDocument();
     expect(screen.getByDisplayValue('H2O')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Berlin Wall year?')).toBeInTheDocument();
@@ -200,7 +200,7 @@ describe('ImportBoard', () => {
     await userEvent.click(uploadButton);
 
     expect(await screen.findByText('Final Jeopardy Round')).toBeInTheDocument();
-    expect(screen.getByText('Literature', { selector: 'div' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^final jeopardy round category 1 title$/i)).toHaveValue('Literature');
     expect(screen.getByDisplayValue('He wrote The Hobbit')).toBeInTheDocument();
     expect(screen.queryByText(/\$200/)).not.toBeInTheDocument();
   });
@@ -290,7 +290,9 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    expect(await screen.findAllByText('Science', { selector: 'div' })).toHaveLength(2);
+    await screen.findByLabelText(/board name/i);
+    expect(screen.getByLabelText(/^jeopardy round category 1 title$/i)).toHaveValue('Science');
+    expect(screen.getByLabelText(/^jeopardy round category 2 title$/i)).toHaveValue('Science');
     expect(screen.getByDisplayValue('Water symbol?')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Speed of light?')).toBeInTheDocument();
   });
@@ -330,7 +332,7 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    expect(await screen.findByText('Café', { selector: 'div' })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^jeopardy round category 1 title$/i)).toHaveValue('Café');
     expect(screen.getByDisplayValue('🐱, "meow"')).toBeInTheDocument();
   });
 
@@ -399,7 +401,7 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    await screen.findByText('Science', { selector: 'div' });
+    await screen.findByLabelText(/board name/i);
     const clueTextareas = screen.getAllByLabelText(/clue text/i);
     const answerTextareas = screen.getAllByLabelText(/answer/i);
 
@@ -567,7 +569,7 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    await screen.findByText('Science', { selector: 'div' });
+    await screen.findByLabelText(/board name/i);
     const valueInputs = screen.getAllByLabelText(/value/i);
     await userEvent.clear(valueInputs[0]);
     await userEvent.type(valueInputs[0], '250');
@@ -599,7 +601,7 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    await screen.findByText('Science', { selector: 'div' });
+    await screen.findByLabelText(/board name/i);
     const answerInputs = screen.getAllByLabelText(/answer/i);
     await userEvent.clear(answerInputs[0]);
     await userEvent.type(answerInputs[0], 'Dihydrogen monoxide');
@@ -631,8 +633,8 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    await screen.findByText('Science', { selector: 'div' });
-    const categorySelects = screen.getAllByLabelText(/category/i);
+    await screen.findByLabelText(/board name/i);
+    const categorySelects = screen.getAllByRole('combobox');
     await userEvent.selectOptions(categorySelects[0], 'History');
 
     const saveButton = screen.getByRole('button', { name: /save board/i });
@@ -709,5 +711,90 @@ describe('ImportBoard', () => {
     await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
     const payload = api.createBoard.mock.calls[0][0];
     expect(payload.includeDoubleJeopardy).toBe(true);
+  });
+
+  it('reflects an edited category title in the saved board payload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText(/upload a spreadsheet/i), file);
+    await userEvent.click(screen.getByRole('button', { name: /upload/i }));
+
+    const titleInput = await screen.findByLabelText(/^jeopardy round category 1 title$/i);
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, 'Chemistry');
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.rounds[0].categories[0].title).toBe('Chemistry');
+  });
+
+  it('allows editing the Final Jeopardy category title after upload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makeDoubleJeopardyPreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makeDoubleJeopardyPreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText(/upload a spreadsheet/i), file);
+    await userEvent.click(screen.getByRole('button', { name: /upload/i }));
+
+    const finalTitle = await screen.findByLabelText(/^final jeopardy round category 1 title$/i);
+    expect(finalTitle).toHaveValue('Literature');
+    await userEvent.clear(finalTitle);
+    await userEvent.type(finalTitle, 'World Capitals');
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    const finalRound = payload.rounds.find((round: { type: string }) => round.type === 'FINAL');
+    expect(finalRound.categories[0].title).toBe('World Capitals');
+  });
+
+  it('lets you mark a clue as a Daily Double after upload', async () => {
+    const api = makeMockApi();
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText(/upload a spreadsheet/i), file);
+    await userEvent.click(screen.getByRole('button', { name: /upload/i }));
+
+    await screen.findByLabelText(/board name/i);
+    const ddCheckboxes = screen.getAllByLabelText(/daily double/i);
+    expect(ddCheckboxes[0]).not.toBeChecked();
+    expect(ddCheckboxes[1]).toBeChecked();
+    await userEvent.click(ddCheckboxes[0]);
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    expect(payload.rounds[0].categories[0].clues[0].isDailyDouble).toBe(true);
   });
 });

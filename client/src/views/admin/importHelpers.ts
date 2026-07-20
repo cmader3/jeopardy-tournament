@@ -22,6 +22,52 @@ export function setIncludeDoubleJeopardy(board: EditableBoard, enabled: boolean)
   return { ...board, includeDoubleJeopardy: enabled };
 }
 
+export function updateCategoryTitle(
+  board: EditableBoard,
+  roundType: RoundInput['type'],
+  categoryIndex: number,
+  title: string,
+): EditableBoard {
+  const rounds = board.rounds.map((round) => {
+    if (round.type !== roundType) return round;
+
+    const categories = round.categories.map((category, index) =>
+      index === categoryIndex ? { ...category, title } : category,
+    );
+
+    return { ...round, categories };
+  });
+
+  return { ...board, rounds };
+}
+
+export function setClueDailyDouble(
+  board: EditableBoard,
+  roundType: RoundInput['type'],
+  categoryIndex: number,
+  clueIndex: number,
+  isDailyDouble: boolean,
+): EditableBoard {
+  const rounds = board.rounds.map((round) => {
+    if (round.type !== roundType) return round;
+
+    const categories = round.categories.map((category, index) => {
+      if (index !== categoryIndex) return category;
+
+      return {
+        ...category,
+        clues: category.clues.map((clue, index) =>
+          index === clueIndex ? { ...clue, isDailyDouble } : clue,
+        ),
+      };
+    });
+
+    return { ...round, categories };
+  });
+
+  return { ...board, rounds };
+}
+
 export function moveClueToCategory(
   board: EditableBoard,
   roundType: RoundInput['type'],

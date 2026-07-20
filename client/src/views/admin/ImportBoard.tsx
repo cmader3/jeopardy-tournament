@@ -5,8 +5,10 @@ import {
   createEditableBoard,
   moveClueToCategory,
   parsePositiveInteger,
+  setClueDailyDouble,
   setIncludeDoubleJeopardy,
   updateBoardName,
+  updateCategoryTitle,
   updateClueAnswer,
   updateClueText,
   updateClueValue,
@@ -252,12 +254,22 @@ function EditablePreview({ preview, board, onChange, onSave, onCancel, isSaving,
                   className={styles.previewGrid}
                   style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(160px, 1fr))` }}
                 >
-                  {round.categories.map((category) => (
+                  {round.categories.map((category, categoryIndex) => (
                     <div
                       key={`${round.type}-cat-${category.order}`}
                       className={styles.previewCategoryHeader}
                     >
-                      {category.title}
+                      <input
+                        type="text"
+                        aria-label={`${roundTitle(round.type)} category ${categoryIndex + 1} title`}
+                        className={styles.previewCategoryTitleInput}
+                        value={category.title}
+                        placeholder="Category"
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          onChange(updateCategoryTitle(board, round.type, categoryIndex, event.target.value))
+                        }
+                      />
                     </div>
                   ))}
 
@@ -296,6 +308,10 @@ function EditablePreview({ preview, board, onChange, onSave, onCancel, isSaving,
                         onChange(updateClueAnswer(board, round.type, categoryIndex, rowIndex, answer));
                       };
 
+                      const handleDailyDoubleChange = (checked: boolean) => {
+                        onChange(setClueDailyDouble(board, round.type, categoryIndex, rowIndex, checked));
+                      };
+
                       return (
                         <div key={`${round.type}-cell-${category.order}-${clue.row}`} className={cellClass}>
                           <label className={styles.previewEditLabel}>
@@ -326,6 +342,19 @@ function EditablePreview({ preview, board, onChange, onSave, onCancel, isSaving,
                                 disabled={isSaving}
                                 className={styles.previewEditInput}
                               />
+                            </label>
+                          )}
+
+                          {!isFinal && (
+                            <label className={styles.dailyDoubleLabel}>
+                              <input
+                                type="checkbox"
+                                aria-label="Daily Double"
+                                checked={clue.isDailyDouble ?? false}
+                                onChange={(event) => handleDailyDoubleChange(event.target.checked)}
+                                disabled={isSaving}
+                              />
+                              Daily Double
                             </label>
                           )}
 
