@@ -42,6 +42,7 @@ function mockUseSocket(overrides: Record<string, unknown> = {}) {
     selectClue: vi.fn(),
     revealClue: vi.fn(),
     revealAnswer: vi.fn(),
+    returnToBoard: vi.fn(),
     armBuzzers: vi.fn(),
     buzz: vi.fn(),
     ruleCorrect: vi.fn(),
@@ -701,6 +702,47 @@ describe('HostInProgress grid and selection', () => {
 
     await userEvent.click(screen.getByTestId('reveal-answer-button'));
     expect(onRevealAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Return to Board before Reveal Answer during CLUE_REVEALED', () => {
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    const returnButton = screen.getByTestId('return-to-board-button');
+    const revealButton = screen.getByTestId('reveal-answer-button');
+    expect(returnButton).toHaveTextContent('Return to Board');
+    expect(revealButton).toHaveTextContent('Reveal Answer');
+    expect(returnButton.compareDocumentPosition(revealButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('calls onReturnToBoard without revealing the answer when Return to Board is clicked', async () => {
+    const onReturnToBoard = vi.fn();
+    const onRevealAnswer = vi.fn();
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      answer: 'Water',
+    });
+    render(
+      <HostInProgress
+        roomCode="WXYZ"
+        state={state}
+        onReturnToBoard={onReturnToBoard}
+        onRevealAnswer={onRevealAnswer}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('return-to-board-button'));
+    expect(onReturnToBoard).toHaveBeenCalledTimes(1);
+    expect(onRevealAnswer).not.toHaveBeenCalled();
   });
 
   it('shows the arm buzzers button during CLUE_REVEALED', () => {

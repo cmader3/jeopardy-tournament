@@ -567,6 +567,25 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('return_to_board', async () => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can return to the board' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(meta.roomCode, { type: 'RETURN_TO_BOARD' }, { now: Date.now() });
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Return to board failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('arm_buzzers', async () => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

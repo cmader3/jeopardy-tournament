@@ -29,6 +29,7 @@ export type Intent =
   | { type: 'TIME_EXPIRE' }
   | { type: 'REVEAL_CLUE' }
   | { type: 'REVEAL_ANSWER' }
+  | { type: 'RETURN_TO_BOARD' }
   | { type: 'SUBMIT_DD_WAGER'; playerId: string; amount: number }
   | { type: 'SUBMIT_FINAL_WAGER'; playerId: string; amount: number }
   | { type: 'SUBMIT_FINAL_ANSWER'; playerId: string; answer: string }
@@ -256,6 +257,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRevealClue(state);
     case 'REVEAL_ANSWER':
       return handleRevealAnswer(state);
+    case 'RETURN_TO_BOARD':
+      return handleReturnToBoard(state);
     case 'ADVANCE_ROUND':
       return handleAdvanceRound(state);
     case 'OVERRIDE_CONTROL':
@@ -1358,6 +1361,26 @@ function handleRevealAnswer(state: GameState): ReducerResult {
     state: {
       ...resolveClueReturnToBoard(state, state.currentClueId),
       revealedAnswer: clue?.answer ?? null,
+      lastOutcome: null,
+    },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleReturnToBoard(state: GameState): ReducerResult {
+  const canReturn = state.phase === 'CLUE_REVEALED' || (state.phase === 'BUZZERS_ARMED' && state.buzzWinnerId === null);
+  if (!canReturn) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No clue is available to close right now' }] };
+  }
+
+  if (!state.currentClueId) {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No current clue' }] };
+  }
+
+  return {
+    state: {
+      ...resolveClueReturnToBoard(state, state.currentClueId),
+      revealedAnswer: null,
       lastOutcome: null,
     },
     effects: [{ type: 'BROADCAST_STATE' }],

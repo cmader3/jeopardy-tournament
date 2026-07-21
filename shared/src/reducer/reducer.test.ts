@@ -1006,6 +1006,53 @@ describe('REVEAL_ANSWER', () => {
   });
 });
 
+describe('RETURN_TO_BOARD', () => {
+  it('resolves the clue and returns to BOARD_SELECT without revealing the answer', () => {
+    const state = setupClueRevealed();
+
+    const result = reduce(state, { type: 'RETURN_TO_BOARD' }, { now: NOW });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.usedClueIds).toContain('cl1');
+    expect(result.state.revealedAnswer).toBeNull();
+    expect(result.state.lastOutcome).toBeNull();
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+  });
+
+  it('returns to the board without revealing when no one buzzed after arming', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+
+    const result = reduce(state, { type: 'RETURN_TO_BOARD' }, { now: NOW + 1000 });
+
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.usedClueIds).toContain('cl1');
+    expect(result.state.revealedAnswer).toBeNull();
+    expect(result.state.players.every((p) => p.score === 0)).toBe(true);
+  });
+
+  it('is rejected when no clue is revealed', () => {
+    const board = makeBoard();
+    const state = createInitialState('session-1', 'ABCD', board);
+
+    const result = reduce(state, { type: 'RETURN_TO_BOARD' }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('No clue') });
+  });
+
+  it('is rejected when a contestant has already buzzed in', () => {
+    let state = setupClueRevealed();
+    state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW }).state;
+    state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 10 }).state;
+
+    const result = reduce(state, { type: 'RETURN_TO_BOARD' }, { now: NOW + 100 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('right now') });
+    expect(result.state.phase).toBe('BUZZED');
+  });
+});
+
 function setupClueRevealed(): GameState {
   const board = makeBoard();
   let state = createInitialState('session-1', 'ABCD', board);

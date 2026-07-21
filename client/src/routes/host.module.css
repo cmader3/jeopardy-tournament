@@ -161,6 +161,30 @@
   outline-offset: 2px;
 }
 
+/* Reveal Answer is the least-used in-game control, so it reads as a
+   de-emphasized red/caution button (distinct from the primary blue actions)
+   to keep the host from clicking it by reflex and exposing the answer. */
+.hostInProgress .revealAnswerButton {
+  background: transparent;
+  border-color: var(--incorrect-red);
+  color: var(--incorrect-red);
+}
+
+.hostInProgress .revealAnswerButton:hover:not(:disabled) {
+  border-color: var(--incorrect-red);
+  color: var(--text-light);
+  background: rgba(198, 40, 40, 0.28);
+  box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.35), 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.hostInProgress .revealAnswerButton:active:not(:disabled) {
+  box-shadow: 0 0 0 2px rgba(198, 40, 40, 0.4);
+}
+
+.hostInProgress .revealAnswerButton:focus-visible {
+  outline-color: var(--incorrect-red);
+}
+
 /* Modernized buttons for the pre-game lobby only. The in-game host controls
    (.hostInProgress) intentionally keep their on-air styling. */
 .hostLobby .actionButton {

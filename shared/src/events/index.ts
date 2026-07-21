@@ -14,6 +14,7 @@ export const ClientToServer = {
   FORCE_FINAL_WAGERS: 'force_final_wagers',
   REVEAL_CLUE: 'reveal_clue',
   REVEAL_ANSWER: 'reveal_answer',
+  RETURN_TO_BOARD: 'return_to_board',
   CANCEL_DAILY_DOUBLE: 'cancel_daily_double',
   ADVANCE_ROUND: 'advance_round',
   OPEN_FINAL_WAGERS: 'open_final_wagers',

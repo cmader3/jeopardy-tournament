@@ -122,6 +122,7 @@ function mockUseSocket(state: ContestantView | null, error: string | null = null
     leaveGame: vi.fn(),
     selectClue: vi.fn(),
     revealAnswer: vi.fn(),
+    returnToBoard: vi.fn(),
     armBuzzers: vi.fn(),
     buzz: vi.fn(),
     ruleCorrect: vi.fn(),

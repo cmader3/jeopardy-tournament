@@ -495,6 +495,7 @@ export interface HostInProgressProps {
   onRevealSelectedClue?: () => void;
   onRevealClue?: () => void;
   onRevealAnswer?: () => void;
+  onReturnToBoard?: () => void;
   onArmBuzzers?: () => void;
   onRuleCorrect?: () => void;
   onRuleIncorrect?: (playerId: string) => void;
@@ -1116,6 +1117,7 @@ export function HostInProgress({
   onRevealSelectedClue,
   onRevealClue,
   onRevealAnswer,
+  onReturnToBoard,
   onArmBuzzers,
   onRuleCorrect,
   onRuleIncorrect,
@@ -1438,14 +1440,24 @@ export function HostInProgress({
                   )}
                   {(state?.phase === 'CLUE_REVEALED' ||
                     (state?.phase === 'BUZZERS_ARMED' && state?.buzzWinnerId == null)) && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={onRevealAnswer}
-                      data-testid="reveal-answer-button"
-                    >
-                      Reveal Answer / Return to Board
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={onReturnToBoard}
+                        data-testid="return-to-board-button"
+                      >
+                        Return to Board
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.actionButton} ${styles.revealAnswerButton}`}
+                        onClick={onRevealAnswer}
+                        data-testid="reveal-answer-button"
+                      >
+                        Reveal Answer
+                      </button>
+                    </>
                   )}
                   {state?.phase === 'DAILY_DOUBLE_CLUE' && ddActorId && (
                     <div className={styles.buzzedPanel} data-testid="daily-double-ruling">
@@ -1976,6 +1988,9 @@ export function HostContent() {
   const handleRevealAnswer = useCallback(() => {
     hostSocket.revealAnswer?.();
   }, [hostSocket]);
+  const handleReturnToBoard = useCallback(() => {
+    hostSocket.returnToBoard?.();
+  }, [hostSocket]);
   const handleArmBuzzers = useCallback(() => {
     hostSocket.armBuzzers?.();
   }, [hostSocket]);
@@ -2084,6 +2099,7 @@ export function HostContent() {
         onRevealSelectedClue={handleRevealSelectedClue}
         onRevealClue={handleRevealClue}
         onRevealAnswer={handleRevealAnswer}
+        onReturnToBoard={handleReturnToBoard}
         onArmBuzzers={handleArmBuzzers}
         onRuleCorrect={handleRuleCorrect}
         onRuleIncorrect={handleRuleIncorrect}
