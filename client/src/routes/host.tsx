@@ -1192,7 +1192,10 @@ export function HostInProgress({
     (record) => record.type === 'CORRECT' || record.type === 'INCORRECT',
   );
 
-  const showControls = currentClue || state?.answer;
+  // The active-clue controls pop out into a modal while a clue is live, and the
+  // modal closes automatically once play returns to the board for the next pick.
+  const clueModalOpen =
+    (state?.phase === 'CLUE_SELECTED' && Boolean(pendingClue)) || Boolean(currentClue);
 
   if (state?.phase === 'ROUND_TRANSITION') {
     return (
@@ -1353,147 +1356,151 @@ export function HostInProgress({
           ))}
         </ul>
       )}
-      {state?.phase === 'CLUE_SELECTED' && pendingClue && (
+      {state?.answer && !currentClue && (
         <div className={styles.stickyControls}>
-          <div className={styles.currentClue} data-testid="pending-clue">
-            <h3>Clue Selected</h3>
-            <p className={styles.clueText} data-testid="pending-clue-text">
-              {pendingCategory?.title} for ${pendingClue.value}
-              {controllerName ? ` — picked by ${controllerName}` : ''}
-            </p>
-            <div className={styles.actionRow}>
-              <button
-                type="button"
-                className={styles.actionButton}
-                onClick={onRevealSelectedClue}
-                data-testid="reveal-selected-clue-button"
-              >
-                Reveal Clue
-              </button>
-            </div>
-          </div>
+          <HostAnswerBanner state={state} />
         </div>
       )}
-      {showControls && (
-        <div className={styles.stickyControls}>
-          {state?.answer && !currentClue && <HostAnswerBanner state={state} />}
-          {currentClue && (
-            <div className={styles.currentClue} data-testid="current-clue">
-              <h3>Current Clue</h3>
-              <p className={styles.clueText} data-testid="clue-text">
-                {state?.currentClueText}
-              </p>
-              {state?.answer && (
-                <p className={styles.answerText} data-testid="answer-text">
-                  Answer: {state.answer}
+      {clueModalOpen && (
+        <div className={styles.clueModal} role="dialog" aria-modal="true" data-testid="clue-modal">
+          <div className={styles.clueModalCard}>
+            {state?.phase === 'CLUE_SELECTED' && pendingClue && (
+              <div className={styles.currentClue} data-testid="pending-clue">
+                <h3>Clue Selected</h3>
+                <p className={styles.clueText} data-testid="pending-clue-text">
+                  {pendingCategory?.title} for ${pendingClue.value}
+                  {controllerName ? ` — picked by ${controllerName}` : ''}
                 </p>
-              )}
-              {state?.dailyDoubleWager != null && (
-                <p className={styles.wagerText} data-testid="daily-double-wager">
-                  Daily Double wager: {formatScore(state.dailyDoubleWager)}
-                </p>
-              )}
-              <Countdown deadline={state?.deadline ?? null} serverNow={state?.serverNow ?? 0} />
-              {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager == null && (
-                <p className={styles.waitingOnWager} data-testid="waiting-on-wager">
-                  Waiting on Wager
-                </p>
-              )}
-              <div className={styles.actionRow}>
-                {state?.phase === 'CLUE_REVEALED' && (
+                <div className={styles.actionRow}>
                   <button
                     type="button"
                     className={styles.actionButton}
-                    onClick={onArmBuzzers}
-                    data-testid="arm-buzzers-button"
+                    onClick={onRevealSelectedClue}
+                    data-testid="reveal-selected-clue-button"
                   >
-                    Arm Buzzers
+                    Reveal Clue
                   </button>
-                )}
-                {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager != null && (
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={onRevealClue}
-                    data-testid="reveal-clue-button"
-                  >
-                    Reveal Daily Double Clue
-                  </button>
-                )}
-                {showCancelDailyDouble && (
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={onCancelDailyDouble}
-                    data-testid="cancel-daily-double-button"
-                  >
-                    Cancel Daily Double / Return to Board
-                  </button>
-                )}
-                {(state?.phase === 'CLUE_REVEALED' ||
-                  (state?.phase === 'BUZZERS_ARMED' && state?.buzzWinnerId == null)) && (
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={onRevealAnswer}
-                    data-testid="reveal-answer-button"
-                  >
-                    Reveal Answer / Return to Board
-                  </button>
-                )}
-                {state?.phase === 'DAILY_DOUBLE_CLUE' && ddActorId && (
-                  <div className={styles.buzzedPanel} data-testid="daily-double-ruling">
-                    <p>
-                      Daily Double: <strong>{ddActorName}</strong>
-                    </p>
-                    <div className={styles.actionRow}>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        onClick={onRuleCorrect}
-                        data-testid="rule-correct-button"
-                      >
-                        Correct
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        onClick={() => onRuleIncorrect?.(ddActorId)}
-                        data-testid="rule-incorrect-button"
-                      >
-                        Incorrect
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {state?.phase === 'BUZZED' && buzzedPlayer && (
-                  <div className={styles.buzzedPanel} data-testid="buzzed-player">
-                    <p>
-                      Buzzed in: <strong className={styles.nameCaps}>{buzzedPlayer.name}{buzzedTeam ? ` (${buzzedTeam.name})` : ''}</strong>
-                    </p>
-                    <div className={styles.actionRow}>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        onClick={onRuleCorrect}
-                        data-testid="rule-correct-button"
-                      >
-                        Correct
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        onClick={() => onRuleIncorrect?.(buzzedPlayer.id)}
-                        data-testid="rule-incorrect-button"
-                      >
-                        Incorrect
-                      </button>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {currentClue && (
+              <div className={styles.currentClue} data-testid="current-clue">
+                <h3>Current Clue</h3>
+                <p className={styles.clueText} data-testid="clue-text">
+                  {state?.currentClueText}
+                </p>
+                {state?.answer && (
+                  <p className={styles.answerText} data-testid="answer-text">
+                    Answer: {state.answer}
+                  </p>
+                )}
+                {state?.dailyDoubleWager != null && (
+                  <p className={styles.wagerText} data-testid="daily-double-wager">
+                    Daily Double wager: {formatScore(state.dailyDoubleWager)}
+                  </p>
+                )}
+                <Countdown deadline={state?.deadline ?? null} serverNow={state?.serverNow ?? 0} />
+                {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager == null && (
+                  <p className={styles.waitingOnWager} data-testid="waiting-on-wager">
+                    Waiting on Wager
+                  </p>
+                )}
+                <div className={styles.actionRow}>
+                  {state?.phase === 'CLUE_REVEALED' && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={onArmBuzzers}
+                      data-testid="arm-buzzers-button"
+                    >
+                      Arm Buzzers
+                    </button>
+                  )}
+                  {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager != null && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={onRevealClue}
+                      data-testid="reveal-clue-button"
+                    >
+                      Reveal Daily Double Clue
+                    </button>
+                  )}
+                  {showCancelDailyDouble && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={onCancelDailyDouble}
+                      data-testid="cancel-daily-double-button"
+                    >
+                      Cancel Daily Double / Return to Board
+                    </button>
+                  )}
+                  {(state?.phase === 'CLUE_REVEALED' ||
+                    (state?.phase === 'BUZZERS_ARMED' && state?.buzzWinnerId == null)) && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={onRevealAnswer}
+                      data-testid="reveal-answer-button"
+                    >
+                      Reveal Answer / Return to Board
+                    </button>
+                  )}
+                  {state?.phase === 'DAILY_DOUBLE_CLUE' && ddActorId && (
+                    <div className={styles.buzzedPanel} data-testid="daily-double-ruling">
+                      <p>
+                        Daily Double: <strong>{ddActorName}</strong>
+                      </p>
+                      <div className={styles.actionRow}>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          onClick={onRuleCorrect}
+                          data-testid="rule-correct-button"
+                        >
+                          Correct
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          onClick={() => onRuleIncorrect?.(ddActorId)}
+                          data-testid="rule-incorrect-button"
+                        >
+                          Incorrect
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {state?.phase === 'BUZZED' && buzzedPlayer && (
+                    <div className={styles.buzzedPanel} data-testid="buzzed-player">
+                      <p>
+                        Buzzed in: <strong className={styles.nameCaps}>{buzzedPlayer.name}{buzzedTeam ? ` (${buzzedTeam.name})` : ''}</strong>
+                      </p>
+                      <div className={styles.actionRow}>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          onClick={onRuleCorrect}
+                          data-testid="rule-correct-button"
+                        >
+                          Correct
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          onClick={() => onRuleIncorrect?.(buzzedPlayer.id)}
+                          data-testid="rule-incorrect-button"
+                        >
+                          Incorrect
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
       <div className={styles.actionRow}>

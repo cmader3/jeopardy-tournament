@@ -364,6 +364,34 @@
   margin-bottom: 1rem;
 }
 
+/* While a clue is live, the host controls pop out over a dimmed backdrop so
+   the host can focus on running the clue. It sits below the confirm dialogs
+   (z-index 1000) so removal/advance confirmations still layer on top. */
+.clueModal {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(5, 7, 20, 0.66);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.clueModalCard {
+  position: relative;
+  width: min(46rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background: var(--panel-bg);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-lg);
+}
+
 .currentClue {
   display: flex;
   flex-direction: column;

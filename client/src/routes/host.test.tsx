@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HostLobby, HostInProgress, HostContent, HostGameControls } from './host.js';
 import type { HostView } from '@jeopardy/shared';
@@ -407,6 +407,63 @@ describe('HostInProgress clue-selection mode', () => {
 
     await userEvent.click(screen.getByTestId('clue-mode-player'));
     expect(onSetClueSelectionMode).toHaveBeenCalledWith('PLAYER');
+  });
+});
+
+describe('HostInProgress clue pop-out modal', () => {
+  it('pops the active clue into a modal dialog while a clue is live', () => {
+    const state = makeHostState({
+      phase: 'CLUE_REVEALED',
+      round: makeRound(),
+      currentClueId: 'cl1',
+      currentClueText: 'H2O is this compound',
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    const modal = screen.getByTestId('clue-modal');
+    expect(modal).toHaveAttribute('role', 'dialog');
+    expect(modal).toHaveAttribute('aria-modal', 'true');
+    expect(within(modal).getByTestId('current-clue')).toBeInTheDocument();
+    expect(within(modal).getByTestId('clue-text')).toHaveTextContent('H2O is this compound');
+    expect(within(modal).getByTestId('arm-buzzers-button')).toBeInTheDocument();
+  });
+
+  it('pops the pending clue into the modal during CLUE_SELECTED', () => {
+    const state = makeHostState({
+      phase: 'CLUE_SELECTED',
+      round: makeRound(),
+      pendingClueId: 'cl1',
+      controllingPlayerId: 'p1',
+      players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    const modal = screen.getByTestId('clue-modal');
+    expect(within(modal).getByTestId('pending-clue')).toBeInTheDocument();
+    expect(within(modal).getByTestId('reveal-selected-clue-button')).toBeInTheDocument();
+  });
+
+  it('does not render the clue modal on the board-select screen', () => {
+    const state = makeHostState({ phase: 'BOARD_SELECT', round: makeRound() });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.queryByTestId('clue-modal')).not.toBeInTheDocument();
+  });
+
+  it('keeps the answer recap inline after a ruling instead of in the modal', () => {
+    const state = makeHostState({
+      phase: 'BOARD_SELECT',
+      round: makeRound(),
+      currentClueId: null,
+      answer: 'Water',
+      lastOutcome: { playerId: 'p1', type: 'CORRECT', value: 100 },
+      players: [{ id: 'p1', name: 'Alice', score: 100, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.queryByTestId('clue-modal')).not.toBeInTheDocument();
+    expect(screen.getByTestId('host-answer-banner')).toBeInTheDocument();
   });
 });
 
