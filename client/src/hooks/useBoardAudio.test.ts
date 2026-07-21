@@ -311,6 +311,55 @@ describe('useBoardAudio', () => {
     expect(audio.play).toHaveBeenCalledTimes(2);
   });
 
+  it('recovers blocked think music on the next user gesture', async () => {
+    let blockPlay = true;
+    const thinkAudio: MockAudio = {
+      src: '',
+      loop: false,
+      volume: 1,
+      preload: '',
+      currentTime: 0,
+      play: vi.fn(() => (blockPlay ? Promise.reject(new Error('blocked')) : Promise.resolve())),
+      pause: vi.fn(),
+    };
+    function ThinkAudioFn() {
+      return thinkAudio;
+    }
+    Object.defineProperty(globalThis, 'Audio', {
+      value: vi.fn(ThinkAudioFn),
+      writable: true,
+      configurable: true,
+    });
+
+    const { result } = renderHook(() => useBoardAudio());
+
+    await act(async () => {
+      result.current.setThinkMusic(true);
+    });
+    expect(thinkAudio.play).toHaveBeenCalledTimes(1);
+
+    blockPlay = false;
+    await act(async () => {
+      document.dispatchEvent(new Event('pointerdown'));
+    });
+    expect(thinkAudio.play).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-asserts think music when the tab becomes visible again', async () => {
+    const { result } = renderHook(() => useBoardAudio());
+
+    await act(async () => {
+      result.current.setThinkMusic(true);
+    });
+    const audio = audioMock!.instances[0];
+    expect(audio.play).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(audio.play).toHaveBeenCalledTimes(2);
+  });
+
   it('plays the winner music once without looping', () => {
     const { result } = renderHook(() => useBoardAudio());
 

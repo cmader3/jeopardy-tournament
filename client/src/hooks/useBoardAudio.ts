@@ -179,17 +179,6 @@ export function useBoardAudio(): UseBoardAudioResult {
     return thinkAudioRef.current;
   }, []);
 
-  const playThinkAudio = useCallback((audio: HTMLAudioElement) => {
-    try {
-      const result = audio.play();
-      if (result && typeof result.catch === 'function') {
-        result.catch(() => {});
-      }
-    } catch {
-      // Autoplay blocked before a user gesture, or unsupported (e.g., jsdom).
-    }
-  }, []);
-
   const stopThinkAudio = useCallback((audio: HTMLAudioElement, reset: boolean) => {
     try {
       audio.pause();
@@ -199,19 +188,74 @@ export function useBoardAudio(): UseBoardAudioResult {
     }
   }, []);
 
+  // Drive the looping think music toward the desired state (playing only when
+  // active and unmuted). Unlike a fire-and-forget play(), this reconciles: a
+  // play() that is rejected (autoplay/suspension gating, or an interrupted
+  // start) is recovered later by the user-gesture / visibility listeners
+  // below, and if the desired state flips while playback is starting the
+  // resolved promise stops it. This keeps the music reliable across game
+  // restarts, tab backgrounding, and rapid phase transitions.
+  const reconcileThinkMusic = useCallback((mutedOverride?: boolean) => {
+    const isMuted = mutedOverride ?? mutedRef.current;
+    const wantPlaying = thinkActiveRef.current && !isMuted;
+    if (!wantPlaying) {
+      const existing = thinkAudioRef.current;
+      if (existing) stopThinkAudio(existing, !thinkActiveRef.current);
+      return;
+    }
+    const audio = ensureThinkAudio();
+    if (!audio) return;
+    try {
+      const result = audio.play();
+      if (result && typeof result.then === 'function') {
+        result.then(
+          () => {
+            if (!(thinkActiveRef.current && !mutedRef.current)) {
+              stopThinkAudio(audio, !thinkActiveRef.current);
+            }
+          },
+          () => {
+            // Blocked or interrupted. Recovery happens on the next user gesture
+            // or when the tab becomes visible again (listeners below); do not
+            // retry synchronously or a persistently blocked play() would loop.
+          },
+        );
+      }
+    } catch {
+      // Ignore synchronous play failures; recovery is handled by the listeners.
+    }
+  }, [ensureThinkAudio, stopThinkAudio]);
+
   const setThinkMusic = useCallback(
     (active: boolean) => {
       thinkActiveRef.current = active;
-      const audio = ensureThinkAudio();
-      if (!audio) return;
-      if (active && !mutedRef.current) {
-        playThinkAudio(audio);
-      } else {
-        stopThinkAudio(audio, !active);
-      }
+      // Create the element eagerly (even while muted/inactive) so it is ready
+      // to play the instant a clue is armed.
+      ensureThinkAudio();
+      reconcileThinkMusic();
     },
-    [ensureThinkAudio, playThinkAudio, stopThinkAudio],
+    [ensureThinkAudio, reconcileThinkMusic],
   );
+
+  // Recover think music on the next user gesture or when the board tab becomes
+  // visible again. A gesture also satisfies the browser autoplay policy, so a
+  // loop that was blocked on the first arm starts as soon as the host interacts
+  // with the page; visibility covers resuming after the tab was backgrounded.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleGesture = () => reconcileThinkMusic();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') reconcileThinkMusic();
+    };
+    document.addEventListener('pointerdown', handleGesture);
+    document.addEventListener('keydown', handleGesture);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('pointerdown', handleGesture);
+      document.removeEventListener('keydown', handleGesture);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [reconcileThinkMusic]);
 
   const ensureWinnerAudio = useCallback((): HTMLAudioElement | null => {
     if (!isAudioElementSupported()) return null;
@@ -270,14 +314,9 @@ export function useBoardAudio(): UseBoardAudioResult {
     setMuted(nextMuted);
     writeMutedPreference(nextMuted);
 
-    const thinkAudio = thinkAudioRef.current;
-    if (thinkAudio) {
-      if (nextMuted) {
-        stopThinkAudio(thinkAudio, false);
-      } else if (thinkActiveRef.current) {
-        playThinkAudio(thinkAudio);
-      }
-    }
+    // Pass the new mute state explicitly: mutedRef is only synced after render,
+    // and the cue-flush path below intentionally relies on that lag.
+    reconcileThinkMusic(nextMuted);
 
     // The winner fanfare is a one-shot: muting stops it, but unmuting does not
     // restart it.
@@ -293,7 +332,7 @@ export function useBoardAudio(): UseBoardAudioResult {
         }
       });
     }
-  }, [muted, ensureContext, flushPending, playThinkAudio, stopThinkAudio, stopWinnerMusic]);
+  }, [muted, ensureContext, flushPending, reconcileThinkMusic, stopWinnerMusic]);
 
   // When the AudioContext becomes available/running, flush any cues that were queued before
   // a user gesture (e.g., the initial armed event before the board was interacted with).
