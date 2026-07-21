@@ -888,7 +888,7 @@ function HostFinalClue({ state, onStartFinalTimer }: HostFinalClueProps) {
       ) : (
         <button
           type="button"
-          className={styles.actionButton}
+          className={`${styles.actionButton} ${styles.startFinalTimerButton}`}
           onClick={onStartFinalTimer}
           data-testid="start-final-timer-button"
         >
@@ -1394,6 +1394,11 @@ export function HostInProgress({
                 </p>
               )}
               <Countdown deadline={state?.deadline ?? null} serverNow={state?.serverNow ?? 0} />
+              {state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager == null && (
+                <p className={styles.waitingOnWager} data-testid="waiting-on-wager">
+                  Waiting on Wager
+                </p>
+              )}
               <div className={styles.actionRow}>
                 {state?.phase === 'CLUE_REVEALED' && (
                   <button

@@ -311,11 +311,18 @@ function AnswerBanner({ state }: AnswerBannerProps) {
   if (!state.answer) return null;
   const outcome = state.lastOutcome;
   const player = outcome ? state.players.find((p) => p.id === outcome.playerId) : undefined;
-  const outcomeLabel =
+  const outcomeTeam =
+    outcome && state.teamMode && player?.teamId
+      ? state.teams.find((t) => t.id === player.teamId)
+      : null;
+  const outcomePlayerLabel = player
+    ? `${player.name}${outcomeTeam ? ` (${outcomeTeam.name})` : ''}`
+    : '';
+  const outcomeInfo =
     outcome?.type === 'CORRECT'
-      ? `Correct! ${player?.name ?? ''} +$${outcome.value}`
+      ? { prefix: `Correct! ${outcomePlayerLabel}`, amount: `+$${outcome.value}` }
       : outcome?.type === 'INCORRECT'
-        ? `Incorrect! ${player?.name ?? ''} -$${outcome.value}`
+        ? { prefix: `Incorrect! ${outcomePlayerLabel}`, amount: `-$${outcome.value}` }
         : null;
 
   return (
@@ -329,7 +336,14 @@ function AnswerBanner({ state }: AnswerBannerProps) {
       <p className={styles.answerText} data-testid="answer-text">
         {state.answer}
       </p>
-      {outcomeLabel && <p className={styles.outcomeLabel} data-testid="outcome-label">{outcomeLabel}</p>}
+      {outcomeInfo && (
+        <p className={styles.outcomeLabel} data-testid="outcome-label">
+          {outcomeInfo.prefix}{' '}
+          <span className={styles.outcomeAmount} data-testid="outcome-amount">
+            {outcomeInfo.amount}
+          </span>
+        </p>
+      )}
     </div>
   );
 }
@@ -455,6 +469,12 @@ function FinalStandings({ state }: CompleteScreenProps) {
       <div className={styles.finalStandingsList} data-testid="final-standings-list">
         {sorted.map((holder) => {
           const isWinner = coWinners.includes(holder.id);
+          const team = state.teamMode ? state.teams.find((t) => t.id === holder.id) : null;
+          const memberNames = team
+            ? team.memberIds
+                .map((memberId) => state.players.find((p) => p.id === memberId)?.name)
+                .filter((name): name is string => Boolean(name))
+            : [];
           return (
             <div
               key={holder.id}
@@ -474,6 +494,14 @@ function FinalStandings({ state }: CompleteScreenProps) {
               <span className={`${styles.score} ${holder.score < 0 ? styles.negative : ''}`} data-testid={`final-standing-score-${holder.id}`}>
                 {formatScore(holder.score)}
               </span>
+              {memberNames.length > 0 && (
+                <span
+                  className={styles.finalStandingMembers}
+                  data-testid={`final-standing-members-${holder.id}`}
+                >
+                  {memberNames.join(', ')}
+                </span>
+              )}
             </div>
           );
         })}

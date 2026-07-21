@@ -129,6 +129,20 @@ describe('Board team mode', () => {
     expect(await screen.findByTestId('buzzed-player-name')).toHaveTextContent('Bob (Blue)');
   });
 
+  it('shows the team name in parentheses on the answer outcome banner', async () => {
+    await showBoard(
+      makeBoardState({
+        answer: 'Water',
+        currentClueId: null,
+        lastOutcome: { type: 'CORRECT', playerId: 'b', value: 100 },
+      }),
+    );
+
+    const outcome = await screen.findByTestId('outcome-label');
+    expect(outcome).toHaveTextContent('Correct! Bob (Blue)');
+    expect(screen.getByTestId('outcome-amount')).toHaveTextContent('+$100');
+  });
+
   it('renders team names in the final standings', async () => {
     await showBoard(
       makeBoardState({
@@ -140,5 +154,27 @@ describe('Board team mode', () => {
 
     expect(await screen.findByTestId('final-standing-name-t1')).toHaveTextContent('Red');
     expect(screen.getByTestId('final-standing-name-t2')).toHaveTextContent('Blue');
+  });
+
+  it('lists each team\'s player names on the winning screen', async () => {
+    await showBoard(
+      makeBoardState({
+        phase: 'COMPLETE',
+        roundIndex: 1,
+        round: { id: 'r2', type: 'FINAL', order: 1, categories: [] },
+        players: [
+          { id: 'a', name: 'Alice', score: 0, connected: true, teamId: 't1' },
+          { id: 'b', name: 'Bob', score: 0, connected: true, teamId: 't2' },
+          { id: 'c', name: 'Cara', score: 0, connected: true, teamId: 't1' },
+        ],
+        teams: [
+          team({ id: 't1', name: 'Red', memberIds: ['a', 'c'], connectedMemberIds: ['a', 'c'], captainId: 'a', actingCaptainId: 'a', score: 400 }),
+          team({ id: 't2', name: 'Blue', memberIds: ['b'], connectedMemberIds: ['b'], captainId: 'b', actingCaptainId: 'b', score: 100 }),
+        ],
+      }),
+    );
+
+    expect(await screen.findByTestId('final-standing-members-t1')).toHaveTextContent('Alice, Cara');
+    expect(screen.getByTestId('final-standing-members-t2')).toHaveTextContent('Bob');
   });
 });

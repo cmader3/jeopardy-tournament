@@ -766,6 +766,7 @@ describe('HostInProgress grid and selection', () => {
     expect(screen.getByTestId('reveal-clue-button')).toBeInTheDocument();
     expect(screen.getByTestId('daily-double-wager')).toHaveTextContent('200');
     expect(screen.queryByTestId('rule-correct-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('waiting-on-wager')).not.toBeInTheDocument();
   });
 
   it('calls onRevealClue when the reveal clue button is clicked', async () => {
@@ -821,6 +822,21 @@ describe('HostInProgress grid and selection', () => {
     render(<HostInProgress roomCode="WXYZ" state={state} />);
 
     expect(screen.queryByTestId('cancel-daily-double-button')).not.toBeInTheDocument();
+  });
+
+  it('shows Waiting on Wager while the Daily Double wager is still pending', () => {
+    const state = makeHostState({
+      phase: 'DAILY_DOUBLE_WAGER',
+      round: makeRound(),
+      currentClueId: 'cl2',
+      currentClueText: null,
+      controllingPlayerId: 'p1',
+      dailyDoubleWager: null,
+      players: [{ id: 'p1', name: 'Alice', score: 1000, connected: true }],
+    });
+    render(<HostInProgress roomCode="WXYZ" state={state} />);
+
+    expect(screen.getByTestId('waiting-on-wager')).toHaveTextContent('Waiting on Wager');
   });
 
   it('shows the ruling buttons during DAILY_DOUBLE_CLUE and rules the controller', async () => {

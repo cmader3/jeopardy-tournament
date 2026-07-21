@@ -403,6 +403,14 @@
   gap: 0.75rem;
 }
 
+.waitingOnWager {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--value-gold);
+  text-transform: uppercase;
+}
+
 .buzzedPanel p {
   margin: 0;
 }
@@ -778,6 +786,12 @@ button.hostCell:hover {
   color: var(--value-gold);
   margin: 0;
   text-transform: uppercase;
+}
+
+/* Keep the Start Timer control content-sized (matching the game-control
+   buttons) instead of stretching to the full width of the clue panel. */
+.startFinalTimerButton {
+  align-self: flex-start;
 }
 
 .hostFinalClueText {

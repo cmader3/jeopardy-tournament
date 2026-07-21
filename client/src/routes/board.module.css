@@ -620,6 +620,11 @@
   text-transform: uppercase;
 }
 
+.outcomeAmount {
+  font-size: clamp(1.35rem, 2.8vw, 2rem);
+  font-weight: 700;
+}
+
 .answerCorrect .outcomeLabel {
   color: var(--correct-green, #2e7d32);
 }
@@ -1049,6 +1054,16 @@
 
 .finalStanding .score {
   justify-self: end;
+}
+
+.finalStandingMembers {
+  grid-column: 1 / -1;
+  justify-self: center;
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: clamp(0.85rem, 1.6vw, 1.1rem);
+  color: var(--text-light);
+  opacity: 0.85;
 }
 
 .finalStandingWinner {
