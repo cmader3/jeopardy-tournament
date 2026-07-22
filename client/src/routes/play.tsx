@@ -372,12 +372,10 @@ function DailyDoubleWager({
   const [amount, setAmount] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const me = state.players.find((p) => p.id === state.playerId);
-  const highestValue =
-    state.round?.categories
-      .flatMap((c) => c.clues)
-      .reduce((max, clue) => Math.max(max, clue.value ?? 0), 0) ?? 0;
   const holderScore = state.teamMode ? state.teams.find((t) => t.id === state.controllingTeamId)?.score ?? 0 : me?.score ?? 0;
-  const maxWager = Math.max(holderScore, highestValue);
+  // Everyone can wager at least $500 (even with a negative score); higher
+  // scorers can still wager up to their full score.
+  const maxWager = Math.max(holderScore, 500);
   const minWager = 5;
   const isLocked = state.dailyDoubleWager != null;
   const controllerName = state.teamMode
@@ -485,7 +483,10 @@ function FinalWager({
   const [amount, setAmount] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const me = state.players.find((p) => p.id === state.playerId);
-  const maxWager = state.teamMode ? state.teamScore ?? 0 : me?.score ?? 0;
+  const holderScore = state.teamMode ? state.teamScore ?? 0 : me?.score ?? 0;
+  // Positive holders wager up to their score; $0-or-less holders (only eligible
+  // when the host enables it) may wager up to $500.
+  const maxWager = holderScore > 0 ? holderScore : state.finalAllowNonPositive ? 500 : holderScore;
   const isLocked = state.finalWagerSubmitted;
   const wagerOwnerLabel = state.teamMode ? "Your team's" : 'Your';
 

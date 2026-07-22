@@ -689,6 +689,35 @@ describe('SET_CLUE_SELECTION_MODE', () => {
   });
 });
 
+describe('SET_FINAL_ALLOW_NON_POSITIVE', () => {
+  it('defaults new games to disallowing non-positive holders in Final', () => {
+    const state = createInitialState('session-1', 'ABCD', makeBoard());
+    expect(state.finalAllowNonPositive).toBe(false);
+  });
+
+  it('toggles the setting on and off and broadcasts', () => {
+    const state = createInitialState('session-1', 'ABCD', makeBoard());
+
+    const on = reduce(state, { type: 'SET_FINAL_ALLOW_NON_POSITIVE', allow: true }, { now: NOW });
+    expect(on.state.finalAllowNonPositive).toBe(true);
+    expect(on.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+
+    const off = reduce(on.state, { type: 'SET_FINAL_ALLOW_NON_POSITIVE', allow: false }, { now: NOW });
+    expect(off.state.finalAllowNonPositive).toBe(false);
+  });
+
+  it('is preserved across a game restart', () => {
+    let state = createInitialState('session-1', 'ABCD', makeBoard());
+    state = reduce(state, { type: 'JOIN', player: makePlayer({ id: 'p1', name: 'Alice' }) }, { now: NOW }).state;
+    state = reduce(state, { type: 'START_GAME' }, { now: NOW }).state;
+    state = reduce(state, { type: 'SET_FINAL_ALLOW_NON_POSITIVE', allow: true }, { now: NOW }).state;
+
+    const restarted = reduce(state, { type: 'RESTART_GAME' }, { now: NOW });
+
+    expect(restarted.state.finalAllowNonPositive).toBe(true);
+  });
+});
+
 function setupDailyDoubleWager(score = 0): GameState {
   const board = makeBoard();
   let state = createInitialState('session-1', 'ABCD', board);
@@ -721,28 +750,39 @@ describe('SUBMIT_DD_WAGER', () => {
     expect(result.state.dailyDoubleWager).toBeNull();
   });
 
-  it('rejects a wager above the maximum (score vs highest clue value)', () => {
+  it('rejects a wager above the $500 floor when the score is lower', () => {
     const state = setupDailyDoubleWager(150);
 
-    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 201 }, { now: NOW });
+    const result = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 501 }, { now: NOW });
 
     expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
     expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
     expect(result.state.dailyDoubleWager).toBeNull();
   });
 
-  it('uses the highest clue value as the maximum when it exceeds the score', () => {
+  it('lets a holder wager up to the $500 floor when the score is below it', () => {
     const state = setupDailyDoubleWager(150);
 
-    const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 200 }, { now: NOW });
-    expect(atMax.state.dailyDoubleWager).toBe(200);
+    const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 500 }, { now: NOW });
+    expect(atMax.state.dailyDoubleWager).toBe(500);
     expect(atMax.state.phase).toBe('DAILY_DOUBLE_WAGER');
 
-    const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 201 }, { now: NOW });
+    const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 501 }, { now: NOW });
     expect(overMax.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
   });
 
-  it('uses the current score as the maximum when it exceeds the highest clue value', () => {
+  it('lets a negative-score holder wager up to the $500 floor', () => {
+    const state = setupDailyDoubleWager(-400);
+
+    const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 500 }, { now: NOW });
+    expect(atMax.state.dailyDoubleWager).toBe(500);
+    expect(atMax.state.phase).toBe('DAILY_DOUBLE_WAGER');
+
+    const overMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 501 }, { now: NOW });
+    expect(overMax.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('exceed') });
+  });
+
+  it('uses the current score as the maximum when it exceeds the $500 floor', () => {
     const state = setupDailyDoubleWager(3000);
 
     const atMax = reduce(state, { type: 'SUBMIT_DD_WAGER', playerId: state.controllingPlayerId!, amount: 3000 }, { now: NOW });

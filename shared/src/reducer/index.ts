@@ -21,6 +21,7 @@ export type Intent =
   | { type: 'SELECT_CLUE'; clueId: string; selectorId?: string; hostOverride?: boolean }
   | { type: 'REOPEN_CLUE'; clueId: string; revertScores: boolean }
   | { type: 'SET_CLUE_SELECTION_MODE'; mode: ClueSelectionMode }
+  | { type: 'SET_FINAL_ALLOW_NON_POSITIVE'; allow: boolean }
   | { type: 'REVEAL_SELECTED_CLUE' }
   | { type: 'ARM_BUZZERS' }
   | { type: 'BUZZ'; playerId: string }
@@ -169,6 +170,7 @@ export function createInitialState(sessionId: string, roomCode: string, board: G
     controllingTeamId: null,
     usedClueIds: [],
     clueSelectionMode: 'HOST',
+    finalAllowNonPositive: false,
     pendingClueId: null,
     removedPlayers: [],
     archived: false,
@@ -227,6 +229,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleReopenClue(state, intent.clueId, intent.revertScores);
     case 'SET_CLUE_SELECTION_MODE':
       return handleSetClueSelectionMode(state, intent);
+    case 'SET_FINAL_ALLOW_NON_POSITIVE':
+      return handleSetFinalAllowNonPositive(state, intent);
     case 'REVEAL_SELECTED_CLUE':
       return handleRevealSelectedClue(state);
     case 'ARM_BUZZERS':
@@ -595,6 +599,7 @@ function handleRestartGame(state: GameState): ReducerResult {
       teamMode: isTeamMode(state),
       teams,
       clueSelectionMode: state.clueSelectionMode ?? 'HOST',
+      finalAllowNonPositive: state.finalAllowNonPositive ?? false,
     },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
@@ -737,6 +742,16 @@ function handleSetClueSelectionMode(
 ): ReducerResult {
   return {
     state: { ...state, clueSelectionMode: intent.mode },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleSetFinalAllowNonPositive(
+  state: GameState,
+  intent: Extract<Intent, { type: 'SET_FINAL_ALLOW_NON_POSITIVE' }>,
+): ReducerResult {
+  return {
+    state: { ...state, finalAllowNonPositive: intent.allow === true },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }
@@ -1233,11 +1248,12 @@ function handleTimeExpire(state: GameState): ReducerResult {
 
 const DEFAULT_MIN_WAGER = 5;
 
-function getHighestClueValueInRound(state: GameState): number {
-  const round = state.board.rounds[state.roundIndex];
-  if (!round) return 0;
-  return round.clues.reduce((max, clue) => (clue.value != null && clue.value > max ? clue.value : max), 0);
-}
+// Every Daily Double controller may wager at least this much, even with a
+// negative score. Higher-scoring holders can still wager up to their score.
+const DAILY_DOUBLE_WAGER_FLOOR = 500;
+// When the "allow non-positive holders in Final" setting is on, a holder with a
+// score of $0 or less may wager up to this amount in Final Jeopardy.
+const FINAL_NON_POSITIVE_WAGER_CAP = 500;
 
 function handleSubmitDDWager(
   state: GameState,
@@ -1263,7 +1279,7 @@ function handleSubmitDDWager(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Player not found' }] };
   }
 
-  const maxWager = Math.max(holderScoreForPlayer(state, intent.playerId), getHighestClueValueInRound(state));
+  const maxWager = Math.max(holderScoreForPlayer(state, intent.playerId), DAILY_DOUBLE_WAGER_FLOOR);
   if (intent.amount < DEFAULT_MIN_WAGER) {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be at least the minimum of $${DEFAULT_MIN_WAGER}` }] };
   }
@@ -1491,13 +1507,16 @@ function handleOverrideControl(state: GameState, playerId: string): ReducerResul
 
 // Final-eligible score holders: teams with a positive score and at least one
 // member in team mode, otherwise individual players with a positive score.
+// When finalAllowNonPositive is set, holders with a score of $0 or less are
+// eligible too (teams still need at least one member).
 function getFinalEligibleHolderIds(state: GameState): string[] {
+  const allowNonPositive = state.finalAllowNonPositive === true;
   if (isTeamMode(state)) {
     return getTeams(state)
-      .filter((t) => t.score > 0 && getTeamMembers(state.players, t.id).length > 0)
+      .filter((t) => (allowNonPositive || t.score > 0) && getTeamMembers(state.players, t.id).length > 0)
       .map((t) => t.id);
   }
-  return state.players.filter((p) => p.score > 0).map((p) => p.id);
+  return state.players.filter((p) => allowNonPositive || p.score > 0).map((p) => p.id);
 }
 
 // Resolve the score holder a submitting player represents in Final Jeopardy.
@@ -1506,10 +1525,11 @@ function resolveFinalSubmission(
   state: GameState,
   playerId: string,
 ): { holderId: string; score: number } | { error: string } {
+  const allowNonPositive = state.finalAllowNonPositive === true;
   if (isTeamMode(state)) {
     const team = getPlayerTeam(state, playerId);
     if (!team) return { error: 'You are not on a team' };
-    if (team.score <= 0) return { error: 'Only eligible teams can submit in Final Jeopardy' };
+    if (team.score <= 0 && !allowNonPositive) return { error: 'Only eligible teams can submit in Final Jeopardy' };
     if (getActingCaptainId(state, team.id) !== playerId) {
       return { error: 'Only the team captain can submit for the team' };
     }
@@ -1517,7 +1537,7 @@ function resolveFinalSubmission(
   }
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return { error: 'Player not found' };
-  if (player.score <= 0) return { error: 'Only eligible contestants can submit in Final Jeopardy' };
+  if (player.score <= 0 && !allowNonPositive) return { error: 'Only eligible contestants can submit in Final Jeopardy' };
   return { holderId: player.id, score: player.score };
 }
 
@@ -1569,10 +1589,13 @@ function handleSubmitFinalWager(
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Wager must be a whole number' }] };
   }
 
-  if (intent.amount < 0 || intent.amount > score) {
+  // Holders with a positive score wager up to that score; holders with $0 or
+  // less (only eligible when finalAllowNonPositive is on) may wager up to the cap.
+  const maxWager = score > 0 ? score : FINAL_NON_POSITIVE_WAGER_CAP;
+  if (intent.amount < 0 || intent.amount > maxWager) {
     return {
       state,
-      effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be between 0 and $${score}` }],
+      effects: [{ type: 'INTENT_REJECTED', reason: `Wager must be between 0 and $${maxWager}` }],
     };
   }
 

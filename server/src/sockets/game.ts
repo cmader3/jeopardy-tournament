@@ -394,6 +394,29 @@ export function registerGameSockets(io: Server, engine: GameEngine) {
       }
     });
 
+    socket.on('set_final_allow_non_positive', async (payload: { allow: boolean }) => {
+      const meta = getSocketMeta(socket);
+      if (!meta || meta.role !== 'host') {
+        socket.emit('error', { message: 'Only the host can change the Final Jeopardy setting' });
+        return;
+      }
+
+      try {
+        const result = await engine.applyIntent(
+          meta.roomCode,
+          { type: 'SET_FINAL_ALLOW_NON_POSITIVE', allow: payload?.allow === true },
+          { now: Date.now() },
+        );
+        const rejected = result.effects.find((e) => e.type === 'INTENT_REJECTED');
+        if (rejected) {
+          socket.emit('error', { message: rejected.reason });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Set Final Jeopardy setting failed';
+        socket.emit('error', { message });
+      }
+    });
+
     socket.on('configure_teams', async (payload: { enabled: boolean; teams: { id: string; name: string }[] }) => {
       const meta = getSocketMeta(socket);
       if (!meta || meta.role !== 'host') {

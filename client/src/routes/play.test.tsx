@@ -108,6 +108,7 @@ function makeContestantState(overrides: Partial<ContestantView> = {}): Contestan
     myFinalAnswer: null,
     roundComplete: false,
     clueSelectionMode: 'HOST',
+    finalAllowNonPositive: false,
     pendingClueId: null,
     ...overrides,
   };
@@ -691,11 +692,11 @@ describe('PlayRoute', () => {
 
     const wagerInput = screen.getByTestId('dd-wager-input');
     await userEvent.clear(wagerInput);
-    await userEvent.type(wagerInput, '201');
+    await userEvent.type(wagerInput, '501');
     await userEvent.click(screen.getByTestId('dd-wager-submit'));
 
     expect(submitDDWager).not.toHaveBeenCalled();
-    expect(await screen.findByTestId('dd-wager-error')).toHaveTextContent(/cannot exceed \$200/i);
+    expect(await screen.findByTestId('dd-wager-error')).toHaveTextContent(/cannot exceed \$500/i);
     expect(screen.getByTestId('dd-wager-error')).toHaveTextContent(/allowed range/i);
   });
 
@@ -1320,6 +1321,46 @@ describe('PlayRoute', () => {
     await userEvent.type(screen.getByTestId('final-wager-amount-input'), '150');
     await userEvent.click(screen.getByTestId('final-wager-submit'));
     expect(submitFinalWager).toHaveBeenCalledWith(150);
+  });
+
+  it('lets a $0-or-less contestant wager up to $500 when finalAllowNonPositive is on', async () => {
+    const submitFinalWager = vi.fn();
+    mockUseSocket(
+      makeContestantState({
+        phase: 'FINAL_WAGER',
+        roundIndex: 1,
+        round: makeFinalRound(),
+        playerId: 'p1',
+        players: [{ id: 'p1', name: 'Alice', score: 0, connected: true }],
+        finalAllowNonPositive: true,
+        isEligibleForFinal: true,
+        canWager: true,
+        finalWagerSubmitted: false,
+        myFinalWager: null,
+      }),
+      null,
+      { submitFinalWager },
+    );
+
+    render(<PlayRoute />);
+
+    await userEvent.type(screen.getByLabelText('Room Code'), 'ABCD');
+    await userEvent.type(screen.getByLabelText('Your Name'), 'Alice');
+    await userEvent.click(screen.getByRole('button', { name: 'Join Game' }));
+
+    expect(await screen.findByTestId('final-wager-input')).toBeInTheDocument();
+
+    const input = screen.getByTestId('final-wager-amount-input');
+    await userEvent.type(input, '500');
+    await userEvent.click(screen.getByTestId('final-wager-submit'));
+    expect(submitFinalWager).toHaveBeenCalledWith(500);
+
+    submitFinalWager.mockClear();
+    await userEvent.clear(input);
+    await userEvent.type(input, '501');
+    await userEvent.click(screen.getByTestId('final-wager-submit'));
+    expect(submitFinalWager).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('final-wager-error')).toHaveTextContent(/\$500/);
   });
 
   it('shows a locked confirmation after an eligible contestant submits a Final wager', async () => {

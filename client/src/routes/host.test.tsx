@@ -143,6 +143,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     removedPlayers: [],
     serverNow: 0,
     clueSelectionMode: 'HOST',
+    finalAllowNonPositive: false,
     pendingClueId: null,
     ...overrides,
   };
@@ -281,6 +282,33 @@ describe('HostLobby', () => {
 
     await userEvent.click(screen.getByTestId('clue-mode-player'));
     expect(onSetClueSelectionMode).toHaveBeenCalledWith('PLAYER');
+  });
+
+  it('renders the Final Jeopardy eligibility toggle unchecked by default', () => {
+    render(<HostLobby roomCode="ABCD" state={makeHostState()} onStartGame={vi.fn()} startError={null} />);
+    expect(screen.getByTestId('final-nonpositive-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('final-nonpositive-checkbox')).not.toBeChecked();
+  });
+
+  it('reflects the Final Jeopardy eligibility toggle as checked when enabled', () => {
+    render(<HostLobby roomCode="ABCD" state={makeHostState({ finalAllowNonPositive: true })} onStartGame={vi.fn()} startError={null} />);
+    expect(screen.getByTestId('final-nonpositive-checkbox')).toBeChecked();
+  });
+
+  it('emits a Final Jeopardy eligibility change from the lobby toggle', async () => {
+    const onSetFinalAllowNonPositive = vi.fn();
+    render(
+      <HostLobby
+        roomCode="ABCD"
+        state={makeHostState()}
+        onStartGame={vi.fn()}
+        onSetFinalAllowNonPositive={onSetFinalAllowNonPositive}
+        startError={null}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('final-nonpositive-checkbox'));
+    expect(onSetFinalAllowNonPositive).toHaveBeenCalledWith(true);
   });
 
   it('shows a remove button for each player in the lobby', () => {

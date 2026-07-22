@@ -168,6 +168,17 @@ describe('Final intro projections', () => {
     expect(ineligibleNegative.isEligibleForFinal).toBe(false);
   });
 
+  it('treats $0-or-less holders as eligible when finalAllowNonPositive is set', () => {
+    const state = { ...setupFinalIntro({ p1: 100, p2: 0, p3: -50 }), finalAllowNonPositive: true };
+
+    const boardView = projectBoard(state, NOW);
+    expect(boardView.finalEligiblePlayerIds.sort()).toEqual(['p1', 'p2', 'p3']);
+    expect(boardView.finalAllowNonPositive).toBe(true);
+
+    expect(projectContestant(state, 'p2', NOW).isEligibleForFinal).toBe(true);
+    expect(projectContestant(state, 'p3', NOW).isEligibleForFinal).toBe(true);
+  });
+
   it('projectContestant hides the Final clue and answer during FINAL_INTRO', () => {
     const state = setupFinalIntro({ p1: 100, p2: 0 });
 

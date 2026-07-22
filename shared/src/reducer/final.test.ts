@@ -275,6 +275,50 @@ describe('SUBMIT_FINAL_WAGER', () => {
   });
 });
 
+function setupFinalWagerAllowNonPositive(scores: Record<string, number>): GameState {
+  const intro = { ...setupFinalIntro(scores), finalAllowNonPositive: true };
+  return reduce(intro, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW }).state;
+}
+
+describe('SUBMIT_FINAL_WAGER with finalAllowNonPositive', () => {
+  it('opens Final wagers even when every contestant has $0 or less', () => {
+    const intro = { ...setupFinalIntro({ p1: 0, p2: -100 }), finalAllowNonPositive: true };
+
+    const result = reduce(intro, { type: 'OPEN_FINAL_WAGERS' }, { now: NOW });
+
+    expect(result.state.phase).toBe('FINAL_WAGER');
+    expect(result.state.finalNoEligiblePlayers).toBe(false);
+  });
+
+  it('lets a $0-or-less contestant wager up to $500', () => {
+    const state = setupFinalWagerAllowNonPositive({ p1: 0, p2: -300 });
+
+    const atMax = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 500 }, { now: NOW });
+    expect(atMax.state.finalWagers['p1']).toBe(500);
+
+    const negativeAtMax = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p2', amount: 500 }, { now: NOW });
+    expect(negativeAtMax.state.finalWagers['p2']).toBe(500);
+  });
+
+  it('rejects a $0-or-less contestant wager above $500', () => {
+    const state = setupFinalWagerAllowNonPositive({ p1: -50 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 501 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('between') });
+    expect(result.state.finalWagers['p1']).toBeUndefined();
+  });
+
+  it('still caps a positive-score contestant at their own score', () => {
+    const state = setupFinalWagerAllowNonPositive({ p1: 200, p2: -100 });
+
+    const result = reduce(state, { type: 'SUBMIT_FINAL_WAGER', playerId: 'p1', amount: 201 }, { now: NOW });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('between') });
+    expect(result.state.finalWagers['p1']).toBeUndefined();
+  });
+});
+
 describe('FORCE_FINAL_WAGERS', () => {
   it('advances to FINAL_CLUE and defaults missing wagers to 0', () => {
     const state = setupFinalWager({ p1: 200, p2: 100 });

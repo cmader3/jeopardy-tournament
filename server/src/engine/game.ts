@@ -110,6 +110,7 @@ export class GameEngine {
         controllingTeamId: parsed.controllingTeamId ?? null,
         lockedOutTeamIds: parsed.lockedOutTeamIds ?? [],
         clueSelectionMode: parsed.clueSelectionMode ?? 'HOST',
+        finalAllowNonPositive: parsed.finalAllowNonPositive ?? false,
         pendingClueId: parsed.pendingClueId ?? null,
         removedPlayers: parsed.removedPlayers ?? [],
         archived: parsed.archived ?? false,

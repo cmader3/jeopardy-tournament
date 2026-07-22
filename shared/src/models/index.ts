@@ -106,6 +106,7 @@ export interface GameState {
   controllingTeamId: string | null;
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
+  finalAllowNonPositive: boolean;
   pendingClueId: string | null;
   removedPlayers: RemovedPlayer[];
   archived: boolean;

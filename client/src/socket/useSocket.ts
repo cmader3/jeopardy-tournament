@@ -24,6 +24,7 @@ export interface SocketState<T> {
   selectClue?: (clueId: string) => void;
   reopenClue?: (clueId: string, revertScores: boolean) => void;
   setClueSelectionMode?: (mode: 'HOST' | 'PLAYER') => void;
+  setFinalAllowNonPositive?: (allow: boolean) => void;
   revealSelectedClue?: () => void;
   revealClue?: () => void;
   revealAnswer?: () => void;
@@ -228,6 +229,10 @@ export function useSocket<T>(
     socketRef.current?.emit('set_clue_selection_mode', { mode });
   }, []);
 
+  const setFinalAllowNonPositive = useCallback((allow: boolean) => {
+    socketRef.current?.emit('set_final_allow_non_positive', { allow });
+  }, []);
+
   const revealSelectedClue = useCallback(() => {
     socketRef.current?.emit('reveal_selected_clue');
   }, []);
@@ -344,7 +349,7 @@ export function useSocket<T>(
     setError(null);
   }, []);
 
-  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, admitPlayer, selectClue, reopenClue, setClueSelectionMode, revealSelectedClue, revealClue, revealAnswer, returnToBoard, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, startFinalTimer, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, configureTeams, chooseTeam, setCaptain, overrideControlTeam, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
+  return { connected, status, removedReason, error, data, startGame, restartGame, leaveGame, removePlayer, admitPlayer, selectClue, reopenClue, setClueSelectionMode, setFinalAllowNonPositive, revealSelectedClue, revealClue, revealAnswer, returnToBoard, armBuzzers, buzz, ruleCorrect, ruleIncorrect, adjustScore, undoLastRuling, submitDDWager, submitFinalWager, submitFinalAnswer, submitFinalAnswerDraft, forceFinalWagers, startFinalTimer, cancelDailyDouble, advanceRound, openFinalWagers, overrideControl, configureTeams, chooseTeam, setCaptain, overrideControlTeam, revealFinalAnswer, ruleFinalCorrect, ruleFinalIncorrect, revealFinalWager, clearError };
 }
 
 export function getStoredContestantToken(): {

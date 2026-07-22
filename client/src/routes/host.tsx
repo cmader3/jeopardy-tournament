@@ -35,6 +35,7 @@ export interface HostLobbyProps {
   onStartGame: () => void;
   onCreateNewGame?: () => void;
   onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
+  onSetFinalAllowNonPositive?: (allow: boolean) => void;
   onRemovePlayer?: (playerId: string) => void;
   onAdmitPlayer?: (playerId: string) => void;
   onConfigureTeams?: (enabled: boolean, teams: { id: string; name: string }[]) => void;
@@ -76,6 +77,34 @@ function ClueSelectionToggle({
         {mode === 'PLAYER'
           ? 'The controlling player picks a clue, then you reveal it.'
           : 'Only you can pick clues, and they reveal immediately.'}
+      </p>
+    </div>
+  );
+}
+
+function FinalNonPositiveToggle({
+  allow,
+  onSetAllow,
+}: {
+  allow: boolean;
+  onSetAllow?: (allow: boolean) => void;
+}) {
+  return (
+    <div className={styles.clueModeToggle} data-testid="final-nonpositive-toggle">
+      <span className={styles.clueModeLabel}>Final Jeopardy eligibility</span>
+      <label className={styles.teamModeToggle}>
+        <input
+          type="checkbox"
+          checked={allow}
+          onChange={(e) => onSetAllow?.(e.target.checked)}
+          data-testid="final-nonpositive-checkbox"
+        />
+        Let $0-or-less contestants play (wager up to $500)
+      </label>
+      <p className={styles.clueModeHint} data-testid="final-nonpositive-hint">
+        {allow
+          ? 'Contestants with $0 or less can play Final Jeopardy and wager up to $500.'
+          : 'Only contestants with a positive score can play Final Jeopardy.'}
       </p>
     </div>
   );
@@ -310,7 +339,7 @@ function TeamRoster({
   );
 }
 
-export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onRemovePlayer, onAdmitPlayer, onConfigureTeams, onSetCaptain, startError }: HostLobbyProps) {
+export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSetClueSelectionMode, onSetFinalAllowNonPositive, onRemovePlayer, onAdmitPlayer, onConfigureTeams, onSetCaptain, startError }: HostLobbyProps) {
   const playerCount = state?.players.length ?? 0;
   const removedPlayers = state?.removedPlayers ?? [];
   const connectedCount = state?.players.filter((p) => p.connected).length ?? 0;
@@ -432,6 +461,7 @@ export function HostLobby({ roomCode, state, onStartGame, onCreateNewGame, onSet
         </div>
       )}
       <ClueSelectionToggle mode={state?.clueSelectionMode ?? 'HOST'} onSetMode={onSetClueSelectionMode} />
+      <FinalNonPositiveToggle allow={state?.finalAllowNonPositive ?? false} onSetAllow={onSetFinalAllowNonPositive} />
       <div className={styles.startControls}>
         <button
           type="button"
@@ -492,6 +522,7 @@ export interface HostInProgressProps {
   onReopenClue?: (clueId: string, revertScores: boolean) => void;
   onRemovePlayer?: (playerId: string) => void;
   onSetClueSelectionMode?: (mode: ClueSelectionMode) => void;
+  onSetFinalAllowNonPositive?: (allow: boolean) => void;
   onRevealSelectedClue?: () => void;
   onRevealClue?: () => void;
   onRevealAnswer?: () => void;
@@ -1114,6 +1145,7 @@ export function HostInProgress({
   onReopenClue,
   onRemovePlayer,
   onSetClueSelectionMode,
+  onSetFinalAllowNonPositive,
   onRevealSelectedClue,
   onRevealClue,
   onRevealAnswer,
@@ -1332,6 +1364,7 @@ export function HostInProgress({
         Phase: {state?.phase ?? '—'}
       </p>
       <ClueSelectionToggle mode={state?.clueSelectionMode ?? 'HOST'} onSetMode={onSetClueSelectionMode} />
+      <FinalNonPositiveToggle allow={state?.finalAllowNonPositive ?? false} onSetAllow={onSetFinalAllowNonPositive} />
       <h2>Roster</h2>
       {players.length === 0 ? (
         <p>No contestants connected.</p>
@@ -1979,6 +2012,12 @@ export function HostContent() {
     },
     [hostSocket],
   );
+  const handleSetFinalAllowNonPositive = useCallback(
+    (allow: boolean) => {
+      hostSocket.setFinalAllowNonPositive?.(allow);
+    },
+    [hostSocket],
+  );
   const handleRevealSelectedClue = useCallback(() => {
     hostSocket.revealSelectedClue?.();
   }, [hostSocket]);
@@ -2076,6 +2115,7 @@ export function HostContent() {
             onStartGame={handleStartGame}
             onCreateNewGame={handleCreateNewGame}
             onSetClueSelectionMode={handleSetClueSelectionMode}
+            onSetFinalAllowNonPositive={handleSetFinalAllowNonPositive}
             onRemovePlayer={handleRemovePlayer}
             onAdmitPlayer={handleAdmitPlayer}
             onConfigureTeams={handleConfigureTeams}
@@ -2096,6 +2136,7 @@ export function HostContent() {
         onReopenClue={handleReopenClue}
         onRemovePlayer={handleRemovePlayer}
         onSetClueSelectionMode={handleSetClueSelectionMode}
+        onSetFinalAllowNonPositive={handleSetFinalAllowNonPositive}
         onRevealSelectedClue={handleRevealSelectedClue}
         onRevealClue={handleRevealClue}
         onRevealAnswer={handleRevealAnswer}

@@ -70,6 +70,7 @@ export interface BoardView {
   round: ProjectedRoundPublic | null;
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
+  finalAllowNonPositive: boolean;
   pendingClueId: string | null;
   currentClueId: string | null;
   currentClueText: string | null;
@@ -104,6 +105,7 @@ export interface HostView {
   round: ProjectedRoundHost | null;
   usedClueIds: string[];
   clueSelectionMode: ClueSelectionMode;
+  finalAllowNonPositive: boolean;
   pendingClueId: string | null;
   currentClueId: string | null;
   currentClueText: string | null;
@@ -298,13 +300,15 @@ export function isRoundComplete(state: GameState): boolean {
 }
 
 // Final-eligible score holders: team ids in team mode, otherwise player ids.
+// When finalAllowNonPositive is set, holders with $0 or less are eligible too.
 function getFinalEligiblePlayerIds(state: GameState): string[] {
+  const allowNonPositive = state.finalAllowNonPositive === true;
   if (isTeamMode(state)) {
     return (state.teams ?? [])
-      .filter((t) => t.score > 0 && getTeamMembers(state.players, t.id).length > 0)
+      .filter((t) => (allowNonPositive || t.score > 0) && getTeamMembers(state.players, t.id).length > 0)
       .map((t) => t.id);
   }
-  return state.players.filter((p) => p.score > 0).map((p) => p.id);
+  return state.players.filter((p) => allowNonPositive || p.score > 0).map((p) => p.id);
 }
 
 function getFinalWagerSubmissionStatus(state: GameState): Record<string, boolean> {
@@ -368,6 +372,7 @@ export function projectBoard(state: GameState, now: number): BoardView {
     round: round ? projectBoardRound(round) : null,
     usedClueIds: state.usedClueIds,
     clueSelectionMode: state.clueSelectionMode ?? 'HOST',
+    finalAllowNonPositive: state.finalAllowNonPositive ?? false,
     pendingClueId: state.pendingClueId ?? null,
     currentClueId: state.currentClueId,
     currentClueText: showClueText ? currentClue?.clueText ?? null : null,
@@ -410,6 +415,7 @@ export function projectHost(state: GameState, now: number): HostView {
     round: round ? projectHostRound(round) : null,
     usedClueIds: state.usedClueIds,
     clueSelectionMode: state.clueSelectionMode ?? 'HOST',
+    finalAllowNonPositive: state.finalAllowNonPositive ?? false,
     pendingClueId: state.pendingClueId ?? null,
     currentClueId: state.currentClueId,
     currentClueText: showClueText ? currentClue?.clueText ?? null : null,
@@ -462,7 +468,10 @@ export function projectContestant(state: GameState, playerId: string, now: numbe
 
   const holderId = holderIdForPlayer(state, playerId);
   const holderScore = teamMode ? team?.score ?? 0 : me?.score ?? 0;
-  const isEligibleForFinal = teamMode ? (team != null && holderScore > 0) : holderScore > 0;
+  const allowNonPositiveFinal = state.finalAllowNonPositive === true;
+  const isEligibleForFinal = teamMode
+    ? team != null && (allowNonPositiveFinal || holderScore > 0)
+    : allowNonPositiveFinal || holderScore > 0;
   // In team mode only the acting captain submits on the team's behalf.
   const canActForFinal = teamMode ? isActingCaptain : true;
   const myFinalWager = holderId ? state.finalWagers[holderId] ?? null : null;
