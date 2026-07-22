@@ -770,13 +770,16 @@
 
 .finalPlayerList {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 1rem;
+  width: 100%;
+  overflow-x: auto;
 }
 
 .finalPlayer {
-  flex: 1 1 200px;
+  flex: 1 1 0;
+  min-width: 0;
   max-width: 300px;
   border: 2px solid var(--value-gold);
   border-radius: 0.5rem;
@@ -802,6 +805,10 @@
   font-size: clamp(1.25rem, 3vw, 2rem);
   color: var(--text-light);
   text-transform: uppercase;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .finalPlayerStatus {
