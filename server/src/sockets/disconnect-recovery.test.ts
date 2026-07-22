@@ -519,4 +519,52 @@ describe('disconnect and recovery during active play', { timeout: 15000 }, () =>
     bob.disconnect();
     await server.close();
   });
+
+  it('lets a disconnected contestant rejoin by name into their existing slot mid-game', async () => {
+    const server = await createTestServer();
+    const { roomCode, host, boardClient, alice, bob, tokenA } = await setupGame(server);
+
+    const previousGrace = process.env.DISCONNECT_GRACE_MS;
+    process.env.DISCONNECT_GRACE_MS = '100';
+    try {
+      // Alice closes her browser and is marked offline once the grace elapses.
+      const hostSawOffline = waitForState(
+        host,
+        (s) =>
+          (s.players as { id: string; connected: boolean }[]).find((p) => p.id === tokenA.playerId)?.connected ===
+          false,
+      );
+      alice.disconnect();
+      await hostSawOffline;
+
+      // She reopens on a new device with no reconnect token and simply enters
+      // her name and the room code again.
+      const aliceReturns = connectClient(server.url);
+      await waitForConnect(aliceReturns);
+      const rejoinState = waitForState(aliceReturns);
+      const rejoinToken = waitForToken(aliceReturns);
+      aliceReturns.emit('join', { role: 'contestant', roomCode, name: 'Alice' });
+      const [state, token] = await Promise.all([rejoinState, rejoinToken]);
+
+      // Reclaims the existing slot (same id + token, still one player) rather
+      // than creating a duplicate or being rejected for not being in the lobby.
+      expect(token.playerId).toBe(tokenA.playerId);
+      expect(token.reconnectToken).toBe(tokenA.reconnectToken);
+      expect((state as { playerId: string }).playerId).toBe(tokenA.playerId);
+      const players = (state as { players: { id: string; connected: boolean }[] }).players;
+      expect(players.find((p) => p.id === tokenA.playerId)?.connected).toBe(true);
+      expect(players.filter((p) => p.id === tokenA.playerId).length).toBe(1);
+      expect(players.length).toBe(2);
+
+      aliceReturns.disconnect();
+    } finally {
+      if (previousGrace === undefined) delete process.env.DISCONNECT_GRACE_MS;
+      else process.env.DISCONNECT_GRACE_MS = previousGrace;
+    }
+
+    host.disconnect();
+    boardClient.disconnect();
+    bob.disconnect();
+    await server.close();
+  });
 });

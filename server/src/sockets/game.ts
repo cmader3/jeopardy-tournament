@@ -1158,6 +1158,26 @@ async function handleContestantJoin(
     return;
   }
 
+  // Name-based rejoin: if a player with this name is currently disconnected
+  // (they closed their browser or reopened on another device and no longer
+  // have their reconnect token), let them reclaim that slot instead of being
+  // rejected once the game has left the lobby. Only disconnected slots are
+  // reclaimable, so an actively-connected contestant can never be taken over,
+  // and host-removed players are gone from `players`, so bans still hold.
+  const normalizedName = name.toLowerCase();
+  const disconnected = state.players.find(
+    (p) => !p.connected && p.name.trim().toLowerCase() === normalizedName,
+  );
+  if (disconnected) {
+    cancelPendingDisconnect(roomCode, disconnected.id);
+    await joinSessionRoom(socket, roomCode, `contestant:${disconnected.id}`);
+    setSocketMeta(socket, { role: 'contestant', roomCode, playerId: disconnected.id });
+    const result = await engine.reconnectPlayer(roomCode, disconnected.id);
+    socket.emit('token', { reconnectToken: disconnected.reconnectToken, playerId: disconnected.id });
+    socket.emit('state', projectContestant(result.state, disconnected.id, Date.now()));
+    return;
+  }
+
   const playerId = `player-${crypto.randomUUID()}`;
   const reconnectToken = generateReconnectToken();
   const newPlayer = {
