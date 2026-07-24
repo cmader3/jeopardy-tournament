@@ -120,15 +120,31 @@ interface BoardGridProps {
   round: NonNullable<BoardView['round']>;
   usedClueIds: string[];
   pendingClueId?: string | null;
-  onSelectedCellRect?: (clueId: string, rect: DOMRect) => void;
+  onCellRect?: (clueId: string, rect: DOMRect) => void;
 }
 
-function BoardGrid({ round, usedClueIds, pendingClueId, onSelectedCellRect }: BoardGridProps) {
+function BoardGrid({ round, usedClueIds, pendingClueId, onCellRect }: BoardGridProps) {
   const maxRow = Math.max(0, ...round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
   const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Snapshot every clue cell's on-screen rect while the board is showing, keyed
+  // by clue id. The host can reveal any clue directly (HOST mode never dwells
+  // in CLUE_SELECTED), so the reveal overlay needs an origin for whichever cell
+  // is picked, not just a pre-selected one. Runs after each render so the rects
+  // stay current right up until the grid unmounts on reveal.
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid || !onCellRect) return;
+    grid.querySelectorAll<HTMLElement>('[data-clue-id]').forEach((node) => {
+      const clueId = node.dataset.clueId;
+      if (clueId) onCellRect(clueId, node.getBoundingClientRect());
+    });
+  });
 
   return (
     <div
+      ref={gridRef}
       className={styles.grid}
       data-testid="board-grid"
       style={{
@@ -150,13 +166,6 @@ function BoardGrid({ round, usedClueIds, pendingClueId, onSelectedCellRect }: Bo
           return (
             <div
               key={clue.id}
-              ref={
-                selected
-                  ? (node) => {
-                      if (node) onSelectedCellRect?.(clue.id, node.getBoundingClientRect());
-                    }
-                  : undefined
-              }
               className={`${styles.cell} ${used ? styles.cellUsed : ''} ${selected ? styles.cellSelected : ''}`}
               data-testid={used ? 'used-cell' : 'clue-cell'}
               data-clue-id={clue.id}
@@ -197,7 +206,7 @@ const CLUE_ZOOM_MS = 1300;
 type ClueOrigin = { clueId: string; rect: DOMRect } | null;
 
 interface ClueOverlayProps {
-  getOrigin: () => ClueOrigin;
+  getOrigin: (clueId: string | null) => ClueOrigin;
   clueId: string | null;
   children: ReactNode;
 }
@@ -218,7 +227,7 @@ export function ClueOverlay({ getOrigin, clueId, children }: ClueOverlayProps) {
     if (typeof window === 'undefined') return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
 
-    const captured = getOrigin();
+    const captured = getOrigin(clueId);
     const origin = captured && captured.clueId === clueId ? captured.rect : null;
     if (!origin) return;
 
@@ -720,11 +729,11 @@ function FinalAnswerReveal({ state }: FinalRevealProps) {
 
 interface BoardStageProps {
   state: BoardView;
-  getClueOrigin: () => ClueOrigin;
-  onSelectedCellRect: (clueId: string, rect: DOMRect) => void;
+  getClueOrigin: (clueId: string | null) => ClueOrigin;
+  onCellRect: (clueId: string, rect: DOMRect) => void;
 }
 
-function BoardStage({ state, getClueOrigin, onSelectedCellRect }: BoardStageProps) {
+function BoardStage({ state, getClueOrigin, onCellRect }: BoardStageProps) {
   if (state.phase === 'ROUND_TRANSITION') {
     return <BetweenRoundScreen state={state} />;
   }
@@ -799,7 +808,7 @@ function BoardStage({ state, getClueOrigin, onSelectedCellRect }: BoardStageProp
           round={state.round}
           usedClueIds={state.usedClueIds}
           pendingClueId={state.pendingClueId}
-          onSelectedCellRect={onSelectedCellRect}
+          onCellRect={onCellRect}
         />
       </div>
     );
@@ -830,13 +839,18 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const serverNow = useServerTime(state?.serverNow ?? 0);
   const serverNowRef = useRef(serverNow);
 
-  // Remember where the last-selected clue cell was so the reveal overlay can
-  // grow out of it. Keyed by clue id so a stale rect is never reused.
-  const clueOriginRef = useRef<ClueOrigin>(null);
-  const handleSelectedCellRect = useCallback((clueId: string, rect: DOMRect) => {
-    clueOriginRef.current = { clueId, rect };
+  // Remember where each clue cell is on the board so the reveal overlay can
+  // grow out of whichever clue is revealed (the host can reveal any clue
+  // directly without a pending-selection step). Keyed by clue id.
+  const cellRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  const handleCellRect = useCallback((clueId: string, rect: DOMRect) => {
+    cellRectsRef.current.set(clueId, rect);
   }, []);
-  const getClueOrigin = useCallback(() => clueOriginRef.current, []);
+  const getClueOrigin = useCallback((clueId: string | null): ClueOrigin => {
+    if (!clueId) return null;
+    const rect = cellRectsRef.current.get(clueId);
+    return rect ? { clueId, rect } : null;
+  }, []);
 
   useEffect(() => {
     serverNowRef.current = serverNow;
@@ -994,7 +1008,7 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
         </button>
       </header>
       <div className={styles.stage}>
-        <BoardStage state={state} getClueOrigin={getClueOrigin} onSelectedCellRect={handleSelectedCellRect} />
+        <BoardStage state={state} getClueOrigin={getClueOrigin} onCellRect={handleCellRect} />
       </div>
       <div className={styles.shareSection}>
         <p className={styles.shareLabel}>Share this board display:</p>

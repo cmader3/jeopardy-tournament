@@ -1223,6 +1223,46 @@ describe('BoardRoute', () => {
     }
   });
 
+  it('grows the reveal out of the clue cell in host-pick mode without a pending-selection step', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(makeCellRect());
+
+    try {
+      // Host-pick mode never sets pendingClueId: the board shows the grid, then
+      // jumps straight to CLUE_REVEALED. The overlay must still grow out of the
+      // revealed cell using the rect captured while the grid was on-screen.
+      mockUseSocket(makeBoardState({ phase: 'BOARD_SELECT', round: makeRound(), pendingClueId: null }));
+      const { rerender } = renderBoardRoute();
+      await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+      await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+      await screen.findByTestId('board-grid');
+
+      mockUseSocket(
+        makeBoardState({
+          phase: 'CLUE_REVEALED',
+          round: makeRound(),
+          currentClueId: 'cl1',
+          currentClueText: 'H2O is this compound',
+        }),
+      );
+      rerender(
+        <MemoryRouter>
+          <BoardRoute />
+        </MemoryRouter>,
+      );
+
+      const overlay = await screen.findByTestId('clue-overlay');
+      await flushRaf();
+
+      expect(overlay.style.transform).toBe('none');
+      expect(overlay.style.transition).toMatch(/transform 1300ms/);
+      expect(overlay.style.animation).toBe('none');
+    } finally {
+      rectSpy.mockRestore();
+    }
+  });
+
   it('shows lit armed indicator lights only when buzzers are armed', async () => {
     mockUseSocket(
       makeBoardState({
