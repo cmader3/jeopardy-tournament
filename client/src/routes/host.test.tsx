@@ -936,7 +936,8 @@ describe('HostInProgress grid and selection', () => {
     expect(onCancelDailyDouble).toHaveBeenCalledTimes(1);
   });
 
-  it('does not show the cancel Daily Double button when the controller is still connected', () => {
+  it('shows the cancel Daily Double failsafe even when the controller is still connected', async () => {
+    const onCancelDailyDouble = vi.fn();
     const state = makeHostState({
       phase: 'DAILY_DOUBLE_WAGER',
       round: makeRound(),
@@ -946,9 +947,13 @@ describe('HostInProgress grid and selection', () => {
       dailyDoubleWager: null,
       players: [{ id: 'p1', name: 'Alice', score: 1000, connected: true }],
     });
-    render(<HostInProgress roomCode="WXYZ" state={state} />);
+    render(<HostInProgress roomCode="WXYZ" state={state} onCancelDailyDouble={onCancelDailyDouble} />);
 
-    expect(screen.queryByTestId('cancel-daily-double-button')).not.toBeInTheDocument();
+    const cancelButton = screen.getByTestId('cancel-daily-double-button');
+    expect(cancelButton).toBeInTheDocument();
+
+    await userEvent.click(cancelButton);
+    expect(onCancelDailyDouble).toHaveBeenCalledTimes(1);
   });
 
   it('shows Waiting on Wager while the Daily Double wager is still pending', () => {

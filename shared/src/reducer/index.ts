@@ -1306,28 +1306,10 @@ function handleCancelDailyDouble(state: GameState): ReducerResult {
     return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'A wager has already been submitted for this Daily Double' }] };
   }
 
-  if (isTeamMode(state)) {
-    if (state.controllingTeamId == null) {
-      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No controlling team is assigned' }] };
-    }
-    const actingId = getActingCaptainId(state, state.controllingTeamId);
-    const acting = actingId ? state.players.find((p) => p.id === actingId) : undefined;
-    if (acting && acting.connected) {
-      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The controlling team still has a connected contestant' }] };
-    }
-  } else {
-    if (state.controllingPlayerId == null) {
-      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'No controlling contestant is assigned' }] };
-    }
-    const controller = state.players.find((p) => p.id === state.controllingPlayerId);
-    if (!controller) {
-      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Controlling contestant not found' }] };
-    }
-    if (controller.connected) {
-      return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'The controlling contestant is still connected' }] };
-    }
-  }
-
+  // Host failsafe: allow returning to the board while a Daily Double wager is
+  // still pending, regardless of whether the controlling contestant is
+  // connected. A stuck captain (connected but unable to wager) would otherwise
+  // trap the host in this phase. The clue is left unused so it can be replayed.
   return {
     state: {
       ...state,

@@ -1208,13 +1208,11 @@ export function HostInProgress({
   const ddActorName = teamMode
     ? controllingTeam?.name ?? 'Controller'
     : players.find((p) => p.id === state?.controllingPlayerId)?.name ?? 'Controller';
+  // Host failsafe: expose "Cancel Daily Double / Return to Board" for the whole
+  // wager phase (until a wager is locked in), regardless of whether the
+  // controlling captain is connected, so a stuck captain can't trap the host.
   const showCancelDailyDouble =
-    state?.phase === 'DAILY_DOUBLE_WAGER' &&
-    state?.dailyDoubleWager == null &&
-    (teamMode
-      ? Boolean(controllingTeam && controllingTeam.connectedMemberIds.length === 0)
-      : state?.controllingPlayerId != null &&
-        players.find((p) => p.id === state.controllingPlayerId)?.connected === false);
+    state?.phase === 'DAILY_DOUBLE_WAGER' && state?.dailyDoubleWager == null;
   const buzzedPlayer = state?.buzzWinnerId ? players.find((p) => p.id === state.buzzWinnerId) : null;
   const buzzedTeam =
     teamMode && buzzedPlayer?.teamId

@@ -881,13 +881,19 @@ describe('CANCEL_DAILY_DOUBLE', () => {
     expect(result.state.revealedAnswer).toBeNull();
   });
 
-  it('rejects cancellation when the controller is still connected', () => {
+  it('lets the host return to the board even when the controller is still connected (failsafe)', () => {
     const state = setupDailyDoubleWager(1000);
+    const controllerId = state.controllingPlayerId;
+    const ddClueId = state.currentClueId;
 
     const result = reduce(state, { type: 'CANCEL_DAILY_DOUBLE' }, { now: NOW });
 
-    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.stringContaining('connected') });
-    expect(result.state.phase).toBe('DAILY_DOUBLE_WAGER');
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('BOARD_SELECT');
+    expect(result.state.currentClueId).toBeNull();
+    expect(result.state.dailyDoubleWager).toBeNull();
+    expect(result.state.usedClueIds).not.toContain(ddClueId);
+    expect(result.state.controllingPlayerId).toBe(controllerId);
   });
 
   it('rejects cancellation when a wager has already been submitted', () => {
