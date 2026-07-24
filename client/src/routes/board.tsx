@@ -306,9 +306,10 @@ function BetweenRoundScreen({ state }: BetweenRoundScreenProps) {
 interface AnswerBannerProps {
   state: BoardView;
   compact?: boolean;
+  presentational?: boolean;
 }
 
-function AnswerBanner({ state, compact = false }: AnswerBannerProps) {
+function AnswerBanner({ state, compact = false, presentational = false }: AnswerBannerProps) {
   if (!state.answer) return null;
   const outcome = state.lastOutcome;
   const player = outcome ? state.players.find((p) => p.id === outcome.playerId) : undefined;
@@ -329,23 +330,53 @@ function AnswerBanner({ state, compact = false }: AnswerBannerProps) {
   return (
     <div
       className={`${styles.answerBanner} ${compact ? styles.answerBannerCompact : ''} ${outcome?.type === 'CORRECT' ? styles.answerCorrect : outcome?.type === 'INCORRECT' ? styles.answerIncorrect : ''}`}
-      data-testid="answer-banner"
-      role="status"
-      aria-live="polite"
+      data-testid={presentational ? undefined : 'answer-banner'}
+      role={presentational ? undefined : 'status'}
+      aria-live={presentational ? undefined : 'polite'}
+      aria-hidden={presentational ? true : undefined}
     >
       <p className={styles.answerLabel}>Answer:</p>
-      <p className={styles.answerText} data-testid="answer-text">
+      <p className={styles.answerText} data-testid={presentational ? undefined : 'answer-text'}>
         {state.answer}
       </p>
       {outcomeInfo && (
-        <p className={styles.outcomeLabel} data-testid="outcome-label">
+        <p className={styles.outcomeLabel} data-testid={presentational ? undefined : 'outcome-label'}>
           {outcomeInfo.prefix}{' '}
-          <span className={styles.outcomeAmount} data-testid="outcome-amount">
+          <span className={styles.outcomeAmount} data-testid={presentational ? undefined : 'outcome-amount'}>
             {outcomeInfo.amount}
           </span>
         </p>
       )}
     </div>
+  );
+}
+
+const ANSWER_DOCK_DELAY_MS = 5000;
+
+// On the board screen the revealed answer first appears big and centered
+// (opaque, easy to read) and, after ANSWER_DOCK_DELAY_MS, animates down into a
+// compact bar pinned to the top so the board grid becomes fully visible again.
+// A hidden in-flow spacer reserves the docked bar's height so the grid sits
+// below it in both states.
+export function AnswerReveal({ state }: AnswerBannerProps) {
+  const [docked, setDocked] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDocked(true), ANSWER_DOCK_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (!state.answer) return null;
+
+  return (
+    <>
+      <div className={styles.answerRevealSpacer} aria-hidden="true">
+        <AnswerBanner state={state} compact presentational />
+      </div>
+      <div className={`${styles.answerReveal} ${docked ? styles.answerRevealDocked : styles.answerRevealCentered}`}>
+        <AnswerBanner state={state} compact />
+      </div>
+    </>
   );
 }
 
@@ -655,7 +686,7 @@ function renderStage(state: BoardView) {
   if (state.round) {
     return (
       <div className={styles.roundStage}>
-        {state.answer && <AnswerBanner state={state} compact />}
+        {state.answer && <AnswerReveal key={state.currentClueId ?? state.answer} state={state} />}
         {state.phase === 'CLUE_SELECTED' && (
           <p className={styles.selectedBanner} data-testid="board-clue-selected">
             Clue selected — waiting for the host to reveal it.

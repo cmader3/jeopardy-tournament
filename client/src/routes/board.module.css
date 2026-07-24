@@ -391,6 +391,7 @@
   gap: 0.75rem;
   padding: 1rem;
   min-height: 0;
+  position: relative;
 }
 
 .clueScreen {
@@ -611,6 +612,87 @@
 
 .answerBannerCompact .outcomeAmount {
   font-size: clamp(0.85rem, 1.9vh, 1.25rem);
+}
+
+/* The revealed answer starts big and centered, then animates down into the
+   compact top bar. A hidden in-flow spacer reserves the docked bar's height. */
+.answerRevealSpacer {
+  flex: 0 0 auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.answerReveal {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  transition:
+    top 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.answerRevealCentered {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.answerRevealDocked {
+  top: 1rem;
+  transform: translateY(0);
+}
+
+.answerReveal .answerBanner {
+  transition:
+    background 500ms ease,
+    box-shadow 500ms ease,
+    padding 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.answerReveal .answerLabel,
+.answerReveal .answerText,
+.answerReveal .outcomeLabel,
+.answerReveal .outcomeAmount {
+  transition: font-size 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Centered intro: opaque background and enlarged type so it reads clearly. */
+.answerRevealCentered .answerBannerCompact {
+  background: #050a24;
+  max-width: min(90%, 70rem);
+  padding: clamp(1rem, 3.5vh, 2.5rem) clamp(1.5rem, 4vw, 3rem);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.6);
+}
+
+.answerRevealCentered .answerBannerCompact .answerLabel {
+  font-size: clamp(1.1rem, 2.6vw, 2rem);
+}
+
+.answerRevealCentered .answerBannerCompact .answerText {
+  font-size: clamp(2rem, 6vw, 5rem);
+}
+
+.answerRevealCentered .answerBannerCompact .outcomeLabel {
+  font-size: clamp(1.1rem, 2.4vw, 1.9rem);
+}
+
+.answerRevealCentered .answerBannerCompact .outcomeAmount {
+  font-size: clamp(1.4rem, 3vw, 2.4rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answerReveal,
+  .answerReveal .answerBanner,
+  .answerReveal .answerLabel,
+  .answerReveal .answerText,
+  .answerReveal .outcomeLabel,
+  .answerReveal .outcomeAmount {
+    transition: none;
+  }
 }
 
 .answerCorrect {

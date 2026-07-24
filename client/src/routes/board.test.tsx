@@ -3,7 +3,7 @@ import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { useState, useCallback } from 'react';
-import { BoardRoute } from './board.js';
+import { BoardRoute, AnswerReveal } from './board.js';
 import type { BoardView } from '@jeopardy/shared';
 
 function renderBoardRoute() {
@@ -738,7 +738,7 @@ describe('BoardRoute', () => {
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(2);
   });
 
-  it('renders the answer as a compact in-flow bar alongside the full board grid, not as an overlay', async () => {
+  it('reveals the answer big and centered over the board grid without replacing it', async () => {
     mockUseSocket(
       makeBoardState({
         phase: 'BOARD_SELECT',
@@ -759,14 +759,55 @@ describe('BoardRoute', () => {
 
     const banner = await screen.findByTestId('answer-banner');
     const grid = screen.getByTestId('board-grid');
+    const reveal = banner.parentElement as HTMLElement;
 
     expect(screen.queryByTestId('answer-overlay')).not.toBeInTheDocument();
     expect(banner).toBeInTheDocument();
     expect(grid).toBeInTheDocument();
-    // The banner and grid are siblings in the round stage; neither contains the other.
+    // The reveal starts centered and never contains (replaces) the grid.
+    expect(reveal.className).toMatch(/answerRevealCentered/);
     expect(banner).not.toContainElement(grid);
     expect(grid).not.toContainElement(banner);
-    expect(banner.parentElement).toBe(grid.parentElement);
+    // The animated reveal and the grid both live inside the round stage.
+    expect(grid.parentElement).toBe(reveal.parentElement);
+  });
+
+  it('docks the revealed answer to the top bar after the centered delay elapses', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(
+        <AnswerReveal
+          state={makeBoardState({
+            phase: 'BOARD_SELECT',
+            round: makeRound(),
+            usedClueIds: ['cl1'],
+            answer: 'Water',
+            lastOutcome: { playerId: 'p2', type: 'CORRECT', value: 100 },
+            currentClueId: 'cl1',
+            players: [
+              { id: 'p1', name: 'Alice', score: 0, connected: true },
+              { id: 'p2', name: 'Bob', score: 100, connected: true },
+            ],
+          })}
+        />,
+      );
+
+      const banner = screen.getByTestId('answer-banner');
+      const reveal = banner.parentElement as HTMLElement;
+      expect(reveal.className).toMatch(/answerRevealCentered/);
+      expect(reveal.className).not.toMatch(/answerRevealDocked/);
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(reveal.className).toMatch(/answerRevealDocked/);
+      expect(reveal.className).not.toMatch(/answerRevealCentered/);
+      // A hidden spacer reserves the docked bar's height so the grid sits below it.
+      expect(container.querySelector('[class*="answerRevealSpacer"]')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows the between-round screen during ROUND_TRANSITION with carried-over scores', async () => {
