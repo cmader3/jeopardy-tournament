@@ -192,7 +192,7 @@ function ClueContent({ clueText, isDailyDouble }: ClueContentProps) {
   );
 }
 
-const CLUE_ZOOM_MS = 480;
+const CLUE_ZOOM_MS = 700;
 
 type ClueOrigin = { clueId: string; rect: DOMRect } | null;
 
@@ -231,15 +231,15 @@ export function ClueOverlay({ getOrigin, clueId, children }: ClueOverlayProps) {
     const translateX = origin.left + origin.width / 2 - vw / 2;
     const translateY = origin.top + origin.height / 2 - vh / 2;
 
+    // Keep the box fully opaque so the grow-out-of-the-cell motion is clearly
+    // visible (matching the answer-shrink easing and 700ms rate).
     el.style.animation = 'none';
     el.style.transformOrigin = 'center center';
     el.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
-    el.style.opacity = '0';
     // Flush the starting frame before enabling the transition to identity.
     void el.getBoundingClientRect();
-    el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${Math.round(CLUE_ZOOM_MS / 2)}ms ease-out`;
+    el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
     el.style.transform = 'none';
-    el.style.opacity = '1';
   }, [getOrigin, clueId]);
 
   return (

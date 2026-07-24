@@ -1077,11 +1077,10 @@ describe('BoardRoute', () => {
 
     const overlay = screen.getByTestId('clue-overlay');
     // The FLIP animation lands the overlay at full-screen (transform none) with
-    // a transform transition enabled and the CSS keyframe disabled.
+    // a 700ms transform transition enabled and the CSS keyframe disabled.
     expect(overlay.style.transform).toBe('none');
-    expect(overlay.style.transition).toMatch(/transform/);
+    expect(overlay.style.transition).toMatch(/transform 700ms/);
     expect(overlay.style.animation).toBe('none');
-    expect(overlay.style.opacity).toBe('1');
   });
 
   it('falls back to the CSS zoom without inline transforms when the captured origin is for another clue', () => {
