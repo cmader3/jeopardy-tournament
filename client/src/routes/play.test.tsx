@@ -960,7 +960,7 @@ describe('PlayRoute', () => {
     expect(buzzer).toHaveTextContent('Too Early');
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1600));
+      await new Promise((resolve) => setTimeout(resolve, 2400));
     });
 
     expect(buzzer).toHaveTextContent('Wait for Host');

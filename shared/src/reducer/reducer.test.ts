@@ -1150,13 +1150,13 @@ describe('ARM_BUZZERS', () => {
 });
 
 describe('BUZZ', () => {
-  it('rejects a buzz before arming and applies a 1000ms lockout', () => {
+  it('rejects a buzz before arming and applies a 2000ms lockout', () => {
     const state = setupClueRevealed();
 
     const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW });
 
     expect(result.state.phase).toBe('CLUE_REVEALED');
-    expect(result.state.lockoutUntil['p1']).toBe(NOW + 1000);
+    expect(result.state.lockoutUntil['p1']).toBe(NOW + 2000);
     expect(result.state.buzzWinnerId).toBeNull();
     expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
   });
@@ -1195,7 +1195,7 @@ describe('BUZZ', () => {
     const early = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW });
     expect(early.state.phase).toBe('CLUE_REVEALED');
     expect(early.state.buzzWinnerId).toBeNull();
-    expect(early.state.lockoutUntil['p1']).toBe(NOW + 1000);
+    expect(early.state.lockoutUntil['p1']).toBe(NOW + 2000);
     expect(early.effects).toContainEqual({ type: 'BROADCAST_STATE' });
 
     const armed = reduce(early.state, { type: 'ARM_BUZZERS' }, { now: NOW + 50 });
@@ -1212,7 +1212,7 @@ describe('BUZZ', () => {
     state = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW }).state;
     state = reduce(state, { type: 'ARM_BUZZERS' }, { now: NOW + 300 }).state;
 
-    const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 1050 });
+    const result = reduce(state, { type: 'BUZZ', playerId: 'p1' }, { now: NOW + 2050 });
 
     expect(result.state.phase).toBe('BUZZED');
     expect(result.state.buzzWinnerId).toBe('p1');
