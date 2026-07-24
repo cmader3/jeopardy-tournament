@@ -1135,9 +1135,9 @@ describe('BoardRoute', () => {
 
     await flushRaf();
 
-    // Release frame: transitions back to full-screen (identity) over 1300ms.
+    // Release frame: transitions back to full-screen (identity) over 600ms.
     expect(overlay.style.transform).toBe('none');
-    expect(overlay.style.transition).toMatch(/transform 1300ms/);
+    expect(overlay.style.transition).toMatch(/transform 600ms/);
   });
 
   it('falls back to the CSS zoom without inline transforms when the captured origin is for another clue', () => {
@@ -1213,10 +1213,10 @@ describe('BoardRoute', () => {
       await flushRaf();
 
       // FLIP fired using the captured origin: it releases to full screen over
-      // 1300ms. The CSS keyframe fallback would instead leave the inline
+      // 600ms. The CSS keyframe fallback would instead leave the inline
       // transform/transition untouched (empty).
       expect(overlay.style.transform).toBe('none');
-      expect(overlay.style.transition).toMatch(/transform 1300ms/);
+      expect(overlay.style.transition).toMatch(/transform 600ms/);
       expect(overlay.style.animation).toBe('none');
     } finally {
       rectSpy.mockRestore();
@@ -1256,7 +1256,7 @@ describe('BoardRoute', () => {
       await flushRaf();
 
       expect(overlay.style.transform).toBe('none');
-      expect(overlay.style.transition).toMatch(/transform 1300ms/);
+      expect(overlay.style.transition).toMatch(/transform 600ms/);
       expect(overlay.style.animation).toBe('none');
     } finally {
       rectSpy.mockRestore();
