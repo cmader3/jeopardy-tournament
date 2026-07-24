@@ -232,14 +232,24 @@ export function ClueOverlay({ getOrigin, clueId, children }: ClueOverlayProps) {
     const translateY = origin.top + origin.height / 2 - vh / 2;
 
     // Keep the box fully opaque so the grow-out-of-the-cell motion is clearly
-    // visible (matching the answer-shrink easing and 700ms rate).
+    // visible (matching the answer-shrink easing and 700ms rate). Pin the
+    // start frame (scaled onto the cell) with the transition disabled, then
+    // enable the transition and release to identity on the next animation
+    // frame. Doing the release on a fresh frame (rather than after a single
+    // synchronous reflow) is what reliably makes the browser animate an
+    // element that is being mounted this commit.
     el.style.animation = 'none';
+    el.style.transition = 'none';
     el.style.transformOrigin = 'center center';
     el.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
-    // Flush the starting frame before enabling the transition to identity.
     void el.getBoundingClientRect();
-    el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-    el.style.transform = 'none';
+
+    const raf = requestAnimationFrame(() => {
+      el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      el.style.transform = 'none';
+    });
+
+    return () => cancelAnimationFrame(raf);
   }, [getOrigin, clueId]);
 
   return (

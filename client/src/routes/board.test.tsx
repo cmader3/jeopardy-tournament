@@ -144,6 +144,16 @@ function mockUseSocket(state: BoardView | null, error: string | null = null) {
   useSocket.mockReturnValue({ connected: true, error, data: state });
 }
 
+// The clue reveal FLIP releases to its final frame inside requestAnimationFrame,
+// so tests must let one frame elapse before asserting the end state.
+async function flushRaf() {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 function makeFinalRound(overrides: Partial<NonNullable<BoardView['round']>> = {}): NonNullable<BoardView['round']> {
   return {
     id: 'r-final',
@@ -1066,7 +1076,7 @@ describe('BoardRoute', () => {
     } as DOMRect;
   }
 
-  it('grows the clue overlay out of the selected cell when the origin matches the current clue', () => {
+  it('grows the clue overlay out of the selected cell when the origin matches the current clue', async () => {
     const rect = makeCellRect();
 
     render(
@@ -1076,11 +1086,17 @@ describe('BoardRoute', () => {
     );
 
     const overlay = screen.getByTestId('clue-overlay');
-    // The FLIP animation lands the overlay at full-screen (transform none) with
-    // a 700ms transform transition enabled and the CSS keyframe disabled.
+    // Start frame: the box is pinned onto the cell with the transition disabled
+    // and the CSS keyframe suppressed.
+    expect(overlay.style.transform).toMatch(/scale/);
+    expect(overlay.style.transition).toBe('none');
+    expect(overlay.style.animation).toBe('none');
+
+    await flushRaf();
+
+    // Release frame: transitions back to full-screen (identity) over 700ms.
     expect(overlay.style.transform).toBe('none');
     expect(overlay.style.transition).toMatch(/transform 700ms/);
-    expect(overlay.style.animation).toBe('none');
   });
 
   it('falls back to the CSS zoom without inline transforms when the captured origin is for another clue', () => {
@@ -1109,6 +1125,61 @@ describe('BoardRoute', () => {
     const overlay = screen.getByTestId('clue-overlay');
     expect(overlay.className).toMatch(/clueScreen/);
     expect(overlay.style.transform).toBe('');
+  });
+
+  it('captures the selected cell rect during CLUE_SELECTED and grows the reveal out of it', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({
+        width: 120,
+        height: 70,
+        left: 200,
+        top: 300,
+        right: 320,
+        bottom: 370,
+        x: 200,
+        y: 300,
+        toJSON() {},
+      } as DOMRect);
+
+    try {
+      mockUseSocket(
+        makeBoardState({ phase: 'CLUE_SELECTED', round: makeRound(), pendingClueId: 'cl1' }),
+      );
+      const { rerender } = renderBoardRoute();
+      await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+      await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+      // The board dwells on the grid with the pending cell highlighted, which
+      // is when the selected cell's rect is captured.
+      await screen.findByTestId('board-grid');
+
+      mockUseSocket(
+        makeBoardState({
+          phase: 'CLUE_REVEALED',
+          round: makeRound(),
+          currentClueId: 'cl1',
+          currentClueText: 'H2O is this compound',
+        }),
+      );
+      rerender(
+        <MemoryRouter>
+          <BoardRoute />
+        </MemoryRouter>,
+      );
+
+      const overlay = await screen.findByTestId('clue-overlay');
+      await flushRaf();
+
+      // FLIP fired using the captured origin: it releases to full screen over
+      // 700ms. The CSS keyframe fallback would instead leave the inline
+      // transform/transition untouched (empty).
+      expect(overlay.style.transform).toBe('none');
+      expect(overlay.style.transition).toMatch(/transform 700ms/);
+      expect(overlay.style.animation).toBe('none');
+    } finally {
+      rectSpy.mockRestore();
+    }
   });
 
   it('shows lit armed indicator lights only when buzzers are armed', async () => {
