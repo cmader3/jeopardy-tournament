@@ -1,9 +1,41 @@
-import type { CreateBoardInput, RoundInput } from '../../api/boards.js';
+import type { CategoryInput, ClueInput, CreateBoardInput, RoundInput } from '../../api/boards.js';
 
 export type EditableBoard = CreateBoardInput;
 
+function makeBlankFinalClue(): ClueInput {
+  return { value: null, row: 0, clueText: '', answer: '', isDailyDouble: false };
+}
+
+function makeBlankFinalCategory(): CategoryInput {
+  return { title: 'Final Category', order: 0, clues: [makeBlankFinalClue()] };
+}
+
+function ensureEditableFinalRound(board: CreateBoardInput): CreateBoardInput {
+  const finalIndex = board.rounds.findIndex((round) => round.type === 'FINAL');
+
+  if (finalIndex === -1) {
+    const nextOrder = board.rounds.reduce((max, round) => Math.max(max, round.order), -1) + 1;
+    return {
+      ...board,
+      rounds: [...board.rounds, { type: 'FINAL', order: nextOrder, categories: [makeBlankFinalCategory()] }],
+    };
+  }
+
+  const rounds = board.rounds.map((round, index) => {
+    if (index !== finalIndex) return round;
+    const category = round.categories[0] ?? makeBlankFinalCategory();
+    const clue = category.clues[0] ?? makeBlankFinalClue();
+    return {
+      ...round,
+      categories: [{ ...category, order: 0, clues: [{ ...clue, value: null, row: 0 }] }],
+    };
+  });
+
+  return { ...board, rounds };
+}
+
 export function createEditableBoard(input: CreateBoardInput): EditableBoard {
-  return input;
+  return ensureEditableFinalRound(input);
 }
 
 export function updateBoardName(board: EditableBoard, name: string): EditableBoard {

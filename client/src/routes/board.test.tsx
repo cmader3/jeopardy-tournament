@@ -738,6 +738,34 @@ describe('BoardRoute', () => {
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(2);
   });
 
+  it('renders the answer banner as an overlay over the board grid rather than compressing it', async () => {
+    mockUseSocket(
+      makeBoardState({
+        phase: 'BOARD_SELECT',
+        round: makeRound(),
+        usedClueIds: ['cl1'],
+        answer: 'Water',
+        lastOutcome: { playerId: 'p2', type: 'CORRECT', value: 100 },
+        players: [
+          { id: 'p1', name: 'Alice', score: 0, connected: true },
+          { id: 'p2', name: 'Bob', score: 100, connected: true },
+        ],
+      }),
+    );
+
+    renderBoardRoute();
+    await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    const overlay = await screen.findByTestId('answer-overlay');
+    const banner = screen.getByTestId('answer-banner');
+    const grid = screen.getByTestId('board-grid');
+
+    expect(overlay).toContainElement(banner);
+    expect(overlay).not.toContainElement(grid);
+    expect(grid).toBeInTheDocument();
+  });
+
   it('shows the between-round screen during ROUND_TRANSITION with carried-over scores', async () => {
     mockUseSocket(
       makeBoardState({

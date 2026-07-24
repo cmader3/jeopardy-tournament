@@ -654,7 +654,11 @@ function renderStage(state: BoardView) {
   if (state.round) {
     return (
       <div className={styles.roundStage}>
-        {answerBanner}
+        {answerBanner && (
+          <div className={styles.answerOverlay} data-testid="answer-overlay">
+            {answerBanner}
+          </div>
+        )}
         {state.phase === 'CLUE_SELECTED' && (
           <p className={styles.selectedBanner} data-testid="board-clue-selected">
             Clue selected — waiting for the host to reveal it.

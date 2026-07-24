@@ -382,6 +382,7 @@
 }
 
 .roundStage {
+  position: relative;
   width: 100%;
   flex: 1;
   display: flex;
@@ -391,6 +392,17 @@
   gap: 1rem;
   padding: 1rem;
   min-height: 0;
+}
+
+.answerOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  pointer-events: none;
 }
 
 .clueScreen {

@@ -374,8 +374,8 @@ describe('ImportBoard', () => {
     await userEvent.upload(fileInput, file);
     await userEvent.click(uploadButton);
 
-    const clueTextarea = await screen.findByLabelText(/clue text/i);
-    const answerTextarea = screen.getByLabelText(/answer/i);
+    const clueTextarea = (await screen.findAllByLabelText(/clue text/i))[0];
+    const answerTextarea = screen.getAllByLabelText(/^answer$/i)[0];
     expect(clueTextarea.tagName).toBe('TEXTAREA');
     expect(answerTextarea.tagName).toBe('TEXTAREA');
     expect(clueTextarea).toHaveValue('Roses are red\nViolets are blue');
@@ -767,6 +767,39 @@ describe('ImportBoard', () => {
     const payload = api.createBoard.mock.calls[0][0];
     const finalRound = payload.rounds.find((round: { type: string }) => round.type === 'FINAL');
     expect(finalRound.categories[0].title).toBe('World Capitals');
+  });
+
+  it('adds an editable Final Jeopardy category when the uploaded board has no Final round', async () => {
+    const api = makeMockApi();
+    // makePreview() intentionally has only a Jeopardy round and no FINAL round.
+    api.importBoard = vi.fn().mockResolvedValue(makePreview());
+    api.createBoard = vi.fn().mockResolvedValue({
+      id: 'saved-board-id',
+      ...makePreview().board,
+      createdAt: 'now',
+      updatedAt: 'now',
+      isComplete: true,
+    });
+    const file = new File(['csv content'], 'sample.csv', { type: 'text/csv' });
+
+    render(<ImportBoard token={token} api={api} onBack={vi.fn()} onSave={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText(/upload a spreadsheet/i), file);
+    await userEvent.click(screen.getByRole('button', { name: /upload/i }));
+
+    const finalTitle = await screen.findByLabelText(/^final jeopardy round category 1 title$/i);
+    expect(finalTitle).toHaveValue('Final Category');
+    await userEvent.clear(finalTitle);
+    await userEvent.type(finalTitle, 'Potent Potables');
+
+    await userEvent.click(screen.getByRole('button', { name: /save board/i }));
+
+    await waitFor(() => expect(api.createBoard).toHaveBeenCalled());
+    const payload = api.createBoard.mock.calls[0][0];
+    const finalRound = payload.rounds.find((round: { type: string }) => round.type === 'FINAL');
+    expect(finalRound).toBeDefined();
+    expect(finalRound.categories[0].title).toBe('Potent Potables');
+    expect(finalRound.categories[0].clues).toHaveLength(1);
+    expect(finalRound.categories[0].clues[0].value).toBeNull();
   });
 
   it('lets you mark a clue as a Daily Double after upload', async () => {
