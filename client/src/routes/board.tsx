@@ -201,7 +201,7 @@ function ClueContent({ clueText, isDailyDouble }: ClueContentProps) {
   );
 }
 
-const CLUE_ZOOM_MS = 600;
+const CLUE_ZOOM_MS = 1000;
 
 type ClueOrigin = { clueId: string; rect: DOMRect } | null;
 
