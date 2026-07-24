@@ -705,7 +705,7 @@ function FinalAnswerReveal({ state }: FinalRevealProps) {
     <div className={styles.finalAnswerReveal} data-testid="final-answer-reveal">
       <RoundBanner roundType="FINAL" />
       {category && (
-        <div className={styles.finalCategory} data-testid="final-answer-reveal-category">
+        <div className={styles.finalAnswerRevealCategory} data-testid="final-answer-reveal-category">
           {category.title}
         </div>
       )}
