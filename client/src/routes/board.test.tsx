@@ -3,7 +3,7 @@ import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { useState, useCallback } from 'react';
-import { BoardRoute, AnswerReveal } from './board.js';
+import { BoardRoute, AnswerReveal, ClueOverlay } from './board.js';
 import type { BoardView } from '@jeopardy/shared';
 
 function renderBoardRoute() {
@@ -1050,6 +1050,66 @@ describe('BoardRoute', () => {
 
     const overlay = await screen.findByTestId('clue-overlay');
     expect(overlay.className).toMatch(/clueScreen/);
+  });
+
+  function makeCellRect(): DOMRect {
+    return {
+      width: 120,
+      height: 70,
+      left: 200,
+      top: 300,
+      right: 320,
+      bottom: 370,
+      x: 200,
+      y: 300,
+      toJSON() {},
+    } as DOMRect;
+  }
+
+  it('grows the clue overlay out of the selected cell when the origin matches the current clue', () => {
+    const rect = makeCellRect();
+
+    render(
+      <ClueOverlay getOrigin={() => ({ clueId: 'cl1', rect })} clueId="cl1">
+        <div>Clue</div>
+      </ClueOverlay>,
+    );
+
+    const overlay = screen.getByTestId('clue-overlay');
+    // The FLIP animation lands the overlay at full-screen (transform none) with
+    // a transform transition enabled and the CSS keyframe disabled.
+    expect(overlay.style.transform).toBe('none');
+    expect(overlay.style.transition).toMatch(/transform/);
+    expect(overlay.style.animation).toBe('none');
+    expect(overlay.style.opacity).toBe('1');
+  });
+
+  it('falls back to the CSS zoom without inline transforms when the captured origin is for another clue', () => {
+    const rect = makeCellRect();
+
+    render(
+      <ClueOverlay getOrigin={() => ({ clueId: 'other-clue', rect })} clueId="cl1">
+        <div>Clue</div>
+      </ClueOverlay>,
+    );
+
+    const overlay = screen.getByTestId('clue-overlay');
+    expect(overlay.className).toMatch(/clueScreen/);
+    expect(overlay.style.transform).toBe('');
+    expect(overlay.style.transition).toBe('');
+    expect(overlay.style.animation).toBe('');
+  });
+
+  it('falls back to the CSS zoom when no cell origin was captured', () => {
+    render(
+      <ClueOverlay getOrigin={() => null} clueId="cl1">
+        <div>Clue</div>
+      </ClueOverlay>,
+    );
+
+    const overlay = screen.getByTestId('clue-overlay');
+    expect(overlay.className).toMatch(/clueScreen/);
+    expect(overlay.style.transform).toBe('');
   });
 
   it('shows lit armed indicator lights only when buzzers are armed', async () => {

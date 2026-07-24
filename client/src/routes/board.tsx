@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useSocket } from '../socket/useSocket.js';
 import { Countdown, useCountdown } from '../components/Countdown.js';
@@ -120,9 +120,10 @@ interface BoardGridProps {
   round: NonNullable<BoardView['round']>;
   usedClueIds: string[];
   pendingClueId?: string | null;
+  onSelectedCellRect?: (clueId: string, rect: DOMRect) => void;
 }
 
-function BoardGrid({ round, usedClueIds, pendingClueId }: BoardGridProps) {
+function BoardGrid({ round, usedClueIds, pendingClueId, onSelectedCellRect }: BoardGridProps) {
   const maxRow = Math.max(0, ...round.categories.flatMap((c) => c.clues.map((clue) => clue.row)));
   const rows = Array.from({ length: maxRow + 1 }, (_, i) => i);
 
@@ -149,6 +150,13 @@ function BoardGrid({ round, usedClueIds, pendingClueId }: BoardGridProps) {
           return (
             <div
               key={clue.id}
+              ref={
+                selected
+                  ? (node) => {
+                      if (node) onSelectedCellRect?.(clue.id, node.getBoundingClientRect());
+                    }
+                  : undefined
+              }
               className={`${styles.cell} ${used ? styles.cellUsed : ''} ${selected ? styles.cellSelected : ''}`}
               data-testid={used ? 'used-cell' : 'clue-cell'}
               data-clue-id={clue.id}
@@ -181,6 +189,63 @@ function ClueContent({ clueText, isDailyDouble }: ClueContentProps) {
     <FitText className={styles.clueText} data-testid="clue-text" maxFontSize={96} minFontSize={12}>
       {clueText}
     </FitText>
+  );
+}
+
+const CLUE_ZOOM_MS = 480;
+
+type ClueOrigin = { clueId: string; rect: DOMRect } | null;
+
+interface ClueOverlayProps {
+  getOrigin: () => ClueOrigin;
+  clueId: string | null;
+  children: ReactNode;
+}
+
+// The full-screen clue grows out of the cell that was selected on the board,
+// mimicking the real Jeopardy reveal. On mount we start the (viewport-sized)
+// overlay scaled and translated onto the origin cell, then transition it back
+// to identity so it expands to fill the screen. Without a matching origin (or
+// with reduced motion) we fall back to the CSS clueZoomIn keyframe. The origin
+// is read via getOrigin inside the effect (commit phase) rather than during
+// render, and matched by clue id so a stale rect is never reused.
+export function ClueOverlay({ getOrigin, clueId, children }: ClueOverlayProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+
+    const captured = getOrigin();
+    const origin = captured && captured.clueId === clueId ? captured.rect : null;
+    if (!origin) return;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (!vw || !vh || origin.width === 0 || origin.height === 0) return;
+
+    const scaleX = origin.width / vw;
+    const scaleY = origin.height / vh;
+    const translateX = origin.left + origin.width / 2 - vw / 2;
+    const translateY = origin.top + origin.height / 2 - vh / 2;
+
+    el.style.animation = 'none';
+    el.style.transformOrigin = 'center center';
+    el.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
+    el.style.opacity = '0';
+    // Flush the starting frame before enabling the transition to identity.
+    void el.getBoundingClientRect();
+    el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${Math.round(CLUE_ZOOM_MS / 2)}ms ease-out`;
+    el.style.transform = 'none';
+    el.style.opacity = '1';
+  }, [getOrigin, clueId]);
+
+  return (
+    <div ref={ref} className={styles.clueScreen} data-testid="clue-overlay">
+      {children}
+    </div>
   );
 }
 
@@ -625,7 +690,13 @@ function FinalReveal({ state }: FinalRevealProps) {
   );
 }
 
-function renderStage(state: BoardView) {
+interface BoardStageProps {
+  state: BoardView;
+  getClueOrigin: () => ClueOrigin;
+  onSelectedCellRect: (clueId: string, rect: DOMRect) => void;
+}
+
+function BoardStage({ state, getClueOrigin, onSelectedCellRect }: BoardStageProps) {
   if (state.phase === 'ROUND_TRANSITION') {
     return <BetweenRoundScreen state={state} />;
   }
@@ -660,7 +731,7 @@ function renderStage(state: BoardView) {
   if (clueContent) {
     return (
       <div className={styles.clueStage}>
-        <div className={styles.clueScreen} data-testid="clue-overlay">
+        <ClueOverlay getOrigin={getClueOrigin} clueId={state.currentClueId}>
           <div className={styles.clueTopZone} data-testid="clue-status-band-top">
             {hasIncorrectFlash && <IncorrectFeedback state={state} />}
           </div>
@@ -668,7 +739,7 @@ function renderStage(state: BoardView) {
           <div className={styles.clueBottomZone} data-testid="clue-status-band">
             <GameStatusBanner state={state} />
           </div>
-        </div>
+        </ClueOverlay>
       </div>
     );
   }
@@ -693,7 +764,12 @@ function renderStage(state: BoardView) {
           </p>
         )}
         {isRoundStart(state) && <RoundBanner roundType={state.round.type} />}
-        <BoardGrid round={state.round} usedClueIds={state.usedClueIds} pendingClueId={state.pendingClueId} />
+        <BoardGrid
+          round={state.round}
+          usedClueIds={state.usedClueIds}
+          pendingClueId={state.pendingClueId}
+          onSelectedCellRect={onSelectedCellRect}
+        />
       </div>
     );
   }
@@ -722,6 +798,14 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
   const winnerMusicFiredRef = useRef(false);
   const serverNow = useServerTime(state?.serverNow ?? 0);
   const serverNowRef = useRef(serverNow);
+
+  // Remember where the last-selected clue cell was so the reveal overlay can
+  // grow out of it. Keyed by clue id so a stale rect is never reused.
+  const clueOriginRef = useRef<ClueOrigin>(null);
+  const handleSelectedCellRect = useCallback((clueId: string, rect: DOMRect) => {
+    clueOriginRef.current = { clueId, rect };
+  }, []);
+  const getClueOrigin = useCallback(() => clueOriginRef.current, []);
 
   useEffect(() => {
     serverNowRef.current = serverNow;
@@ -878,7 +962,9 @@ function BoardDisplay({ roomCode, onReset }: BoardDisplayProps) {
           Leave Game
         </button>
       </header>
-      <div className={styles.stage}>{renderStage(state)}</div>
+      <div className={styles.stage}>
+        <BoardStage state={state} getClueOrigin={getClueOrigin} onSelectedCellRect={handleSelectedCellRect} />
+      </div>
       <div className={styles.shareSection}>
         <p className={styles.shareLabel}>Share this board display:</p>
         <ShareableLink roomCode={roomCode} />
