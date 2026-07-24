@@ -304,6 +304,10 @@ describe('full game end-to-end', () => {
     expect(state.finalRevealStep).toBe('WAGER');
     expect(projectBoard(state, NOW).finalRevealedWagers).toHaveProperty('p2', 150);
     state = reduce(state, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 2 }).state;
+    expect(state.finalRevealStep).toBe('FINAL_ANSWER');
+    // The board surfaces the correct Final answer before the winners board.
+    expect(projectBoard(state, NOW).finalCorrectAnswer).not.toBeNull();
+    state = reduce(state, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 3 }).state;
     expectPhase(state, 'COMPLETE');
 
     // Final standings are consistent across all projections.
@@ -408,6 +412,8 @@ describe('full game end-to-end', () => {
     state = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW }).state;
     state = reduce(state, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 1 }).state;
     state = reduce(state, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 2 }).state;
+    expect(state.finalRevealStep).toBe('FINAL_ANSWER');
+    state = reduce(state, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 3 }).state;
     expectPhase(state, 'COMPLETE');
 
     const scores = projectBoard(state, NOW).players.map((p) => ({ id: p.id, score: p.score }));

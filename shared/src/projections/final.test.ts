@@ -437,7 +437,7 @@ describe('Final answer projections', () => {
 });
 
 function setupFinalRevealState(
-  step: 'ANSWER' | 'RULE' | 'WAGER',
+  step: 'ANSWER' | 'RULE' | 'WAGER' | 'FINAL_ANSWER',
   index = 0,
 ): GameState {
   return {
@@ -532,6 +532,26 @@ describe('Final reveal projections', () => {
     expect(p1.finalRevealedWagers).toEqual({ p2: 100, p3: 200 });
     expect(p1.finalRevealedAnswers).not.toHaveProperty('p1');
     expect(p1.finalRevealedWagers).not.toHaveProperty('p1');
+  });
+
+  it('board projection hides the correct Final answer until the FINAL_ANSWER step', () => {
+    for (const step of ['ANSWER', 'RULE', 'WAGER'] as const) {
+      const view = projectBoard(setupFinalRevealState(step, 2), NOW);
+      expect(view.finalCorrectAnswer).toBeNull();
+    }
+  });
+
+  it('board projection exposes the correct Final answer on the FINAL_ANSWER step', () => {
+    const view = projectBoard(setupFinalRevealState('FINAL_ANSWER', 3), NOW);
+
+    expect(view.finalRevealStep).toBe('FINAL_ANSWER');
+    expect(view.finalCorrectAnswer).toBe('J.R.R. Tolkien');
+  });
+
+  it('host projection exposes the correct Final answer on the FINAL_ANSWER step', () => {
+    const view = projectHost(setupFinalRevealState('FINAL_ANSWER', 3), NOW);
+
+    expect(view.finalCorrectAnswer).toBe('J.R.R. Tolkien');
   });
 });
 

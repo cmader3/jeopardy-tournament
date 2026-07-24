@@ -132,6 +132,7 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     finalRevealStep: 'ANSWER',
     finalRevealedAnswers: {},
     finalRevealedWagers: {},
+    finalCorrectAnswer: null,
     roundComplete: false,
     serverNow: 0,
     clueSelectionMode: 'HOST',
@@ -879,6 +880,46 @@ describe('BoardRoute', () => {
     expect(screen.getByTestId('final-category')).toHaveTextContent('Literature');
     expect(screen.queryByTestId('clue-text')).not.toBeInTheDocument();
     expect(screen.queryByTestId('answer-text')).not.toBeInTheDocument();
+  });
+
+  it('shows the correct-answer reveal screen during the FINAL_ANSWER step', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'FINAL_REVEAL',
+        finalRevealStep: 'FINAL_ANSWER',
+        finalCorrectAnswer: 'J.R.R. Tolkien',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+        finalRevealOrder: ['p1'],
+        finalRevealIndex: 1,
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('final-answer-reveal')).toBeInTheDocument();
+    expect(screen.getByTestId('final-answer-reveal-text')).toHaveTextContent('J.R.R. Tolkien');
+    expect(screen.getByTestId('round-banner')).toHaveTextContent('Final Jeopardy!');
+    expect(screen.queryByTestId('final-reveal')).not.toBeInTheDocument();
+  });
+
+  it('omits the Final Jeopardy banner on the final standings screen', async () => {
+    mockUseSocket(
+      makeFinalIntroState({
+        phase: 'COMPLETE',
+        players: [{ id: 'p1', name: 'Alice', score: 200, connected: true }],
+      }),
+    );
+
+    renderBoardRoute();
+    const input = screen.getByLabelText(/room code/i);
+    await userEvent.type(input, 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: /view board/i }));
+
+    expect(await screen.findByTestId('final-standings-heading')).toHaveTextContent('Final Standings');
+    expect(screen.queryByTestId('round-banner')).not.toBeInTheDocument();
   });
 
   it('shows eligible and not-participating contestants during FINAL_INTRO', async () => {

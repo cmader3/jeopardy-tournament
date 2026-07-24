@@ -88,9 +88,10 @@ export interface BoardView {
   finalAnswerSubmissionStatus: Record<string, boolean>;
   finalRevealOrder: string[];
   finalRevealIndex: number;
-  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER';
+  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER' | 'FINAL_ANSWER';
   finalRevealedAnswers: Record<string, string>;
   finalRevealedWagers: Record<string, number>;
+  finalCorrectAnswer: string | null;
   roundComplete: boolean;
   serverNow: number;
 }
@@ -125,9 +126,10 @@ export interface HostView {
   finalAnswerSubmissionStatus: Record<string, boolean>;
   finalRevealOrder: string[];
   finalRevealIndex: number;
-  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER';
+  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER' | 'FINAL_ANSWER';
   finalRevealedAnswers: Record<string, string>;
   finalRevealedWagers: Record<string, number>;
+  finalCorrectAnswer: string | null;
   roundComplete: boolean;
   nextRoundTarget: 'DOUBLE_JEOPARDY' | 'FINAL';
   removedPlayers: RemovedPlayer[];
@@ -357,6 +359,15 @@ function getFinalRevealedWagers(state: GameState): Record<string, number> {
   return revealed;
 }
 
+// The correct Final Jeopardy answer is only surfaced on the terminal reveal
+// step, so the board never shows it while contestants are still being judged.
+function getFinalCorrectAnswer(state: GameState): string | null {
+  if (state.phase !== 'FINAL_REVEAL' || state.finalRevealStep !== 'FINAL_ANSWER') {
+    return null;
+  }
+  return getCurrentClue(state)?.answer ?? null;
+}
+
 export function projectBoard(state: GameState, now: number): BoardView {
   const round = getCurrentRound(state);
   const currentClue = getCurrentClue(state);
@@ -395,6 +406,7 @@ export function projectBoard(state: GameState, now: number): BoardView {
     finalRevealStep: state.finalRevealStep,
     finalRevealedAnswers: getFinalRevealedAnswers(state),
     finalRevealedWagers: getFinalRevealedWagers(state),
+    finalCorrectAnswer: getFinalCorrectAnswer(state),
     roundComplete: isRoundComplete(state),
     serverNow: now,
   };
@@ -440,6 +452,7 @@ export function projectHost(state: GameState, now: number): HostView {
     finalRevealStep: state.finalRevealStep,
     finalRevealedAnswers: getFinalRevealedAnswers(state),
     finalRevealedWagers: getFinalRevealedWagers(state),
+    finalCorrectAnswer: getFinalCorrectAnswer(state),
     roundComplete: isRoundComplete(state),
     nextRoundTarget: getNextRoundTarget(state),
     removedPlayers: state.removedPlayers,

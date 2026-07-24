@@ -914,6 +914,25 @@ button.hostCell:hover {
   margin: 0;
 }
 
+.hostFinalAnswerReveal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--jeopardy-blue);
+  border: 2px solid var(--value-gold);
+  border-radius: 0.5rem;
+}
+
+.hostFinalRevealAnswerLabel {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--value-gold);
+  margin: 0;
+}
+
 .hostFinalRevealWager {
   font-family: var(--font-body);
   font-size: 1rem;

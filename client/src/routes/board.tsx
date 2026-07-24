@@ -620,7 +620,6 @@ function FinalStandings({ state }: CompleteScreenProps) {
 function CompleteScreen({ state }: CompleteScreenProps) {
   return (
     <div className={styles.finalIntro} data-testid={state.finalNoEligiblePlayers ? 'final-no-eligible' : 'final-standings'}>
-      <RoundBanner roundType="FINAL" />
       {state.finalNoEligiblePlayers && (
         <p className={styles.finalNoEligibleMessage} data-testid="final-no-eligible-message">
           No contestants were eligible for Final Jeopardy.
@@ -700,6 +699,24 @@ function FinalReveal({ state }: FinalRevealProps) {
   );
 }
 
+function FinalAnswerReveal({ state }: FinalRevealProps) {
+  const category = state.round?.categories[0];
+  return (
+    <div className={styles.finalAnswerReveal} data-testid="final-answer-reveal">
+      <RoundBanner roundType="FINAL" />
+      {category && (
+        <div className={styles.finalCategory} data-testid="final-answer-reveal-category">
+          {category.title}
+        </div>
+      )}
+      <p className={styles.finalAnswerRevealLabel}>The correct answer:</p>
+      <p className={styles.finalAnswerRevealText} data-testid="final-answer-reveal-text">
+        {state.finalCorrectAnswer}
+      </p>
+    </div>
+  );
+}
+
 interface BoardStageProps {
   state: BoardView;
   getClueOrigin: () => ClueOrigin;
@@ -720,6 +737,9 @@ function BoardStage({ state, getClueOrigin, onSelectedCellRect }: BoardStageProp
   }
 
   if (state.phase === 'FINAL_REVEAL') {
+    if (state.finalRevealStep === 'FINAL_ANSWER') {
+      return <FinalAnswerReveal state={state} />;
+    }
     return <FinalReveal state={state} />;
   }
 

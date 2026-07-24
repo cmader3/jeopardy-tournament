@@ -683,16 +683,22 @@ describe('REVEAL_FINAL_WAGER', () => {
     expect(result.state.lastOutcome).toBeNull();
   });
 
-  it('transitions to COMPLETE after the last contestant wager is revealed', () => {
+  it('reveals the correct-answer step after the last contestant wager, then completes on Show Results', () => {
     const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' }, { p1: 200 });
     const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
     const ruled = reduce(revealed, { type: 'RULE_FINAL_INCORRECT' }, { now: NOW + 32_000 }).state;
 
-    const result = reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 });
+    const afterWager = reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 });
 
-    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
-    expect(result.state.phase).toBe('COMPLETE');
-    expect(result.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+    expect(afterWager.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(afterWager.state.phase).toBe('FINAL_REVEAL');
+    expect(afterWager.state.finalRevealStep).toBe('FINAL_ANSWER');
+    expect(afterWager.state.players.find((p) => p.id === 'p1')?.score).toBe(0);
+
+    const complete = reduce(afterWager.state, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 34_000 });
+
+    expect(complete.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(complete.state.phase).toBe('COMPLETE');
   });
 
   it('is rejected when the wager has not been ruled on', () => {
@@ -724,7 +730,11 @@ describe('Final reveal full sequence', () => {
     }
 
     expect(visited).toEqual(['p2', 'p3', 'p1']);
-    expect(current.phase).toBe('COMPLETE');
+    expect(current.phase).toBe('FINAL_REVEAL');
+    expect(current.finalRevealStep).toBe('FINAL_ANSWER');
+
+    const complete = reduce(current, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 40_000 }).state;
+    expect(complete.phase).toBe('COMPLETE');
   });
 
   it('preserves already-revealed answers, wagers, and scores while advancing', () => {
@@ -744,6 +754,44 @@ describe('Final reveal full sequence', () => {
     expect(afterFirst.players.find((p) => p.id === 'p2')?.score).toBe(200);
     expect(afterFirst.finalAnswers['p1']).toBe('Tolkien');
     expect(afterFirst.finalWagers['p1']).toBe(300);
+  });
+});
+
+describe('SHOW_FINAL_RESULTS', () => {
+  function revealToFinalAnswerStep(): GameState {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' }, { p1: 200 });
+    const revealed = reduce(state, { type: 'REVEAL_FINAL_ANSWER' }, { now: NOW + 31_000 }).state;
+    const ruled = reduce(revealed, { type: 'RULE_FINAL_CORRECT' }, { now: NOW + 32_000 }).state;
+    return reduce(ruled, { type: 'REVEAL_FINAL_WAGER' }, { now: NOW + 33_000 }).state;
+  }
+
+  it('transitions to COMPLETE from the correct-answer step', () => {
+    const atAnswer = revealToFinalAnswerStep();
+    expect(atAnswer.finalRevealStep).toBe('FINAL_ANSWER');
+
+    const result = reduce(atAnswer, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 34_000 });
+
+    expect(result.effects).toContainEqual({ type: 'BROADCAST_STATE' });
+    expect(result.state.phase).toBe('COMPLETE');
+  });
+
+  it('is rejected before the correct-answer step is reached', () => {
+    const state = setupFinalReveal({ p1: 200 }, { p1: 'Tolkien' }, { p1: 200 });
+    expect(state.finalRevealStep).toBe('ANSWER');
+
+    const result = reduce(state, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 31_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.any(String) });
+    expect(result.state.phase).toBe('FINAL_REVEAL');
+  });
+
+  it('is rejected once the game is already COMPLETE', () => {
+    const complete = reduce(revealToFinalAnswerStep(), { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 34_000 }).state;
+    expect(complete.phase).toBe('COMPLETE');
+
+    const result = reduce(complete, { type: 'SHOW_FINAL_RESULTS' }, { now: NOW + 35_000 });
+
+    expect(result.effects).toContainEqual({ type: 'INTENT_REJECTED', reason: expect.any(String) });
   });
 });
 

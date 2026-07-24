@@ -46,7 +46,8 @@ export type Intent =
   | { type: 'REVEAL_FINAL_ANSWER' }
   | { type: 'RULE_FINAL_CORRECT' }
   | { type: 'RULE_FINAL_INCORRECT' }
-  | { type: 'REVEAL_FINAL_WAGER' };
+  | { type: 'REVEAL_FINAL_WAGER' }
+  | { type: 'SHOW_FINAL_RESULTS' };
 
 export type Effect =
   | { type: 'NOOP' }
@@ -281,6 +282,8 @@ export function reduce(state: GameState, intent: Intent, ctx: ReducerCtx): Reduc
       return handleRuleFinalIncorrect(state, ctx);
     case 'REVEAL_FINAL_WAGER':
       return handleRevealFinalWager(state);
+    case 'SHOW_FINAL_RESULTS':
+      return handleShowFinalResults(state);
     default:
       return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Unknown intent' }] };
   }
@@ -1963,11 +1966,15 @@ function handleRevealFinalWager(state: GameState): ReducerResult {
 
   const nextIndex = state.finalRevealIndex + 1;
   if (nextIndex >= state.finalRevealOrder.length) {
+    // Every contestant has been judged. Move to a terminal step that reveals
+    // the correct Final Jeopardy answer on the board before the host advances
+    // to the winners board (COMPLETE).
     return {
       state: {
         ...state,
-        phase: 'COMPLETE',
-        finalRevealStep: 'ANSWER',
+        finalRevealIndex: nextIndex,
+        finalRevealStep: 'FINAL_ANSWER',
+        lastOutcome: null,
       },
       effects: [{ type: 'BROADCAST_STATE' }],
     };
@@ -1980,6 +1987,17 @@ function handleRevealFinalWager(state: GameState): ReducerResult {
       finalRevealStep: 'ANSWER',
       lastOutcome: null,
     },
+    effects: [{ type: 'BROADCAST_STATE' }],
+  };
+}
+
+function handleShowFinalResults(state: GameState): ReducerResult {
+  if (state.phase !== 'FINAL_REVEAL' || state.finalRevealStep !== 'FINAL_ANSWER') {
+    return { state, effects: [{ type: 'INTENT_REJECTED', reason: 'Cannot show the Final results right now' }] };
+  }
+
+  return {
+    state: { ...state, phase: 'COMPLETE', finalRevealStep: 'ANSWER' },
     effects: [{ type: 'BROADCAST_STATE' }],
   };
 }

@@ -78,6 +78,7 @@ function makeBoardState(overrides: Partial<BoardView> = {}): BoardView {
     finalRevealStep: 'ANSWER',
     finalRevealedAnswers: {},
     finalRevealedWagers: {},
+    finalCorrectAnswer: null,
     roundComplete: false,
     serverNow: 0,
     clueSelectionMode: 'HOST',

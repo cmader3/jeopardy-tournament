@@ -56,6 +56,7 @@ function makeHostState(overrides: Partial<HostView> = {}): HostView {
     finalRevealStep: 'ANSWER',
     finalRevealedAnswers: {},
     finalRevealedWagers: {},
+    finalCorrectAnswer: null,
     roundComplete: false,
     nextRoundTarget: 'FINAL',
     removedPlayers: [],

@@ -1655,6 +1655,40 @@ describe('HostInProgress score tools', () => {
   });
 });
 
+describe('HostInProgress Final correct-answer reveal', () => {
+  function makeFinalAnswerState(overrides: Partial<HostView> = {}): HostView {
+    return makeHostState({
+      phase: 'FINAL_REVEAL',
+      round: makeFinalRound(),
+      players: [{ id: 'p1', name: 'Alice', score: 400, connected: true }],
+      finalRevealOrder: ['p1'],
+      finalRevealIndex: 1,
+      finalRevealStep: 'FINAL_ANSWER',
+      finalRevealedAnswers: { p1: 'Tolkien' },
+      finalRevealedWagers: { p1: 200 },
+      finalCorrectAnswer: 'J.R.R. Tolkien',
+      ...overrides,
+    });
+  }
+
+  it('shows the correct answer and a Show Results button on the FINAL_ANSWER step', () => {
+    render(<HostInProgress roomCode="WXYZ" state={makeFinalAnswerState()} onShowFinalResults={vi.fn()} />);
+
+    expect(screen.getByTestId('host-final-answer-reveal')).toBeInTheDocument();
+    expect(screen.getByTestId('host-final-correct-answer')).toHaveTextContent('J.R.R. Tolkien');
+    expect(screen.getByTestId('host-show-final-results-button')).toBeInTheDocument();
+  });
+
+  it('calls onShowFinalResults when the Show Results button is clicked', async () => {
+    const onShowFinalResults = vi.fn();
+    render(<HostInProgress roomCode="WXYZ" state={makeFinalAnswerState()} onShowFinalResults={onShowFinalResults} />);
+
+    await userEvent.click(screen.getByTestId('host-show-final-results-button'));
+
+    expect(onShowFinalResults).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('HostContent games manager', () => {
   const token = 'host-token';
 

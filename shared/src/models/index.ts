@@ -128,7 +128,7 @@ export interface GameState {
   finalNoEligiblePlayers: boolean;
   finalRevealOrder: string[];
   finalRevealIndex: number;
-  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER';
+  finalRevealStep: 'ANSWER' | 'RULE' | 'WAGER' | 'FINAL_ANSWER';
   lastOutcome: {
     playerId: string;
     type: 'CORRECT' | 'INCORRECT';

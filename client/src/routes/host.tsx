@@ -544,6 +544,7 @@ export interface HostInProgressProps {
   onRuleFinalCorrect?: () => void;
   onRuleFinalIncorrect?: () => void;
   onRevealFinalWager?: () => void;
+  onShowFinalResults?: () => void;
 }
 
 function HostGrid({
@@ -956,6 +957,7 @@ interface HostFinalRevealProps {
   onRuleFinalCorrect?: () => void;
   onRuleFinalIncorrect?: () => void;
   onRevealFinalWager?: () => void;
+  onShowFinalResults?: () => void;
 }
 
 function HostFinalReveal({
@@ -964,6 +966,7 @@ function HostFinalReveal({
   onRuleFinalCorrect,
   onRuleFinalIncorrect,
   onRevealFinalWager,
+  onShowFinalResults,
 }: HostFinalRevealProps) {
   const holders = getHostHolders(state);
   const findHolder = (id: string | null) => (id ? holders.find((h) => h.id === id) : undefined);
@@ -1035,6 +1038,22 @@ function HostFinalReveal({
               </button>
             </>
           )}
+        </div>
+      )}
+      {state.finalRevealStep === 'FINAL_ANSWER' && (
+        <div className={styles.hostFinalAnswerReveal} data-testid="host-final-answer-reveal">
+          <p className={styles.hostFinalRevealAnswerLabel}>Correct answer</p>
+          <p className={styles.hostFinalRevealAnswer} data-testid="host-final-correct-answer">
+            {state.finalCorrectAnswer}
+          </p>
+          <button
+            type="button"
+            className={styles.actionButton}
+            onClick={onShowFinalResults}
+            data-testid="host-show-final-results-button"
+          >
+            Show Results
+          </button>
         </div>
       )}
       {revealedPlayerIds.length > 0 && (
@@ -1167,6 +1186,7 @@ export function HostInProgress({
   onRuleFinalCorrect,
   onRuleFinalIncorrect,
   onRevealFinalWager,
+  onShowFinalResults,
 }: HostInProgressProps) {
   const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
   const [roundAdvanceDismissed, setRoundAdvanceDismissed] = useState(false);
@@ -1332,6 +1352,7 @@ export function HostInProgress({
           onRuleFinalCorrect={onRuleFinalCorrect}
           onRuleFinalIncorrect={onRuleFinalIncorrect}
           onRevealFinalWager={onRevealFinalWager}
+          onShowFinalResults={onShowFinalResults}
         />
       </main>
     );
@@ -2100,6 +2121,9 @@ export function HostContent() {
   const handleRevealFinalWager = useCallback(() => {
     hostSocket.revealFinalWager?.();
   }, [hostSocket]);
+  const handleShowFinalResults = useCallback(() => {
+    hostSocket.showFinalResults?.();
+  }, [hostSocket]);
 
   if (roomCode) {
     const inLobby = !gameState || gameState.phase === 'LOBBY';
@@ -2156,6 +2180,7 @@ export function HostContent() {
         onRuleFinalCorrect={handleRuleFinalCorrect}
         onRuleFinalIncorrect={handleRuleFinalIncorrect}
         onRevealFinalWager={handleRevealFinalWager}
+        onShowFinalResults={handleShowFinalResults}
         />
       </>
     );
