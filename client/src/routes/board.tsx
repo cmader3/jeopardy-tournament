@@ -192,7 +192,7 @@ function ClueContent({ clueText, isDailyDouble }: ClueContentProps) {
   );
 }
 
-const CLUE_ZOOM_MS = 700;
+const CLUE_ZOOM_MS = 1300;
 
 type ClueOrigin = { clueId: string; rect: DOMRect } | null;
 
@@ -232,8 +232,9 @@ export function ClueOverlay({ getOrigin, clueId, children }: ClueOverlayProps) {
     const translateY = origin.top + origin.height / 2 - vh / 2;
 
     // Keep the box fully opaque so the grow-out-of-the-cell motion is clearly
-    // visible (matching the answer-shrink easing and 700ms rate). Pin the
-    // start frame (scaled onto the cell) with the transition disabled, then
+    // visible. A symmetric ease-in-out curve grows the box at a steady,
+    // deliberate pace (rather than a front-loaded pop) for a cinematic reveal.
+    // Pin the start frame (scaled onto the cell) with the transition disabled, then
     // enable the transition and release to identity on the next animation
     // frame. Doing the release on a fresh frame (rather than after a single
     // synchronous reflow) is what reliably makes the browser animate an
@@ -245,7 +246,7 @@ export function ClueOverlay({ getOrigin, clueId, children }: ClueOverlayProps) {
     void el.getBoundingClientRect();
 
     const raf = requestAnimationFrame(() => {
-      el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      el.style.transition = `transform ${CLUE_ZOOM_MS}ms cubic-bezier(0.45, 0.05, 0.55, 0.95)`;
       el.style.transform = 'none';
     });
 
