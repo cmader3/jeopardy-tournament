@@ -738,7 +738,7 @@ describe('BoardRoute', () => {
     expect(screen.getAllByTestId('clue-cell')).toHaveLength(2);
   });
 
-  it('renders the answer banner as an overlay over the board grid rather than compressing it', async () => {
+  it('renders the answer as a compact in-flow bar alongside the full board grid, not as an overlay', async () => {
     mockUseSocket(
       makeBoardState({
         phase: 'BOARD_SELECT',
@@ -757,13 +757,16 @@ describe('BoardRoute', () => {
     await userEvent.type(screen.getByLabelText(/room code/i), 'ABCD');
     await userEvent.click(screen.getByRole('button', { name: /view board/i }));
 
-    const overlay = await screen.findByTestId('answer-overlay');
-    const banner = screen.getByTestId('answer-banner');
+    const banner = await screen.findByTestId('answer-banner');
     const grid = screen.getByTestId('board-grid');
 
-    expect(overlay).toContainElement(banner);
-    expect(overlay).not.toContainElement(grid);
+    expect(screen.queryByTestId('answer-overlay')).not.toBeInTheDocument();
+    expect(banner).toBeInTheDocument();
     expect(grid).toBeInTheDocument();
+    // The banner and grid are siblings in the round stage; neither contains the other.
+    expect(banner).not.toContainElement(grid);
+    expect(grid).not.toContainElement(banner);
+    expect(banner.parentElement).toBe(grid.parentElement);
   });
 
   it('shows the between-round screen during ROUND_TRANSITION with carried-over scores', async () => {

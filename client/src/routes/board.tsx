@@ -305,9 +305,10 @@ function BetweenRoundScreen({ state }: BetweenRoundScreenProps) {
 
 interface AnswerBannerProps {
   state: BoardView;
+  compact?: boolean;
 }
 
-function AnswerBanner({ state }: AnswerBannerProps) {
+function AnswerBanner({ state, compact = false }: AnswerBannerProps) {
   if (!state.answer) return null;
   const outcome = state.lastOutcome;
   const player = outcome ? state.players.find((p) => p.id === outcome.playerId) : undefined;
@@ -327,7 +328,7 @@ function AnswerBanner({ state }: AnswerBannerProps) {
 
   return (
     <div
-      className={`${styles.answerBanner} ${outcome?.type === 'CORRECT' ? styles.answerCorrect : outcome?.type === 'INCORRECT' ? styles.answerIncorrect : ''}`}
+      className={`${styles.answerBanner} ${compact ? styles.answerBannerCompact : ''} ${outcome?.type === 'CORRECT' ? styles.answerCorrect : outcome?.type === 'INCORRECT' ? styles.answerIncorrect : ''}`}
       data-testid="answer-banner"
       role="status"
       aria-live="polite"
@@ -654,11 +655,7 @@ function renderStage(state: BoardView) {
   if (state.round) {
     return (
       <div className={styles.roundStage}>
-        {answerBanner && (
-          <div className={styles.answerOverlay} data-testid="answer-overlay">
-            {answerBanner}
-          </div>
-        )}
+        {state.answer && <AnswerBanner state={state} compact />}
         {state.phase === 'CLUE_SELECTED' && (
           <p className={styles.selectedBanner} data-testid="board-clue-selected">
             Clue selected — waiting for the host to reveal it.
